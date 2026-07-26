@@ -170,11 +170,20 @@ const SPAWN_RATE = 60;
 const BEARING_DRIFT = 0.35;
 
 /**
- * Runs one step of the timeline: tops the crowd up and releases bosses on schedule.
+ * The crowd size in force: the stage's, or an override, never above a cap.
  *
- * `targetOverride`, when positive, replaces the stage's crowd size. It exists for
- * measuring the frame budget at a chosen enemy count without editing the table or
- * waiting thirteen minutes for the stage that reaches it.
+ * The two are different tools and were briefly conflated, with the result that
+ * choosing the *lowest* quality tier raised the opening minute from 55 bodies to 140.
+ * An override replaces the table because it exists to measure a chosen number; a cap
+ * only ever removes enemies, because it exists to protect a phone.
+ */
+export function effectiveTarget(stage: WaveStage, override = 0, cap = 0): number {
+  const target = override > 0 ? override : stage.target;
+  return cap > 0 ? Math.min(target, cap) : target;
+}
+
+/**
+ * Runs one step of the timeline: tops the crowd up and releases bosses on schedule.
  *
  * @returns How many ordinary enemies were spawned this step.
  */
@@ -188,6 +197,7 @@ export function stepDirector(
   elapsed: number,
   stepSeconds: number,
   targetOverride = 0,
+  targetCap = 0,
 ): number {
   for (let i = 0; i < BOSS_ENTRIES.length; i++) {
     const entry = BOSS_ENTRIES[i];
@@ -213,8 +223,7 @@ export function stepDirector(
   director.bearing += BEARING_DRIFT * stepSeconds;
 
   director.credit += SPAWN_RATE * stepSeconds;
-  const target = targetOverride > 0 ? targetOverride : stage.target;
-  const room = target - pool.count;
+  const room = effectiveTarget(stage, targetOverride, targetCap) - pool.count;
   const wanted = Math.min(Math.floor(director.credit), room);
   if (wanted <= 0) {
     // Do not bank credit while at capacity, or the moment a gap opens the whole

@@ -423,19 +423,54 @@ geçişi gerektiriyor — Faz 8'in cila kalemi.
 
 ---
 
-### Faz 7 — Kabuk, UI ve oyun akışı · ~3–4 gün
+### Faz 7 — Kabuk, UI ve oyun akışı · ✅ tamamlandı
 
-- Ana menü, karakter seçim (tek karakter ama iskelet hazır), duraklat, ölüm
-  ekranı, run özeti
-- HUD: can, XP çubuğu, süre, öldürme sayısı, silah/eşya ikonları
-- İkonlar voxel modellerden **render edilerek** üretilir (ayrı asset yok)
-- Ayarlar: ses seviyeleri, ekran sarsıntısı kapatma, hasar sayıları kapatma,
-  kalite kademesi (düşman limiti)
-- Tuş atamaları, gamepad tam desteği
-- Türkçe/İngilizce lokalizasyon altyapısı (string tablosu — çeviri sonra)
+- [x] Ana menü (başlık, başla, nasıl oynanır, ayarlar)
+- [x] Duraklat — Esc / P, kol çubuğunda Start, mobilde HUD düğmesi
+- [x] Ölüm ekranı ve run özeti (Faz 6'da geldi)
+- [x] HUD: can, XP çubuğu, süre + **silah/eşya ikonları**
+- [x] İkonlar voxel modellerden **render edilerek** üretiliyor (ayrı asset yok)
+- [x] Ayarlar: dil, ekran sarsıntısı, hasar sayıları, kalite kademesi
+- [x] Tuş atamaları, kol çubuğu tam desteği (sol çubuk + d-pad + Start)
+- [x] Türkçe/İngilizce lokalizasyon altyapısı — ve iki dil de dolu
 
-**Çıkış kriteri:** Bir yabancı, hiç açıklama olmadan oyunu açıp bir run
-tamamlayabiliyor.
+**Çıkış kriteri durumu:** Oyun artık kendini tanıtarak açılıyor: başlık, "nasıl
+oynanır", sonra run. Duraklatılabiliyor, ayarları değiştirilebiliyor, bırakılıp
+menüye dönülebiliyor — masaüstünde, kolda ve telefonda. Tarayıcıda doğrulandı:
+menüde saat donuk, duraklatınca donuk, devam edince akıyor; ayarlar reload'dan
+sağ çıkıyor; yeniden atanan tuş anında geçerli oluyor. Bir yabancının açıklamasız
+bir run tamamlayıp tamamlayamayacağı hâlâ senin doğrulaman gereken kısım.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **`localStorage` bu faza çekildi** (plana göre Faz 8). Kapatıldığında bir
+  sonraki açılışta geri gelen bir "ekran sarsıntısını kapat" ayarı, ayar değil;
+  erişilebilirlik gerekçesiyle konan bir anahtarın kalıcı olmaması onu işlevsiz
+  bırakıyordu. Depolama gizli sekmede erişilmeye çalışıldığında hata fırlatıyor,
+  o yüzden okuma da yazma da sessizce varsayılana düşüyor: bir tercihi kaybetmek
+  oyuncunun içinde olduğu run'dan daha ucuz.
+- **Karakter seçim ekranı yok.** Tek karakter var; "iskeleti hazır" bir seçim
+  ekranı, seçenek eklendiğinde nasıl olsa yeniden yazılacak boş bir ekrandır.
+- **Yeniden başlatma sayfayı yeniliyor.** Her havuzun, her RNG akışının ve her
+  katmanın ayrı sıfırlama yolu olması gerekirdi; atlanan tek bir alan, önceki
+  run'ın kalabalığıyla başlayan bir run demek. Paket zaten önbellekte.
+- **Mobil duraklat düğmesi eklendi.** Telefonda Esc tuşu yok; onsuz run'ın en
+  zor bırakıldığı platformda bırakma yolu hiç yoktu. Doğrulama sırasında çıktı.
+- **Silah/düşman isimleri string tablosuna girmedi.** Onlar `data/balance/*.json`
+  içinde sayılarının yanında duruyor: Yatağan'ı yeniden adlandırmak bir denge
+  tablosu düzenlemesi, çeviri değil.
+
+**Yol boyunca bulunan iki hata:**
+
+- **Kalite kademesi hedefi _yükseltiyordu_.** "Düşük" seçmek ilk dakikayı 55
+  gövdeden 140'a çıkarıyordu, çünkü tavan ile hedef aynı parametreye
+  bağlanmıştı. Bunlar iki ayrı araç: `?enemies=` tabloyu _değiştirir_ (seçilen
+  bir sayıyı ölçmek için), kalite tavanı yalnızca _düşürür_ (telefonu korumak
+  için). `effectiveTarget` ayrımı yapıyor, test de tutuyor.
+- **Tuş atama boşta bırakabiliyordu.** İlk halim, tuşu çalınan eylemin eski
+  tuşlarını geri veriyordu — yani engellemeye çalıştığı çift atamayı üretiyordu.
+  Doğrusu takas: tuşunu kaybeden eylem, hedefin bıraktıklarını alıyor. Böylece
+  hiçbir eylem tuşsuz kalmıyor ve hiçbir tuş iki işe bakmıyor.
 
 ---
 
@@ -538,11 +573,13 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 
 ## 8. Sıradaki Adım
 
-**Faz 7** — Kabuk, UI ve oyun akışı: ana menü, duraklat, ayarlar, tam HUD
-(silah/eşya ikonları voxel modellerden render edilerek), tuş atamaları ve
-lokalizasyon iskeleti.
+**Faz 8** — Ses, cila, yayın: WebAudio efekt havuzu ve mehter esinli döngü,
+hafif bloom/vinyet, en iyi sürenin kaydı, Playwright smoke testi, README ve
+yayın.
 
-Faz 0–6 tamamlandı; her birinin sapmaları kendi bölümünde kayıtlı.
+Faz 0–7 tamamlandı; her birinin sapmaları kendi bölümünde kayıtlı. Faz 8'e
+devrolan tek açık kalem: 500+ gövdede koyu paletli sıradan düşmanların tek bir
+siyah kütleye dönüşmesi — bir palet geçişi gerektiriyor.
 
 **Sende bekleyenler:**
 

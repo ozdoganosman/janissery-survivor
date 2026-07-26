@@ -4,6 +4,7 @@ import { createRng } from '../src/core/rng';
 import {
   BOSS_ENTRIES,
   createDirector,
+  effectiveTarget,
   pickKind,
   stageAt,
   stepDirector,
@@ -18,7 +19,7 @@ const SPAWN_RADIUS = 34;
 /** Runs the director for a stretch of time, holding the player still. */
 function run(
   seconds: number,
-  options: { from?: number; target?: number; pool?: EnemyPool } = {},
+  options: { from?: number; target?: number; cap?: number; pool?: EnemyPool } = {},
 ): { pool: EnemyPool; spawned: number } {
   const pool = options.pool ?? new EnemyPool(2000);
   const director = createDirector();
@@ -37,6 +38,7 @@ function run(
       elapsed,
       TICK_SECONDS,
       options.target ?? 0,
+      options.cap ?? 0,
     );
   }
   return { pool, spawned };
@@ -163,7 +165,50 @@ describe('pickKind', () => {
   });
 });
 
+describe('effectiveTarget', () => {
+  const stage = WAVE_STAGES[0];
+
+  it('uses the stage when nothing else is asked for', () => {
+    expect(effectiveTarget(stage)).toBe(stage.target);
+  });
+
+  it('lets an override replace the stage in either direction', () => {
+    expect(effectiveTarget(stage, 600)).toBe(600);
+    expect(effectiveTarget(stage, 10)).toBe(10);
+  });
+
+  it('only ever removes enemies with a cap', () => {
+    // The bug this exists to prevent: a cap treated as a target made the *lowest*
+    // quality tier raise the opening minute from 55 bodies to 140.
+    expect(effectiveTarget(stage, 0, 140)).toBe(Math.min(stage.target, 140));
+    expect(effectiveTarget(stage, 0, 140)).toBeLessThanOrEqual(stage.target);
+    const late = WAVE_STAGES[WAVE_STAGES.length - 1];
+    expect(effectiveTarget(late, 0, 140)).toBe(140);
+  });
+
+  it('applies the cap to an override too', () => {
+    expect(effectiveTarget(stage, 600, 140)).toBe(140);
+  });
+
+  it('treats zero as "not set" for both', () => {
+    expect(effectiveTarget(stage, 0, 0)).toBe(stage.target);
+  });
+});
+
 describe('stepDirector', () => {
+  it('never exceeds a quality cap, at any point in the run', () => {
+    for (const from of [0, 300, 700]) {
+      const { pool } = run(60, { from, cap: 90 });
+      expect(pool.count).toBeLessThanOrEqual(90);
+    }
+  });
+
+  it('does not let a cap inflate an early stage', () => {
+    const uncapped = run(45).pool.count;
+    const capped = run(45, { cap: 140 }).pool.count;
+    expect(capped).toBeLessThanOrEqual(uncapped);
+  });
+
   it('fills the crowd up to the stage target and then stops', () => {
     const { pool } = run(60);
     expect(pool.count).toBe(WAVE_STAGES[0].target);

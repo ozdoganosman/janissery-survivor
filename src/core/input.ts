@@ -1,3 +1,5 @@
+import { DEFAULT_BINDINGS, type ActionId, type Bindings } from './settings';
+
 /**
  * Movement intent from keyboard and gamepad.
  *
@@ -33,6 +35,10 @@ export interface InputSource {
   get usingGamepad(): boolean;
   /** Non-null while a finger is steering. */
   get touchStick(): TouchStick | null;
+  /** Replaces the key map, so a rebind takes effect without a reload. */
+  setBindings(bindings: Bindings): void;
+  /** Checks the pad's pause button. Call once per rendered frame, not per step. */
+  pollPause(): void;
   dispose(): void;
 }
 
@@ -42,10 +48,13 @@ export const TOUCH_STICK_RADIUS = 58;
 /** Drag below this many pixels is treated as a tap, not a steer. */
 const TOUCH_DEADZONE_PX = 7;
 
-const MOVE_LEFT = new Set(['KeyA', 'ArrowLeft']);
-const MOVE_RIGHT = new Set(['KeyD', 'ArrowRight']);
-const MOVE_UP = new Set(['KeyW', 'ArrowUp']);
-const MOVE_DOWN = new Set(['KeyS', 'ArrowDown']);
+/**
+ * Gamepad face and shoulder buttons that pause.
+ *
+ * Start (9) is the convention; B/Circle (1) is included because a pad without a
+ * usable Start button would otherwise have no way out of a run at all.
+ */
+const PAUSE_BUTTONS = [9, 1];
 
 /** Keys whose default action would otherwise scroll the page under the game. */
 const SWALLOWED = new Set([
@@ -111,13 +120,23 @@ export function stickIntent(
 export function createInput(
   target: Window = window,
   touchSurface: HTMLElement | null = null,
+  options: { bindings?: Bindings; onPause?: () => void } = {},
 ): InputSource {
   const pressed = new Set<string>();
+  let bindings = options.bindings ?? DEFAULT_BINDINGS;
   let usingGamepad = false;
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.repeat) return;
     if (SWALLOWED.has(event.code)) event.preventDefault();
+    // Pause is an edge, not a state: holding the key must not toggle sixty times a
+    // second. Handled on the event rather than in `sample`, so it still works while
+    // the simulation is stopped and `sample` is no longer being called.
+    if (bindings.pause.includes(event.code)) {
+      event.preventDefault();
+      options.onPause?.();
+      return;
+    }
     pressed.add(event.code);
     usingGamepad = false;
   };
@@ -186,16 +205,39 @@ export function createInput(
     touchSurface.addEventListener('lostpointercapture', endStick);
   }
 
+  const connectedPads = (): (Gamepad | null)[] => target.navigator.getGamepads?.() ?? [];
+
   const readGamepad = (): InputSnapshot | null => {
-    const pads = target.navigator.getGamepads?.() ?? [];
-    for (const pad of pads) {
+    for (const pad of connectedPads()) {
       if (pad === null || !pad.connected) continue;
-      const x = pad.axes[0] ?? 0;
-      const y = pad.axes[1] ?? 0;
-      const stick = applyDeadzone(x, y);
-      if (stick.moveX !== 0 || stick.moveZ !== 0) return stick;
+      // The d-pad reads as buttons on most pads, and a player who has found the d-pad
+      // should not discover that only the stick works.
+      let x = pad.axes[0] ?? 0;
+      let y = pad.axes[1] ?? 0;
+      if (pad.buttons[14]?.pressed === true) x -= 1;
+      if (pad.buttons[15]?.pressed === true) x += 1;
+      if (pad.buttons[12]?.pressed === true) y -= 1;
+      if (pad.buttons[13]?.pressed === true) y += 1;
+      const reading = applyDeadzone(x, y);
+      if (reading.moveX !== 0 || reading.moveZ !== 0) return reading;
     }
     return null;
+  };
+
+  // Remembered so a held button fires once. The gamepad API has no events, so the
+  // edge has to be found by comparing against the previous poll.
+  let padPauseHeld = false;
+
+  const pollPause = (): void => {
+    let pressed = false;
+    for (const pad of connectedPads()) {
+      if (pad === null || !pad.connected) continue;
+      for (const index of PAUSE_BUTTONS) {
+        if (pad.buttons[index]?.pressed === true) pressed = true;
+      }
+    }
+    if (pressed && !padPauseHeld) options.onPause?.();
+    padPauseHeld = pressed;
   };
 
   return {
@@ -213,6 +255,22 @@ export function createInput(
       };
     },
 
+    setBindings(next: Bindings): void {
+      bindings = next;
+      // Keys held under the old map would otherwise stay held forever: their keyup
+      // carries the old code, and nothing is listening for it any more.
+      pressed.clear();
+    },
+
+    /**
+     * Checks the pad's pause button.
+     *
+     * Separate from `sample`, and driven from the render loop rather than the
+     * simulation step, because the simulation is exactly what stops while paused —
+     * polling there would let a pad pause the game and then never resume it.
+     */
+    pollPause,
+
     sample(): InputSnapshot {
       // Touch first: a finger on the glass is unambiguous intent, and on a phone
       // there is nothing else competing for it.
@@ -220,13 +278,16 @@ export function createInput(
         return stickIntent(stickOriginX, stickOriginY, stickThumbX, stickThumbY);
       }
 
+      const held = (action: ActionId): boolean =>
+        bindings[action].some((code) => pressed.has(code));
+
       let x = 0;
       let z = 0;
-      if (pressed.has('KeyA') || pressed.has('ArrowLeft')) x -= 1;
-      if (pressed.has('KeyD') || pressed.has('ArrowRight')) x += 1;
+      if (held('left')) x -= 1;
+      if (held('right')) x += 1;
       // Screen-up walks away from the camera, which is -Z in world space.
-      if (pressed.has('KeyW') || pressed.has('ArrowUp')) z -= 1;
-      if (pressed.has('KeyS') || pressed.has('ArrowDown')) z += 1;
+      if (held('up')) z -= 1;
+      if (held('down')) z += 1;
 
       if (x !== 0 || z !== 0) return clampIntent(x, z);
 
@@ -254,11 +315,3 @@ export function createInput(
     },
   };
 }
-
-/** Exposed for tests and for a future key-rebinding screen. */
-export const KEY_BINDINGS = {
-  left: MOVE_LEFT,
-  right: MOVE_RIGHT,
-  up: MOVE_UP,
-  down: MOVE_DOWN,
-} as const;

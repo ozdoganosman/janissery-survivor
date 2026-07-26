@@ -8,7 +8,7 @@ import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
 import { createWorld } from '../render/world/ground';
 import { createHordeView } from '../render/world/horde';
-import { createDirector, stageAt, stepDirector } from '../sim/director';
+import { createDirector, effectiveTarget, stageAt, stepDirector } from '../sim/director';
 import {
   censusOf,
   createEnemyIntents,
@@ -48,7 +48,11 @@ import {
 import { SpatialGrid } from '../sim/spatial';
 import { createVitals, heal, stepVitals } from '../sim/vitals';
 import { equip, stepWeapons, weaponStats, type WeaponId, type WeaponStats } from '../sim/weapons';
-import { createHud } from '../ui/hud';
+import { loadSettings, QUALITY_ENEMY_LIMIT, type Settings } from '../core/settings';
+import { setLanguage } from '../core/strings';
+import { disposeItemIcons, renderItemIcons } from '../render/voxel/icons';
+import { createHud, type HudItem } from '../ui/hud';
+import { createShell } from '../ui/shell';
 import { createSummaryScreen } from '../ui/summary';
 import { createLevelUpScreen } from '../ui/level-up';
 import { createTouchStickOverlay } from '../ui/touch-stick';
@@ -92,6 +96,27 @@ const CRITICAL_MULTIPLIER = 2;
 /** How long a run lasts before it counts as survived. */
 const RUN_SECONDS = 15 * 60;
 
+function noop(): void {
+  /* Nothing to do yet; the shell still wants a handler. */
+}
+
+/**
+ * Starts a fresh run by reloading the page.
+ *
+ * Blunt, and deliberately so: every pool, every RNG stream and every overlay would
+ * otherwise need a reset path, and one missed field is a run that starts with the
+ * previous run's crowd still on the field. The bundle is already cached, so the cost
+ * is a repaint rather than a download.
+ */
+function reload(straightIntoPlay: boolean): void {
+  const url = new URL(window.location.href);
+  if (straightIntoPlay) url.searchParams.set('go', '1');
+  else url.searchParams.delete('go');
+  // Also drop the debugging clock, so "play again" means a whole run.
+  url.searchParams.delete('start');
+  window.location.replace(url.toString());
+}
+
 export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const seedParam = params.get('seed');
   const worldSeed = seedParam === null ? 0x4a4e15 : seedFromString(seedParam);
@@ -118,11 +143,47 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const damageNumbers = createDamageNumbers();
   view.scene.add(damageNumbers.object);
 
-  const input = createInput(window, view.renderer.domElement);
+  const settings = loadSettings();
+  setLanguage(settings.language);
+
+  // Rendered before the shell exists, so the title screen is already on top of a
+  // finished HUD rather than appearing over a row that pops in a frame later.
+  const icons = renderItemIcons();
+
+  const input = createInput(window, view.renderer.domElement, {
+    bindings: settings.bindings,
+    onPause: () => {
+      // The card screen and the summary own the keyboard while they are up; pausing
+      // under them would stack two stopped states with no defined way out.
+      if (levelUp.visible || summary.visible) return;
+      shell.togglePause();
+    },
+  });
   const touchOverlay = createTouchStickOverlay();
-  const hud = createHud();
+  const hud = createHud(document.body, icons, () => {
+    if (levelUp.visible || summary.visible) return;
+    shell.togglePause();
+  });
   const levelUp = createLevelUpScreen();
   const summary = createSummaryScreen();
+
+  // `?go=1` skips the title screen. "Play again" reloads with it set, so a restart
+  // goes straight back into a run while quitting to the menu does not.
+  const shell = createShell({
+    settings,
+    startImmediately: params.get('go') === '1',
+    hooks: {
+      onStart: noop,
+      onResume: noop,
+      onQuit: () => {
+        reload(false);
+      },
+      onSettingsChanged: (next) => {
+        input.setBindings(next.bindings);
+        applySettings(next);
+      },
+    },
+  });
 
   const player = createPlayer(0, 0);
   const focus = createCameraFocus(0, 0);
@@ -162,6 +223,31 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   let outcome: 'running' | 'won' | 'lost' = 'running';
   const census = { elites: 0, bosses: 0, telegraphing: 0 };
 
+  // Resolved settings, refreshed whenever the panel changes one. Read in the hot loop,
+  // so they are plain locals rather than property lookups through the settings object.
+  let shakeAllowed = true;
+  let numbersAllowed = true;
+  let crowdCap = 0;
+
+  function applySettings(next: Settings): void {
+    shakeAllowed = next.screenShake;
+    numbersAllowed = next.damageNumbers;
+
+    // A ceiling, never a target. Zero means the tier imposes none.
+    crowdCap = QUALITY_ENEMY_LIMIT[next.quality];
+
+    if (!next.screenShake) {
+      // Otherwise whatever offset was in flight stays applied for good.
+      shake.offsetX = 0;
+      shake.offsetZ = 0;
+      shake.previousOffsetX = 0;
+      shake.previousOffsetZ = 0;
+    }
+    // Numbers already in flight are left to fade; they last under a second, and the
+    // setting is about the stream of them rather than the three currently rising.
+  }
+  applySettings(settings);
+
   world.update(player.x, player.z);
 
   /** A weapon's stats as the player currently has them: its level plus every passive. */
@@ -177,6 +263,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   };
 
   const onHit = (x: number, z: number, amount: number, critical: boolean): void => {
+    if (!numbersAllowed) return;
     // Criticals always show; ordinary hits get a budget. The flash still confirms
     // every one of them landed, so what is dropped is noise rather than information.
     if (critical) {
@@ -209,6 +296,24 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     return taken;
   };
 
+  /**
+   * Pushes the carried build to the HUD.
+   *
+   * Called when the build changes rather than every frame: rebuilding fourteen DOM
+   * nodes sixty times a second is layout work for a row that changes once a minute.
+   */
+  const refreshLoadout = (): void => {
+    const items: HudItem[] = [];
+    for (const [id, level] of loadout.weapons) {
+      items.push({ id, name: weaponStats(id).name, level, weapon: true });
+    }
+    for (const [id, level] of loadout.passives) {
+      items.push({ id, name: passiveDefinition(id).name, level, weapon: false });
+    }
+    hud.setLoadout(items);
+  };
+  refreshLoadout();
+
   const presentLevel = (): void => {
     const cards = offerCards(loadout, cardRng, 3);
     levelUp.show(progression.level, cards, (index) => {
@@ -224,6 +329,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       // Recomputed on every choice rather than cached per frame: a passive has to
       // take effect on the next shot, not the next level.
       stats = derivedStats(loadout);
+      refreshLoadout();
       pendingLevels--;
       levelUp.hide();
       // Several levels can land in one step — a heap of gems — and each is owed its
@@ -235,8 +341,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   return {
     update(stepSeconds: number): void {
       // The card screen stops the world. Being killed while reading a choice would
-      // teach the player not to read it.
-      if (levelUp.visible || summary.visible || outcome !== 'running') return;
+      // teach the player not to read it — and the same goes for the title screen,
+      // pause and the settings panel.
+      if (shell.blocking || levelUp.visible || summary.visible || outcome !== 'running') return;
       if (stepHitStop(hitStop, stepSeconds)) return;
 
       elapsed += stepSeconds;
@@ -261,6 +368,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         elapsed,
         stepSeconds,
         targetEnemies,
+        crowdCap,
       );
 
       grid.rebuild(enemies.count, enemies.x, enemies.z);
@@ -335,13 +443,16 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           stats.regenPerSecond,
         ) + applyDirectDamage(shotDamage + slamDamage);
 
-      if (hurt > 0) addShake(shake, HURT_SHAKE);
-      if (combat.kills > 0) addShake(shake, KILL_SHAKE);
-      if (combat.criticals > 0) {
-        addShake(shake, CRIT_SHAKE);
-        requestHitStop(hitStop);
+      if (shakeAllowed) {
+        if (hurt > 0) addShake(shake, HURT_SHAKE);
+        if (combat.kills > 0) addShake(shake, KILL_SHAKE);
+        if (combat.criticals > 0) addShake(shake, CRIT_SHAKE);
+        stepShake(shake, stepSeconds, effectRng);
       }
-      stepShake(shake, stepSeconds, effectRng);
+      // Hit stop is not shake. It is a frame of weight on a critical, it does not
+      // move the camera, and switching it off with the shake would quietly take away
+      // the feedback rather than the motion.
+      if (combat.criticals > 0) requestHitStop(hitStop);
 
       const collected = stepGems(
         gems,
@@ -380,13 +491,20 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
             ),
           },
           () => {
-            window.location.reload();
+            reload(true);
+          },
+          () => {
+            reload(false);
           },
         );
       }
     },
 
     render(alpha: number): void {
+      // Polled here rather than in `update`, because `update` is exactly what stops
+      // while paused — a pad could otherwise pause the game and never resume it.
+      input.pollPause();
+
       hero.root.position.set(
         THREE.MathUtils.lerp(player.previousX, player.x, alpha),
         0,
@@ -432,7 +550,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         `hp ${String(Math.ceil(vitals.health))}/${String(vitals.maxHealth)}  lv ${String(progression.level)}  xp ${String(progression.lifetime)}  ${outcome}`,
         `build ${build}`,
         `passives ${passives === '' ? '-' : passives}`,
-        `enemies ${String(enemies.count)}/${String(targetEnemies > 0 ? targetEnemies : stageAt(elapsed).target)}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
+        `enemies ${String(enemies.count)}/${String(effectiveTarget(stageAt(elapsed), targetEnemies, crowdCap))}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
         `elites ${String(census.elites)}  bosses ${String(census.bosses)}  winding up ${String(census.telegraphing)}  enemy shots ${String(enemyShots.count)}`,
         `draw calls ${String(info.calls)}  tris ${String(info.triangles)}`,
       ].join('\n');
@@ -440,6 +558,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
     dispose(): void {
       input.dispose();
+      shell.dispose();
+      disposeItemIcons();
       touchOverlay.dispose();
       hud.dispose();
       levelUp.dispose();

@@ -1,3 +1,5 @@
+import { t } from '../core/strings';
+
 import type { Card } from '../sim/loadout';
 
 /**
@@ -140,7 +142,7 @@ export function createLevelUpScreen(parent: HTMLElement = document.body): LevelU
 
     show(level, cards, choose): void {
       pending = choose;
-      title.textContent = `Seviye ${String(level)} — birini seç`;
+      title.textContent = `${t('levelup.title')} ${String(level)} - ${t('levelup.pick')}`;
       row.replaceChildren();
 
       cards.forEach((card, index) => {
@@ -150,12 +152,16 @@ export function createLevelUpScreen(parent: HTMLElement = document.body): LevelU
 
         const key = document.createElement('span');
         key.className = 'ju-key';
-        key.textContent = `${String(index + 1)} tuşu`;
+        key.textContent = t('levelup.key').replace('{n}', String(index + 1));
 
         const kind = document.createElement('span');
         kind.className = 'ju-kind';
         kind.textContent =
-          card.kind === 'weapon' ? 'Silah' : card.kind === 'passive' ? 'Eşya' : 'İkram';
+          card.kind === 'weapon'
+            ? t('card.weapon')
+            : card.kind === 'passive'
+              ? t('card.item')
+              : t('card.treat');
 
         const name = document.createElement('span');
         name.className = 'ju-name';
