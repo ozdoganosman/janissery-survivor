@@ -1,0 +1,101 @@
+{
+  "stages": [
+    {
+      "at": 0,
+      "target": 55,
+      "eliteChance": 0,
+      "formation": "ring",
+      "weights": { "karakoncolos": 1 }
+    },
+    {
+      "at": 75,
+      "target": 90,
+      "eliteChance": 0,
+      "formation": "ring",
+      "weights": { "karakoncolos": 0.75, "cin": 0.25 }
+    },
+    {
+      "at": 150,
+      "target": 130,
+      "eliteChance": 0.02,
+      "formation": "wall",
+      "weights": { "karakoncolos": 0.55, "cin": 0.35, "sahmeran": 0.1 }
+    },
+    {
+      "at": 240,
+      "target": 175,
+      "eliteChance": 0.03,
+      "formation": "ring",
+      "weights": {
+        "karakoncolos": 0.4,
+        "cin": 0.3,
+        "sahmeran": 0.15,
+        "gulyabani": 0.1,
+        "alkarisi": 0.05
+      }
+    },
+    {
+      "at": 330,
+      "target": 220,
+      "eliteChance": 0.05,
+      "formation": "stream",
+      "weights": {
+        "cin": 0.35,
+        "sahmeran": 0.25,
+        "karakoncolos": 0.2,
+        "alkarisi": 0.12,
+        "gulyabani": 0.08
+      }
+    },
+    {
+      "at": 420,
+      "target": 270,
+      "eliteChance": 0.07,
+      "formation": "ring",
+      "weights": {
+        "sahmeran": 0.3,
+        "cin": 0.25,
+        "gulyabani": 0.2,
+        "alkarisi": 0.15,
+        "karakoncolos": 0.1
+      }
+    },
+    {
+      "at": 540,
+      "target": 320,
+      "eliteChance": 0.09,
+      "formation": "wall",
+      "weights": {
+        "sahmeran": 0.3,
+        "gulyabani": 0.25,
+        "cin": 0.2,
+        "alkarisi": 0.15,
+        "karakoncolos": 0.1
+      }
+    },
+    {
+      "at": 660,
+      "target": 380,
+      "eliteChance": 0.12,
+      "formation": "ring",
+      "weights": {
+        "gulyabani": 0.3,
+        "sahmeran": 0.25,
+        "alkarisi": 0.2,
+        "cin": 0.15,
+        "karakoncolos": 0.1
+      }
+    },
+    {
+      "at": 780,
+      "target": 440,
+      "eliteChance": 0.16,
+      "formation": "stream",
+      "weights": { "gulyabani": 0.32, "sahmeran": 0.24, "alkarisi": 0.22, "cin": 0.22 }
+    }
+  ],
+  "bosses": [
+    { "at": 600, "kind": "gulyabaniAgasi", "healthScale": 1 },
+    { "at": 870, "kind": "gulyabaniAgasi", "healthScale": 1.9 }
+  ]
+}

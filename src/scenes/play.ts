@@ -8,14 +8,16 @@ import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
 import { createWorld } from '../render/world/ground';
 import { createHordeView } from '../render/world/horde';
+import { createDirector, stageAt, stepDirector } from '../sim/director';
 import {
+  censusOf,
+  createEnemyIntents,
   despawnDistant,
   ENEMY_CAPACITY,
   EnemyPool,
-  KARAKONCOLOS,
-  spawnRing,
   stepEnemies,
 } from '../sim/enemies';
+import { ENEMY_SHOT_CAPACITY, EnemyShotPool, stepEnemyShots } from '../sim/enemy-shots';
 import {
   addShake,
   createHitStop,
@@ -30,6 +32,7 @@ import {
   derivedStats,
   effectiveWeapon,
   offerCards,
+  passiveDefinition,
 } from '../sim/loadout';
 import { GEM_CAPACITY, GemPool, stepGems } from '../sim/pickups';
 import { createCameraFocus, createPlayer, stepCameraFocus, stepPlayer } from '../sim/player';
@@ -44,8 +47,9 @@ import {
 } from '../sim/projectiles';
 import { SpatialGrid } from '../sim/spatial';
 import { createVitals, heal, stepVitals } from '../sim/vitals';
-import { equip, stepWeapons, type WeaponId, type WeaponStats } from '../sim/weapons';
+import { equip, stepWeapons, weaponStats, type WeaponId, type WeaponStats } from '../sim/weapons';
 import { createHud } from '../ui/hud';
+import { createSummaryScreen } from '../ui/summary';
 import { createLevelUpScreen } from '../ui/level-up';
 import { createTouchStickOverlay } from '../ui/touch-stick';
 import type { GameScene, SceneFactory } from './types';
@@ -54,8 +58,9 @@ import type { GameScene, SceneFactory } from './types';
  * A run.
  *
  * `?seed=word` fixes the scenery, the spawns and the card offers, so a run replays
- * exactly. `?enemies=N` sets the crowd the spawner maintains, for measuring the
- * performance budget on real hardware.
+ * exactly. `?enemies=N` pins the crowd the director maintains, for measuring the frame
+ * budget on real hardware. `?start=SECONDS` begins the clock partway in, which is the
+ * only practical way to look at the late roster or a boss without playing to it.
  */
 
 const IDLE_THRESHOLD = 0.05;
@@ -68,9 +73,6 @@ const SPAWN_RADIUS = 34;
 
 /** Past this the player has outrun them for good and the slots are better reused. */
 const DESPAWN_RADIUS = 52;
-
-const DEFAULT_TARGET_ENEMIES = 300;
-const SPAWN_RATE = 55;
 
 /**
  * Ordinary damage numbers allowed per simulation step.
@@ -93,7 +95,9 @@ const RUN_SECONDS = 15 * 60;
 export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const seedParam = params.get('seed');
   const worldSeed = seedParam === null ? 0x4a4e15 : seedFromString(seedParam);
-  const targetEnemies = readPositiveInt(params.get('enemies'), DEFAULT_TARGET_ENEMIES);
+  // Zero means "whatever the wave table says", which is the ordinary game.
+  const targetEnemies = readPositiveInt(params.get('enemies'), 0);
+  const startSeconds = Math.min(readPositiveInt(params.get('start'), 0), RUN_SECONDS - 1);
 
   const world = createWorld(worldSeed);
   for (const object of world.objects) view.scene.add(object);
@@ -101,7 +105,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const hero = createVoxelRig(getVoxelModel('yeniceri'));
   view.scene.add(hero.root);
 
-  const horde = createHordeView(ENEMY_CAPACITY, GEM_CAPACITY);
+  const horde = createHordeView(ENEMY_CAPACITY, GEM_CAPACITY, ENEMY_SHOT_CAPACITY);
   for (const object of horde.objects) view.scene.add(object);
 
   const shards = createShardField(0x6b5f80);
@@ -118,14 +122,18 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const touchOverlay = createTouchStickOverlay();
   const hud = createHud();
   const levelUp = createLevelUpScreen();
+  const summary = createSummaryScreen();
 
   const player = createPlayer(0, 0);
   const focus = createCameraFocus(0, 0);
   const vitals = createVitals();
 
   const enemies = new EnemyPool(ENEMY_CAPACITY);
+  const enemyShots = new EnemyShotPool(ENEMY_SHOT_CAPACITY);
   const gems = new GemPool(GEM_CAPACITY);
   const grid = new SpatialGrid(GRID_CELL_SIZE, ENEMY_CAPACITY);
+  const director = createDirector();
+  const intents = createEnemyIntents();
 
   // Separate streams, so adding a spawn roll cannot shift the card offers and a seed
   // keeps meaning the same run after a balance change to an unrelated system.
@@ -147,12 +155,12 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const hitStop = createHitStop();
   const combat = createCombatReport();
 
-  let spawnCredit = 0;
   let kills = 0;
   let numbersThisStep = 0;
-  let elapsed = 0;
+  let elapsed = startSeconds;
   let pendingLevels = 0;
   let outcome: 'running' | 'won' | 'lost' = 'running';
+  const census = { elites: 0, bosses: 0, telegraphing: 0 };
 
   world.update(player.x, player.z);
 
@@ -160,8 +168,10 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const resolveWeapon = (id: WeaponId): WeaponStats =>
     effectiveWeapon(id, loadout.weapons.get(id) ?? 1, stats);
 
-  const onKill = (x: number, z: number): void => {
-    gems.spawn(x, z, 1);
+  // The pool is asked what the corpse was worth rather than assuming one gem: a
+  // Gulyabani and an elite are the reason to fight through a wall instead of round it.
+  const onKill = (x: number, z: number, value: number): void => {
+    gems.spawn(x, z, value);
     shards.burst(x, z, shardRandom);
     kills++;
   };
@@ -179,6 +189,25 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   };
 
   const rollCritical = (): boolean => combatRng.chance(CRITICAL_CHANCE);
+
+  /**
+   * Applies damage that bypasses the contact system.
+   *
+   * Arrows and slams are aimed and avoidable, so they are not softened by the
+   * immunity window that stops a surrounding crowd from deleting the player — being
+   * hit by something you could have stepped out of should cost the full amount.
+   */
+  const applyDirectDamage = (amount: number): number => {
+    if (amount <= 0 || vitals.dead) return 0;
+    const taken = Math.max(1, amount - Math.max(0, stats.armour));
+    vitals.health -= taken;
+    vitals.hurtFlash = 1;
+    if (vitals.health <= 0) {
+      vitals.health = 0;
+      vitals.dead = true;
+    }
+    return taken;
+  };
 
   const presentLevel = (): void => {
     const cards = offerCards(loadout, cardRng, 3);
@@ -207,7 +236,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     update(stepSeconds: number): void {
       // The card screen stops the world. Being killed while reading a choice would
       // teach the player not to read it.
-      if (levelUp.visible || outcome !== 'running') return;
+      if (levelUp.visible || summary.visible || outcome !== 'running') return;
       if (stepHitStop(hitStop, stepSeconds)) return;
 
       elapsed += stepSeconds;
@@ -222,19 +251,46 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       stepCameraFocus(focus, player, stepSeconds);
 
       despawnDistant(enemies, player.x, player.z, DESPAWN_RADIUS);
-
-      spawnCredit += SPAWN_RATE * stepSeconds;
-      const room = targetEnemies - enemies.count;
-      const wanted = Math.min(Math.floor(spawnCredit), room);
-      if (wanted > 0) {
-        spawnCredit -= wanted;
-        spawnRing(enemies, spawnRng, player.x, player.z, SPAWN_RADIUS, wanted);
-      } else if (room <= 0) {
-        spawnCredit = 0;
-      }
+      stepDirector(
+        director,
+        enemies,
+        spawnRng,
+        player.x,
+        player.z,
+        SPAWN_RADIUS,
+        elapsed,
+        stepSeconds,
+        targetEnemies,
+      );
 
       grid.rebuild(enemies.count, enemies.x, enemies.z);
-      stepEnemies(enemies, grid, player.x, player.z, stepSeconds, KARAKONCOLOS);
+      stepEnemies(enemies, grid, player.x, player.z, stepSeconds, elapsed, intents);
+
+      // Ranged attacks and boss slams are decided by the enemy step and carried out
+      // here, so the pool never needs to know what a player or a projectile is.
+      for (let i = 0; i < intents.shooterCount; i++) {
+        const shooter = intents.shooters[i];
+        const type = enemies.typeOf(shooter);
+        enemyShots.fire(
+          enemies.x[shooter],
+          enemies.z[shooter],
+          player.x,
+          player.z,
+          type.shotSpeed,
+          type.shotDamage,
+        );
+      }
+      let slamDamage = 0;
+      for (let i = 0; i < intents.slammerCount; i++) {
+        const boss = intents.slammers[i];
+        const type = enemies.typeOf(boss);
+        const dx = player.x - enemies.x[boss];
+        const dz = player.z - enemies.z[boss];
+        if (dx * dx + dz * dz <= type.slamRadius * type.slamRadius) {
+          slamDamage += type.slamDamage;
+        }
+        addShake(shake, 1);
+      }
 
       stepWeapons(
         [...equipped.values()],
@@ -267,15 +323,17 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         rollCritical,
       );
 
-      const hurt = stepVitals(
-        vitals,
-        grid,
-        player.x,
-        player.z,
-        stepSeconds,
-        stats.armour,
-        stats.regenPerSecond,
-      );
+      const shotDamage = stepEnemyShots(enemyShots, player.x, player.z, 0.55, stepSeconds);
+      const hurt =
+        stepVitals(
+          vitals,
+          grid,
+          player.x,
+          player.z,
+          stepSeconds,
+          stats.armour,
+          stats.regenPerSecond,
+        ) + applyDirectDamage(shotDamage + slamDamage);
 
       if (hurt > 0) addShake(shake, HURT_SHAKE);
       if (combat.kills > 0) addShake(shake, KILL_SHAKE);
@@ -306,6 +364,26 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
       if (vitals.dead) outcome = 'lost';
       else if (elapsed >= RUN_SECONDS) outcome = 'won';
+
+      if (outcome !== 'running' && !summary.visible) {
+        summary.show(
+          {
+            survived: outcome === 'won',
+            seconds: elapsed,
+            level: progression.level,
+            kills,
+            weapons: [...loadout.weapons.entries()].map(
+              ([id, level]) => `${weaponStats(id).name} ${String(level)}`,
+            ),
+            passives: [...loadout.passives.entries()].map(
+              ([id, level]) => `${passiveDefinition(id).name} ${String(level)}`,
+            ),
+          },
+          () => {
+            window.location.reload();
+          },
+        );
+      }
     },
 
     render(alpha: number): void {
@@ -325,7 +403,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           THREE.MathUtils.lerp(shake.previousOffsetZ, shake.offsetZ, alpha),
       );
 
-      horde.render(enemies, gems, alpha);
+      horde.render(enemies, gems, enemyShots, alpha);
       projectileView.render(projectiles, alpha);
       shards.render(alpha);
       damageNumbers.render();
@@ -343,6 +421,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
     detail(): string {
       const info = view.renderer.info.render;
+      censusOf(enemies, census);
       const build = [...loadout.weapons.entries()]
         .map(([id, level]) => `${id}${String(level)}`)
         .join(' ');
@@ -353,7 +432,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         `hp ${String(Math.ceil(vitals.health))}/${String(vitals.maxHealth)}  lv ${String(progression.level)}  xp ${String(progression.lifetime)}  ${outcome}`,
         `build ${build}`,
         `passives ${passives === '' ? '-' : passives}`,
-        `enemies ${String(enemies.count)}/${String(targetEnemies)}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
+        `enemies ${String(enemies.count)}/${String(targetEnemies > 0 ? targetEnemies : stageAt(elapsed).target)}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
+        `elites ${String(census.elites)}  bosses ${String(census.bosses)}  winding up ${String(census.telegraphing)}  enemy shots ${String(enemyShots.count)}`,
         `draw calls ${String(info.calls)}  tris ${String(info.triangles)}`,
       ].join('\n');
     },
@@ -363,6 +443,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       touchOverlay.dispose();
       hud.dispose();
       levelUp.dispose();
+      summary.dispose();
       hero.dispose();
       horde.dispose();
       projectileView.dispose();

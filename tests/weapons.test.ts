@@ -270,7 +270,12 @@ describe('projectile motion', () => {
 describe('resolveHits', () => {
   function setup(enemyCount: number) {
     const enemies = new EnemyPool(64);
-    for (let i = 0; i < enemyCount; i++) enemies.spawn(i * 0.6, 0, 0, { speed: 1, health: 100 });
+    for (let i = 0; i < enemyCount; i++) {
+      enemies.spawn(i * 0.6, 0, 0);
+      // Health is set past the table so these tests measure the damage pipeline rather
+      // than tracking whatever the bestiary is balanced at this week.
+      enemies.health[i] = 100;
+    }
     const grid = new SpatialGrid(2, 64);
     grid.rebuild(enemies.count, enemies.x, enemies.z);
     return { enemies, grid, projectiles: new ProjectilePool(16), report: createCombatReport() };
@@ -353,7 +358,8 @@ describe('resolveHits', () => {
 
   it('reports a kill and releases the slot', () => {
     const enemies = new EnemyPool(8);
-    enemies.spawn(0, 0, 0, { speed: 1, health: 5 });
+    enemies.spawn(0, 0, 0);
+    enemies.health[0] = 5;
     const grid = new SpatialGrid(2, 8);
     grid.rebuild(enemies.count, enemies.x, enemies.z);
     const projectiles = new ProjectilePool(8);
@@ -382,7 +388,10 @@ describe('resolveHits', () => {
     // is what stops a removal from moving a not-yet-damaged enemy out from under the
     // iteration.
     const enemies = new EnemyPool(64);
-    for (let i = 0; i < 8; i++) enemies.spawn(i * 0.4, 0, 0, { speed: 1, health: 5 });
+    for (let i = 0; i < 8; i++) {
+      enemies.spawn(i * 0.4, 0, 0);
+      enemies.health[i] = 5;
+    }
     const grid = new SpatialGrid(2, 64);
     grid.rebuild(enemies.count, enemies.x, enemies.z);
     const projectiles = new ProjectilePool(8);
@@ -396,7 +405,8 @@ describe('resolveHits', () => {
 
   it('applies knockback away from the hitbox', () => {
     const enemies = new EnemyPool(8);
-    enemies.spawn(1, 0, 0, { speed: 1, health: 100 });
+    enemies.spawn(1, 0, 0);
+    enemies.health[0] = 100;
     const grid = new SpatialGrid(2, 8);
     grid.rebuild(enemies.count, enemies.x, enemies.z);
     const projectiles = new ProjectilePool(8);

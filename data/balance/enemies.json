@@ -1,0 +1,81 @@
+{
+  "karakoncolos": {
+    "name": "Karakoncolos",
+    "model": "karakoncolos",
+    "behaviour": "chase",
+    "speed": 2.45,
+    "health": 10,
+    "radius": 0.55,
+    "scale": 1,
+    "experience": 1,
+    "contactDamage": 1
+  },
+  "cin": {
+    "name": "Cin",
+    "model": "cin",
+    "behaviour": "zigzag",
+    "speed": 3.7,
+    "health": 7,
+    "radius": 0.45,
+    "scale": 0.9,
+    "experience": 1,
+    "contactDamage": 0.9,
+    "waveAmplitude": 0.85,
+    "waveFrequency": 2.6
+  },
+  "gulyabani": {
+    "name": "Gulyabani",
+    "model": "gulyabani",
+    "behaviour": "chase",
+    "speed": 1.45,
+    "health": 55,
+    "radius": 0.95,
+    "scale": 1.45,
+    "experience": 4,
+    "contactDamage": 1.6
+  },
+  "sahmeran": {
+    "name": "Şahmeran Yavrusu",
+    "model": "sahmeran",
+    "behaviour": "serpentine",
+    "speed": 4.6,
+    "health": 6,
+    "radius": 0.42,
+    "scale": 0.85,
+    "experience": 2,
+    "contactDamage": 0.8,
+    "waveAmplitude": 1.25,
+    "waveFrequency": 4.2
+  },
+  "alkarisi": {
+    "name": "Alkarısı",
+    "model": "alkarisi",
+    "behaviour": "ranged",
+    "speed": 2.1,
+    "health": 18,
+    "radius": 0.55,
+    "scale": 1.05,
+    "experience": 3,
+    "contactDamage": 0.8,
+    "keepDistance": 8.5,
+    "shotCooldown": 2.6,
+    "shotSpeed": 8.5,
+    "shotDamage": 7
+  },
+  "gulyabaniAgasi": {
+    "name": "Gulyabani Ağası",
+    "model": "gulyabani",
+    "behaviour": "boss",
+    "speed": 1.6,
+    "health": 2600,
+    "radius": 1.9,
+    "scale": 3.1,
+    "experience": 60,
+    "contactDamage": 3,
+    "slamCooldown": 5.2,
+    "slamTelegraph": 1.15,
+    "slamRadius": 9,
+    "slamDamage": 22,
+    "pursuitSpeed": 7.6
+  }
+}

@@ -247,7 +247,7 @@ export function resolveHits(
   grid: SpatialGrid,
   attack: AttackProfile,
   report: CombatReport,
-  onKill: (x: number, z: number) => void,
+  onKill: (x: number, z: number, experience: number) => void,
   onHit: (x: number, z: number, amount: number, critical: boolean) => void,
   rollCritical: () => boolean,
   defence: DefenceProfile = NO_DEFENCE,
@@ -310,7 +310,9 @@ export function resolveHits(
       projectiles.pierce[p] -= 1;
 
       if (enemies.health[enemy] <= 0) {
-        onKill(enemies.x[enemy], enemies.z[enemy]);
+        // Read before the kill: swap-removal overwrites the slot, so asking
+        // afterwards would report whichever enemy was moved into it.
+        onKill(enemies.x[enemy], enemies.z[enemy], enemies.experienceOf(enemy));
         report.kills++;
         enemies.kill(enemy);
       }

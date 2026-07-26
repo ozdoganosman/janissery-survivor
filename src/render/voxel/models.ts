@@ -1,5 +1,9 @@
+import alkarisiJson from '../../../data/models/alkarisi.json';
+import cinJson from '../../../data/models/cin.json';
+import gulyabaniJson from '../../../data/models/gulyabani.json';
 import kandilJson from '../../../data/models/kandil.json';
 import karakoncolosJson from '../../../data/models/karakoncolos.json';
+import sahmeranJson from '../../../data/models/sahmeran.json';
 import serviJson from '../../../data/models/servi.json';
 import surJson from '../../../data/models/sur.json';
 import yeniceriJson from '../../../data/models/yeniceri.json';
@@ -16,7 +20,14 @@ import { parseVoxelModel } from './schema';
  */
 
 /** Models with limbs, shown side by side in the model debug scene. */
-export const MODEL_IDS = ['yeniceri', 'karakoncolos'] as const;
+export const MODEL_IDS = [
+  'yeniceri',
+  'karakoncolos',
+  'cin',
+  'gulyabani',
+  'sahmeran',
+  'alkarisi',
+] as const;
 
 /** Single-part scenery. Kept apart so the debug scene does not parade the trees. */
 export const PROP_MODEL_IDS = ['sur', 'servi', 'kandil'] as const;
@@ -26,6 +37,10 @@ export type ModelId = (typeof MODEL_IDS)[number] | (typeof PROP_MODEL_IDS)[numbe
 const SOURCES: Readonly<Record<ModelId, unknown>> = {
   yeniceri: yeniceriJson,
   karakoncolos: karakoncolosJson,
+  cin: cinJson,
+  gulyabani: gulyabaniJson,
+  sahmeran: sahmeranJson,
+  alkarisi: alkarisiJson,
   sur: surJson,
   servi: serviJson,
   kandil: kandilJson,

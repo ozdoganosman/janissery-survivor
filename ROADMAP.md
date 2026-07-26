@@ -362,11 +362,10 @@ sınırda tekrarlanmıştı. NaN can sıfıra hiç ulaşamaz, yani oyuncu hem
 
 ---
 
-### Faz 6 — Dalga direktörü ve boss · ~4–5 gün
+### Faz 6 — Dalga direktörü ve boss · ✅ tamamlandı
 
-- Zaman çizelgesi tablosu: `t=0..15dk` arası dakika başına spawn kuralları
-  (tip, oran, formasyon, elit şansı) — tamamen veri
-- **5 düşman tipi:**
+- [x] Zaman çizelgesi tablosu: 9 kademe, `data/balance/waves.json` — tamamen veri
+- [x] **5 düşman tipi:**
 
 | Düşman               | Rol                                              |
 | -------------------- | ------------------------------------------------ |
@@ -376,13 +375,51 @@ sınırda tekrarlanmıştı. NaN can sıfıra hiç ulaşamaz, yani oyuncu hem
 | **Şahmeran Yavrusu** | Çok hızlı, dalgalı hat izler                     |
 | **Alkarısı**         | Mesafe koruyan menzilli saldırgan                |
 
-- Formasyonlar: halka kuşatma, duvar akını, tek yönlü kalabalık
-- Elit varyantlar: instance rengi + stat çarpanı ile (yeni model gerekmez)
-- **Boss: Gulyabani Ağası** (t=10dk mid-boss, t=15dk final) — 3 fazlı,
-  telegraph'lı saldırılar
-- Kazanma/kayıp durumu, run özet ekranı
+- [x] Formasyonlar: halka kuşatma, duvar akını, tek yönlü akış
+- [x] Elit varyantlar: instance tinti + can/boyut/ödül çarpanı (yeni model yok)
+- [x] **Boss: Gulyabani Ağası** (t=10dk, t=14.5dk) — cana göre 3 fazlı,
+      telegraph'lı slam
+- [x] Kazanma/kayıp durumu, run özet ekranı
 
-**Çıkış kriteri:** Zorluk eğrisi ilk 3 dakikada kolay, 8. dakikada yoğun, 14. dakikada zorlayıcı. Kazanmak mümkün ama garanti değil.
+**Çıkış kriteri durumu:** Kademeler 55 düşmandan 440'a çıkıyor, elit şansı
+%0'dan %16'ya; roster 75. saniyeden itibaren açılıyor ve 660. saniyede beş
+tipin beşi de sahada. Tarayıcıda doğrulandı: erken dakika tek tip ve elitsiz, 13. dakika 550 gövde + 91 elit + 31 düşman mermisi, boss geliyor, ring'ini
+çiziyor, vuruyor. Her iki bitiş de (kazanma ve ölüm) özet ekranını açıyor —
+masaüstünde ve mobilde. Eğrinin _hissi_ hâlâ senin doğrulaman gereken kısım.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Boss'a "takip hızı" eklendi.** Plan bunu içermiyordu ve onsuz boss işe
+  yaramıyordu: oyuncu 5.6 br/s, boss 1.6 br/s ve boss ekranın 39 br dışında
+  doğuyor. Bir kez ters yöne yürüyen oyuncu bossu run'ın geri kalanında hiç
+  görmüyordu. Artık uzaktayken 7.6 br/s'ye çıkıyor, slam menziline girince
+  kendi hızına düşüyor — yani gelmesi garanti, ama dövüşte hâlâ yürüyerek
+  kaçılabilir. Rampanın _nerede bittiği_ kritik: kaçan oyuncu rampanın kendi
+  hızına eşit olduğu noktada dengeye oturuyor, o nokta slam menzilinin dışında
+  kalırsa boss orada park edip hiç saldırmıyor. İlk denemem tam olarak bunu
+  yaptı (31 br'de takıldı); test bunu yakalıyor.
+- **Telegraph halkası büyümüyor, doluyor.** İlk hali gerçek yarıçapının
+  %35'inden başlayıp büyüyordu — yani vuruşun son anına kadar oyuncuya
+  ulaşmadığı yalanını söylüyordu. Bir uyarı ancak güvenilirse uyarıdır: dış
+  halka artık her zaman gerçek slam yarıçapında, içindeki disk zamanlayıcı
+  olarak doluyor.
+- **Boss ve elit tintleri güçlendirildi.** Roster'ın paleti koyu kahve ve gri;
+  kâğıtta altın görünen çarpan koyu kahveyi biraz daha az koyu kahve yapıyordu
+  ve 400 kişilik kalabalıkta 87 elit tek tek seçilemiyordu. Boss ise 3.1
+  ölçekte okunamayan siyah bir kütleydi.
+- **Boss despawn'dan muaf.** Uzaklaşan düşmanları temizleyen kural bossu da
+  siliyordu, ve boss "bir kez salındı" diye işaretlendiği için geri gelmiyordu:
+  yürüyerek dövüşü silmek mümkündü.
+- **`?start=SANIYE` eklendi.** Geç roster'ı veya bossu görmek için 10 dakika
+  oynamak zorunda kalmamak için. `?enemies=N` artık kalabalığı tabloyu ezerek
+  sabitliyor (kare bütçesi ölçümü için).
+- **Yürüme döngüsü gerçek hıza bağlandı.** Sabit çevrim sayısı, koşarak gelen
+  bossun kaydığı izlenimi veriyordu.
+
+**Kalan okunabilirlik sorunu:** 500+ gövdede koyu paletli yaratıklar üst üste
+binince tek bir siyah kütleye dönüşüyor. Elit ve boss tintleri bunu kendi
+içinde çözüyor, ama sıradan düşmanların birbirinden ayrılması bir palet
+geçişi gerektiriyor — Faz 8'in cila kalemi.
 
 ---
 
@@ -501,7 +538,18 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 
 ## 8. Sıradaki Adım
 
-**Faz 0** — Vite + TS iskeleti, sabit adımlı döngü, CI ve GitHub Pages
-deploy. Sonunda boş ama canlı bir sahne URL'i olur.
+**Faz 7** — Kabuk, UI ve oyun akışı: ana menü, duraklat, ayarlar, tam HUD
+(silah/eşya ikonları voxel modellerden render edilerek), tuş atamaları ve
+lokalizasyon iskeleti.
 
-Onay verirsen başlıyorum.
+Faz 0–6 tamamlandı; her birinin sapmaları kendi bölümünde kayıtlı.
+
+**Sende bekleyenler:**
+
+- GitHub Pages'i elle aç (Settings → Pages → Source: GitHub Actions).
+  `GITHUB_TOKEN` bir Pages sitesi _oluşturamıyor_, sadece var olana deploy
+  edebiliyor.
+- Gerçek donanımda yüksek düşman sayısında FPS. Bu ortamda GPU yok
+  (headless Chromium SwiftShader ile yazılımdan çiziyor), yani buradaki
+  kare süreleri gerçek performans hakkında hiçbir şey söylemiyor.
+- Hareket hissi ve build çeşitliliği hakkında öznel geri bildirim.
