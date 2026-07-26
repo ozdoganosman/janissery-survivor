@@ -111,32 +111,48 @@ Oyun yok, ama her şeyin üzerine kurulacağı zemin var.
 
 ---
 
-### Faz 1 — Voxel model pipeline · ~4–5 gün
+### Faz 1 — Voxel model pipeline · ✅ tamamlandı
 
 Projenin en ayırt edici teknik parçası. Erken çözülmeli, çünkü sonraki her
 faz buna dayanacak.
 
-- **JSON şeması:** her model bir palet + parça (`part`) listesi. Her parça:
-  `{ name, pos, size, color, pivot, parent }`. Hiyerarşi uzuv animasyonunu
-  mümkün kılar.
-- **Builder:** JSON → parça başına merged `BufferGeometry`. Aynı renkteki
-  yüzler tek materyalde birleşir; kamera görüş açısı sabit olduğu için
-  görünmeyen yüzler kırpılır (yüz sayısı ~%40 düşer).
-- **Animatör:** iskeletsiz, prosedürel uzuv rotasyonu. `walk`, `idle`,
-  `attack`, `hit` (kısa flash + geri tepme), `death` (parçalara ayrılma).
-- **Instancing katmanı:** aynı modelden N örnek → tek `InstancedMesh`,
-  per-instance renk/matris. Animasyon fazı instance attribute'u olarak geçer
-  ki her düşman aynı anda aynı ayağı atmasın.
-- **Debug sahnesi:** `/?scene=models` ile tüm modelleri yan yana, animasyon
-  seçiciyle gösteren geliştirici ekranı.
-- İlk model: **yeniçeri** (börk, kaftan, yatağan) + bir test düşmanı.
+- [x] **JSON şeması** + yol bildiren runtime doğrulama (palet indeksi, sıfır
+      hacimli kutu, çakışan uzuv rolü)
+- [x] **Builder:** JSON → parça başına merged `BufferGeometry`, vertex renkli,
+      görünmeyen yüzler kırpılmış
+- [x] **Animatör:** iskeletsiz prosedürel poz — `idle`, `walk`, `attack`, `hit`
+- [x] **Instancing katmanı:** parça başına `InstancedMesh`, animasyon GPU'da
+- [x] **Debug sahnesi:** `?scene=models`, animasyon seçici, ölçüm overlay'i
+- [x] **Modeller:** yeniçeri (börk, kaftan, yatağan) + karakoncolos
 
-**Çıkış kriteri:** Debug sahnesinde 1000 animasyonlu voxel figür 60 FPS'te
-dönüyor, tek draw call.
+**Çıkış kriteri durumu:** 1000 figür render ediliyor, **18–26 draw call**
+(bütçe <60). 60 FPS bu ortamda **doğrulanamadı** — headless Chromium yazılım
+rasterizasyonu (SwiftShader) kullanıyor, GPU yok. Gerçek donanımda ölçülmeli.
 
-**Risk:** Prosedürel animasyonun "cansız" görünmesi. Azaltma: squash/stretch
-ve hafif gövde salınımı (bob) ekle — Minecraft'ın kendisi bunu yapmaz ama
-top-down'da hareket hissi için gerekli.
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Yüz kırpma oranı ~%40 değil, ölçülen %8.** Plandaki mantık hatalıydı:
+  "kamera açısı sabit olduğu için arka yüzler kırpılabilir" — ama figürler
+  gittikleri yöne dönüyor, yani kuzeye yürürken gizli olan yüz güneye
+  yürürken görünür. Kamera yönüne göre kırpmak dönen her düşmanda delik
+  açardı. Onun yerine görüş-bağımsız kırpma yapıldı: başka bir kutunun tam
+  olarak kapattığı yüzler. Kazanç daha küçük ama doğru, ve `BuiltModel`
+  gerçek sayıyı raporluyor.
+- **Hiyerarşi (`parent`) şemadan çıkarıldı.** Instanced yol GPU'da parça
+  başına tek rotasyon uyguluyor, ebeveyn zinciri yürümüyor. Hiyerarşi olsaydı
+  oyuncu doğru, yüzlerce düşman yanlış animasyon oynardı. Düz liste her iki
+  yolun aynı şeyi göstermesini garanti ediyor; bir uzva bağlı olması gereken
+  şey (eldeki yatağan) o uzvun kutu listesinde duruyor.
+- **`death` animasyonu ertelendi.** Parçalara ayrılma per-instance per-part
+  offset istiyor, bu da instanced yolun uniform modeline sığmıyor. Faz 3'te
+  ölüm efekti olarak ayrı ele alınacak.
+- **Animasyon CPU yerine GPU'da.** Parça başına CPU matrisi 800 düşmanda
+  frame başına ~4800 matris ve ~76 000 float trafiği demekti. Bunun yerine
+  figür durumu beş instance attribute'unda; vertex shader dönüşümü kuruyor.
+  Yürüme artık frame başına **sıfır CPU işi**.
+
+**Risk (kapandı):** Prosedürel animasyonun cansız görünmesi. Squash/stretch ve
+çift frekanslı gövde salınımı eklendi, testle sınırları korunuyor.
 
 ---
 

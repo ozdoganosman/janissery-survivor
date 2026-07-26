@@ -10,11 +10,23 @@ import * as THREE from 'three';
  * away than an equally distant one at the bottom.
  */
 
-/** Camera tilt from straight-down, in degrees. Enough to reveal model silhouettes. */
+/** Camera tilt measured up from the ground plane, in degrees. Reveals model silhouettes. */
 const CAMERA_PITCH_DEG = 55;
 
-/** World units visible vertically. Sets the effective play area, so it is a balance knob. */
-const VIEW_HEIGHT_UNITS = 26;
+/**
+ * How much of the screen's vertical extent a span along world Z occupies.
+ *
+ * Exported so scenes can fit the view to their contents instead of copying the pitch
+ * and re-deriving it — getting the sine and cosine the wrong way round silently
+ * mis-frames everything, which is easy to do and slow to notice.
+ */
+export const WORLD_Z_TO_SCREEN_Y = Math.sin(THREE.MathUtils.degToRad(CAMERA_PITCH_DEG));
+
+/** How much of the screen's vertical extent a world-space height occupies. */
+export const WORLD_Y_TO_SCREEN_Y = Math.cos(THREE.MathUtils.degToRad(CAMERA_PITCH_DEG));
+
+/** Default world units visible vertically. Sets the effective play area, so it is a balance knob. */
+const DEFAULT_VIEW_HEIGHT_UNITS = 26;
 
 /** Ortho cameras do not scale with distance, so this only needs to clear the geometry. */
 const CAMERA_DISTANCE = 80;
@@ -27,6 +39,14 @@ export interface WorldView {
   readonly camera: THREE.OrthographicCamera;
   /** Point the camera orbits, on the ground plane. Later driven by the player. */
   readonly cameraTarget: THREE.Vector3;
+  /**
+   * World units visible vertically.
+   *
+   * Not a player-facing zoom — the play view keeps a fixed extent so that no one can
+   * gain an information advantage by zooming out. It exists for developer scenes that
+   * need to fit far more on screen than a run ever shows.
+   */
+  setViewHeight(units: number): void;
   /** Re-reads the canvas size and rebuilds the projection. Idempotent. */
   resize(): void;
   render(): void;
@@ -83,6 +103,8 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
   grid.position.y = 0.01;
   scene.add(grid);
 
+  let viewHeightUnits = DEFAULT_VIEW_HEIGHT_UNITS;
+
   const resize = (): void => {
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
@@ -94,7 +116,7 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
     // alternative — fixing width — would shrink a widescreen player's vertical
     // awareness, which matters more than horizontal in a top-down game.
     const aspect = width / height;
-    const halfHeight = VIEW_HEIGHT_UNITS / 2;
+    const halfHeight = viewHeightUnits / 2;
     const halfWidth = halfHeight * aspect;
     camera.left = -halfWidth;
     camera.right = halfWidth;
@@ -111,6 +133,13 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
     scene,
     camera,
     cameraTarget,
+    setViewHeight(units: number): void {
+      if (!(units > 0)) {
+        throw new RangeError(`view height must be positive, got ${units}`);
+      }
+      viewHeightUnits = units;
+      resize();
+    },
     resize,
     render() {
       placeCamera();
