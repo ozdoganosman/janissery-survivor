@@ -49,8 +49,13 @@
         display: block;
         width: 100%;
         height: 100%;
-        /* The camera is fixed and the game is played with keys, so browser touch
-           gestures over the canvas are only ever accidental input. */
+        /* Stops the long-press callout and text selection that a steering drag
+           otherwise triggers on a phone. */
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        /* The canvas owns every touch: a drag steers the character, so handing any
+           of it to the browser's scroll or pinch-zoom would fight the controls. */
         touch-action: none;
       }
     </style>

@@ -25,8 +25,25 @@ export const WORLD_Z_TO_SCREEN_Y = Math.sin(THREE.MathUtils.degToRad(CAMERA_PITC
 /** How much of the screen's vertical extent a world-space height occupies. */
 export const WORLD_Y_TO_SCREEN_Y = Math.cos(THREE.MathUtils.degToRad(CAMERA_PITCH_DEG));
 
-/** Default world units visible vertically. Sets the effective play area, so it is a balance knob. */
-const DEFAULT_VIEW_HEIGHT_UNITS = 26;
+/**
+ * World units guaranteed visible along the *narrower* screen axis.
+ *
+ * Not simply the vertical extent. Holding the vertical extent fixed and letting the
+ * width follow the aspect ratio works on a widescreen monitor and fails badly on a
+ * phone held upright: a 390x844 window would show 26 units tall but only 12 wide, so
+ * an enemy closing in from the side would be on top of the player in half the time it
+ * takes on a desktop. Since this is a game about being surrounded, sight distance has
+ * to be the same in every direction, whatever the screen.
+ */
+const DEFAULT_VIEW_SPAN_UNITS = 26;
+
+/**
+ * Narrowest aspect ratio the view will stretch for.
+ *
+ * Beyond this the long axis stops growing, so an extremely tall window does not end
+ * up showing so much world that the figures become specks.
+ */
+const MIN_ASPECT = 0.55;
 
 /** Ortho cameras do not scale with distance, so this only needs to clear the geometry. */
 const CAMERA_DISTANCE = 80;
@@ -38,13 +55,13 @@ export interface WorldView {
   /** Point the camera orbits, on the ground plane. Later driven by the player. */
   readonly cameraTarget: THREE.Vector3;
   /**
-   * World units visible vertically.
+   * World units visible along the narrower screen axis.
    *
-   * Not a player-facing zoom — the play view keeps a fixed extent so that no one can
+   * Not a player-facing zoom — the play view keeps a fixed span so that nobody can
    * gain an information advantage by zooming out. It exists for developer scenes that
    * need to fit far more on screen than a run ever shows.
    */
-  setViewHeight(units: number): void;
+  setViewSpan(units: number): void;
   /** Re-reads the canvas size and rebuilds the projection. Idempotent. */
   resize(): void;
   render(): void;
@@ -92,7 +109,7 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
   // units across, so the ground belongs to `world/ground.ts`, which follows the
   // player. Scenes that want a floor ask for one.
 
-  let viewHeightUnits = DEFAULT_VIEW_HEIGHT_UNITS;
+  let viewSpanUnits = DEFAULT_VIEW_SPAN_UNITS;
 
   const resize = (): void => {
     const width = canvas.clientWidth;
@@ -101,11 +118,13 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
 
     renderer.setSize(width, height, false);
 
-    // Hold the vertical extent fixed and let width follow the aspect ratio. The
-    // alternative — fixing width — would shrink a widescreen player's vertical
-    // awareness, which matters more than horizontal in a top-down game.
+    // Size the frustum so the *shorter* axis always spans `viewSpanUnits`, giving
+    // every player the same reaction distance whatever the screen shape. On a
+    // widescreen monitor that is the height, exactly as before; held upright it
+    // becomes the width, and the view grows taller rather than pinching inwards.
     const aspect = width / height;
-    const halfHeight = viewHeightUnits / 2;
+    const effectiveAspect = Math.max(aspect, MIN_ASPECT);
+    const halfHeight = viewSpanUnits / 2 / Math.min(effectiveAspect, 1);
     const halfWidth = halfHeight * aspect;
     camera.left = -halfWidth;
     camera.right = halfWidth;
@@ -122,11 +141,11 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
     scene,
     camera,
     cameraTarget,
-    setViewHeight(units: number): void {
+    setViewSpan(units: number): void {
       if (!(units > 0)) {
-        throw new RangeError(`view height must be positive, got ${units}`);
+        throw new RangeError(`view span must be positive, got ${units}`);
       }
-      viewHeightUnits = units;
+      viewSpanUnits = units;
       resize();
     },
     resize,

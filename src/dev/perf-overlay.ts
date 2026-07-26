@@ -23,6 +23,9 @@ export interface PerfOverlay {
 
 export function createPerfOverlay(parent: HTMLElement = document.body): PerfOverlay {
   const element = document.createElement('div');
+  // A stable handle so tests and screenshots can find the readout without relying on
+  // DOM order, which shifts whenever another overlay is added.
+  element.id = 'perf-overlay';
   element.style.cssText = [
     'position:fixed',
     'top:8px',

@@ -16,12 +16,31 @@ export interface InputSnapshot {
   readonly moveZ: number;
 }
 
+/**
+ * Where the on-screen thumbstick currently is, in CSS pixels, or `null` when no
+ * finger is down. The renderer draws it; the input layer only decides the numbers.
+ */
+export interface TouchStick {
+  readonly originX: number;
+  readonly originY: number;
+  readonly thumbX: number;
+  readonly thumbY: number;
+}
+
 export interface InputSource {
   sample(): InputSnapshot;
   /** True if a gamepad supplied the most recent non-zero reading. */
   get usingGamepad(): boolean;
+  /** Non-null while a finger is steering. */
+  get touchStick(): TouchStick | null;
   dispose(): void;
 }
+
+/** Drag distance, in CSS pixels, that counts as full deflection. */
+export const TOUCH_STICK_RADIUS = 58;
+
+/** Drag below this many pixels is treated as a tap, not a steer. */
+const TOUCH_DEADZONE_PX = 7;
 
 const MOVE_LEFT = new Set(['KeyA', 'ArrowLeft']);
 const MOVE_RIGHT = new Set(['KeyD', 'ArrowRight']);
@@ -63,7 +82,36 @@ export function applyDeadzone(x: number, y: number, deadzone = STICK_DEADZONE): 
   return { moveX: x * scaled, moveZ: y * scaled };
 }
 
-export function createInput(target: Window = window): InputSource {
+/**
+ * Turns a drag into an intent vector.
+ *
+ * Screen Y grows downward and so does world +Z, so the vertical axis passes straight
+ * through — dragging down walks toward the camera, matching what the S key does.
+ */
+export function stickIntent(
+  originX: number,
+  originY: number,
+  pointX: number,
+  pointY: number,
+  radius = TOUCH_STICK_RADIUS,
+  deadzonePx = TOUCH_DEADZONE_PX,
+): InputSnapshot {
+  const dx = pointX - originX;
+  const dy = pointY - originY;
+  const distance = Math.hypot(dx, dy);
+  if (!Number.isFinite(distance) || distance < deadzonePx) return { moveX: 0, moveZ: 0 };
+  return clampIntent(dx / radius, dy / radius);
+}
+
+/**
+ * @param target Window the keyboard and gamepad are read from.
+ * @param touchSurface Element that starts a steer when touched. Restricting this to
+ *   the canvas rather than the whole window keeps buttons and overlays tappable.
+ */
+export function createInput(
+  target: Window = window,
+  touchSurface: HTMLElement | null = null,
+): InputSource {
   const pressed = new Set<string>();
   let usingGamepad = false;
 
@@ -89,6 +137,55 @@ export function createInput(target: Window = window): InputSource {
   target.addEventListener('keyup', onKeyUp);
   target.addEventListener('blur', onBlur);
 
+  // A floating stick rather than a fixed pad in a corner: the stick appears wherever
+  // the thumb lands. A fixed pad has to be found by looking, and looking away from
+  // the crowd is the one thing this genre never gives you time for.
+  let stickPointerId: number | null = null;
+  let stickOriginX = 0;
+  let stickOriginY = 0;
+  let stickThumbX = 0;
+  let stickThumbY = 0;
+
+  const onPointerDown = (event: PointerEvent): void => {
+    // Only touch. Leaving the mouse out keeps click-to-drag from fighting a future
+    // click-to-aim, and desktop already has the keyboard.
+    if (event.pointerType !== 'touch') return;
+    // Ignore extra fingers: the first one steers until it lifts, so a second thumb
+    // resting on the glass cannot yank the player sideways.
+    if (stickPointerId !== null) return;
+
+    stickPointerId = event.pointerId;
+    stickOriginX = event.clientX;
+    stickOriginY = event.clientY;
+    stickThumbX = event.clientX;
+    stickThumbY = event.clientY;
+    usingGamepad = false;
+    touchSurface?.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const onPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== stickPointerId) return;
+    stickThumbX = event.clientX;
+    stickThumbY = event.clientY;
+    event.preventDefault();
+  };
+
+  const endStick = (event: PointerEvent): void => {
+    if (event.pointerId !== stickPointerId) return;
+    stickPointerId = null;
+  };
+
+  if (touchSurface !== null) {
+    touchSurface.addEventListener('pointerdown', onPointerDown);
+    touchSurface.addEventListener('pointermove', onPointerMove);
+    touchSurface.addEventListener('pointerup', endStick);
+    // Without `pointercancel` the player keeps running when the browser steals the
+    // gesture — a notification shade pulled down, a system back swipe.
+    touchSurface.addEventListener('pointercancel', endStick);
+    touchSurface.addEventListener('lostpointercapture', endStick);
+  }
+
   const readGamepad = (): InputSnapshot | null => {
     const pads = target.navigator.getGamepads?.() ?? [];
     for (const pad of pads) {
@@ -106,7 +203,23 @@ export function createInput(target: Window = window): InputSource {
       return usingGamepad;
     },
 
+    get touchStick(): TouchStick | null {
+      if (stickPointerId === null) return null;
+      return {
+        originX: stickOriginX,
+        originY: stickOriginY,
+        thumbX: stickThumbX,
+        thumbY: stickThumbY,
+      };
+    },
+
     sample(): InputSnapshot {
+      // Touch first: a finger on the glass is unambiguous intent, and on a phone
+      // there is nothing else competing for it.
+      if (stickPointerId !== null) {
+        return stickIntent(stickOriginX, stickOriginY, stickThumbX, stickThumbY);
+      }
+
       let x = 0;
       let z = 0;
       if (pressed.has('KeyA') || pressed.has('ArrowLeft')) x -= 1;
@@ -129,6 +242,14 @@ export function createInput(target: Window = window): InputSource {
       target.removeEventListener('keydown', onKeyDown);
       target.removeEventListener('keyup', onKeyUp);
       target.removeEventListener('blur', onBlur);
+      if (touchSurface !== null) {
+        touchSurface.removeEventListener('pointerdown', onPointerDown);
+        touchSurface.removeEventListener('pointermove', onPointerMove);
+        touchSurface.removeEventListener('pointerup', endStick);
+        touchSurface.removeEventListener('pointercancel', endStick);
+        touchSurface.removeEventListener('lostpointercapture', endStick);
+      }
+      stickPointerId = null;
       pressed.clear();
     },
   };

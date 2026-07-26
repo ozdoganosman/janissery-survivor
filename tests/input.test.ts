@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDeadzone, clampIntent } from '../src/core/input';
+import { applyDeadzone, clampIntent, stickIntent, TOUCH_STICK_RADIUS } from '../src/core/input';
 
 describe('clampIntent', () => {
   it('leaves a short vector alone', () => {
@@ -79,5 +79,62 @@ describe('applyDeadzone', () => {
         expect(Math.hypot(result.moveX, result.moveZ)).toBeLessThanOrEqual(1 + 1e-9);
       }
     }
+  });
+});
+
+describe('stickIntent', () => {
+  const R = TOUCH_STICK_RADIUS;
+
+  it('treats a tap as no movement', () => {
+    // Without this, every tap on the screen jerks the character a step sideways.
+    expect(stickIntent(100, 100, 100, 100)).toEqual({ moveX: 0, moveZ: 0 });
+    expect(stickIntent(100, 100, 103, 102)).toEqual({ moveX: 0, moveZ: 0 });
+  });
+
+  it('maps a drag right to +X', () => {
+    const intent = stickIntent(100, 100, 100 + R, 100);
+    expect(intent.moveX).toBeCloseTo(1, 6);
+    expect(intent.moveZ).toBeCloseTo(0, 6);
+  });
+
+  it('maps a drag down to +Z, matching the S key', () => {
+    // Screen Y and world Z both grow "toward the viewer", so the axis passes through
+    // unflipped. Getting this backwards makes the whole control feel inverted.
+    const intent = stickIntent(100, 100, 100, 100 + R);
+    expect(intent.moveZ).toBeCloseTo(1, 6);
+  });
+
+  it('maps a drag up to -Z', () => {
+    const intent = stickIntent(100, 100, 100, 100 - R);
+    expect(intent.moveZ).toBeCloseTo(-1, 6);
+  });
+
+  it('gives partial speed for a partial drag', () => {
+    const intent = stickIntent(0, 0, R / 2, 0);
+    expect(intent.moveX).toBeCloseTo(0.5, 6);
+  });
+
+  it('never exceeds full speed however far the finger travels', () => {
+    for (const distance of [R, R * 2, R * 20, 5000]) {
+      const intent = stickIntent(0, 0, distance, distance);
+      expect(Math.hypot(intent.moveX, intent.moveZ)).toBeLessThanOrEqual(1 + 1e-9);
+    }
+  });
+
+  it('keeps direction when clamped', () => {
+    const intent = stickIntent(0, 0, 300, 400);
+    expect(intent.moveX / intent.moveZ).toBeCloseTo(300 / 400, 6);
+  });
+
+  it('covers every direction without a dead axis', () => {
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+      const intent = stickIntent(0, 0, Math.cos(angle) * R, Math.sin(angle) * R);
+      expect(Math.hypot(intent.moveX, intent.moveZ)).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('survives nonsense coordinates', () => {
+    expect(stickIntent(0, 0, Number.NaN, 0)).toEqual({ moveX: 0, moveZ: 0 });
+    expect(stickIntent(0, 0, Number.POSITIVE_INFINITY, 0)).toEqual({ moveX: 0, moveZ: 0 });
   });
 });

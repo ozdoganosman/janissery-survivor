@@ -164,6 +164,7 @@ rasterizasyonu (SwiftShader) kullanıyor, GPU yok. Gerçek donanımda ölçülme
       deterministik dekor (sur parçası, servi, kandil)
 - [x] Animasyon durum makinesi: idle ↔ walk
 - [x] `?debug=1` overlay: pozisyon, hız, dekor sayısı, draw call, tohum
+- [x] **Dokunmatik joystick** (plana göre Faz 8'di, öne alındı — bkz. aşağı)
 
 **Çıkış kriteri:** Boş dünyada dolaşmak akıcı hissettiriyor. Bu subjektif kriter
 **senin doğrulaman gereken** tek madde — ben ancak hareketin doğru olduğunu
@@ -181,6 +182,17 @@ rasterizasyonu (SwiftShader) kullanıyor, GPU yok. Gerçek donanımda ölçülme
   yapıldı.** Düzlem yalnızca tam grid karesi adımlarıyla kayıyor: sürekli
   kaydırmak grid çizgilerini oyuncunun altında sürükler ve hareket hissini
   tamamen yok ederdi.
+- **Dokunmatik joystick Faz 8'den öne alındı.** Plana göre mobil desteği en sona
+  bırakılmıştı, ama test edilebilir bir sürüm yayınlandığı anda telefonda hiç
+  oynanamaz olduğu ortaya çıktı — klavye ve gamepad'in ikisi de yok. Yüzen
+  joystick: parmağın indiği yerde beliriyor. Sabit bir pad köşede aranmayı
+  gerektirir, kalabalıktan gözünü ayırmak ise bu türün asla vermediği şey.
+  Kalite kademesi Faz 8'de kaldı.
+- **Kamera artık dar ekran eksenini sabitliyor, dikeyi değil.** Dikey açıklığı
+  sabit tutmak masaüstünde doğru, telefonda dikey tutulunca yıkıcı: 390x844 bir
+  pencerede 26 birim yükseklik ama yalnızca 12 birim genişlik görünüyordu, yani
+  yandan gelen bir düşmana tepki süresi masaüstünün yarısı. Etrafının sarılması
+  üzerine kurulu bir oyunda görüş mesafesi her yönde eşit olmalı.
 
 **Yol boyunca bulunan hata:** Dekor hücrelerini tohumlayan hash zayıftı — 13×13
 lük bir blokta 169 hücrenin yalnızca 123'ü farklı değer üretiyordu. Çarpışma,

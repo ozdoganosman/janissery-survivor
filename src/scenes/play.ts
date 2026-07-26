@@ -11,6 +11,7 @@ import {
   stepPlayer,
   PLAYER_SPEED,
 } from '../sim/player';
+import { createTouchStickOverlay } from '../ui/touch-stick';
 import type { GameScene, SceneFactory } from './types';
 
 /**
@@ -38,7 +39,10 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const hero = createVoxelRig(getVoxelModel('yeniceri'));
   view.scene.add(hero.root);
 
-  const input = createInput();
+  // Touch is bound to the canvas, not the window, so on-screen buttons stay tappable
+  // instead of every tap being swallowed as a steer.
+  const input = createInput(window, view.renderer.domElement);
+  const touchOverlay = createTouchStickOverlay();
   const player = createPlayer(0, 0);
   const focus = createCameraFocus(0, 0);
 
@@ -75,6 +79,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         THREE.MathUtils.lerp(focus.previousZ, focus.z, alpha),
       );
 
+      touchOverlay.render(input.touchStick);
       view.render();
     },
 
@@ -90,6 +95,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
     dispose(): void {
       input.dispose();
+      touchOverlay.dispose();
       hero.dispose();
       world.dispose();
     },

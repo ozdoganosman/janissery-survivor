@@ -55,7 +55,7 @@ export const createModelsScene: SceneFactory = (view, params): GameScene => {
   const tallest = Math.max(...MODEL_IDS.map((id) => getVoxelModel(id).height));
   const fitted = Math.max(14, depth * WORLD_Z_TO_SCREEN_Y + tallest * WORLD_Y_TO_SCREEN_Y + 3);
   const zoom = readPositiveInt(params.get('zoom'), Math.round(fitted));
-  view.setViewHeight(zoom);
+  view.setViewSpan(zoom);
   view.cameraTarget.set(0, 0, (SHOWCASE_Z + armyBackZ) / 2);
 
   // The shared view no longer ships a floor, since the play world needs one that
