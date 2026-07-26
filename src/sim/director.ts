@@ -170,16 +170,21 @@ const SPAWN_RATE = 60;
 const BEARING_DRIFT = 0.35;
 
 /**
- * The crowd size in force: the stage's, or an override, never above a cap.
+ * The crowd size in force: the stage's, an override, or a cap.
  *
- * The two are different tools and were briefly conflated, with the result that
- * choosing the *lowest* quality tier raised the opening minute from 55 bodies to 140.
- * An override replaces the table because it exists to measure a chosen number; a cap
- * only ever removes enemies, because it exists to protect a phone.
+ * Three things that were briefly two, with the result that choosing the *lowest*
+ * quality tier raised the opening minute from 55 bodies to 140.
+ *
+ * - The stage table is the game.
+ * - A cap only ever removes enemies. It exists to protect a device that cannot draw
+ *   the full crowd, so it is a ceiling and never a floor.
+ * - An override replaces both. It comes from `?enemies=`, which exists to measure the
+ *   frame cost of a chosen number on real hardware — and a measurement quietly capped
+ *   to something other than the number asked for is worse than no measurement.
  */
 export function effectiveTarget(stage: WaveStage, override = 0, cap = 0): number {
-  const target = override > 0 ? override : stage.target;
-  return cap > 0 ? Math.min(target, cap) : target;
+  if (override > 0) return override;
+  return cap > 0 ? Math.min(stage.target, cap) : stage.target;
 }
 
 /**

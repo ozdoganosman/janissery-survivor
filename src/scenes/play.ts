@@ -48,7 +48,11 @@ import {
 import { SpatialGrid } from '../sim/spatial';
 import { createVitals, heal, stepVitals } from '../sim/vitals';
 import { equip, stepWeapons, weaponStats, type WeaponId, type WeaponStats } from '../sim/weapons';
-import { loadSettings, QUALITY_ENEMY_LIMIT, type Settings } from '../core/settings';
+import { createAudioEngine } from '../audio/engine';
+import { createMusic } from '../audio/music';
+import { createSfx } from '../audio/sfx';
+import { loadRecord, recordRun, saveRecord } from '../core/record';
+import { loadSettings, QUALITY_ENEMY_LIMIT, VOLUME_LEVEL, type Settings } from '../core/settings';
 import { setLanguage } from '../core/strings';
 import { disposeItemIcons, renderItemIcons } from '../render/voxel/icons';
 import { createHud, type HudItem } from '../ui/hud';
@@ -146,6 +150,11 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const settings = loadSettings();
   setLanguage(settings.language);
 
+  const audio = createAudioEngine();
+  const sfx = createSfx(audio);
+  const music = createMusic(audio);
+  let record = loadRecord();
+
   // Rendered before the shell exists, so the title screen is already on top of a
   // finished HUD rather than appearing over a row that pops in a frame later.
   const icons = renderItemIcons();
@@ -172,6 +181,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const shell = createShell({
     settings,
     startImmediately: params.get('go') === '1',
+    onSound: (id) => {
+      sfx.play(id);
+    },
     hooks: {
       onStart: noop,
       onResume: noop,
@@ -222,6 +234,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   let pendingLevels = 0;
   let outcome: 'running' | 'won' | 'lost' = 'running';
   const census = { elites: 0, bosses: 0, telegraphing: 0 };
+  let lastBossCount = 0;
 
   // Resolved settings, refreshed whenever the panel changes one. Read in the hot loop,
   // so they are plain locals rather than property lookups through the settings object.
@@ -235,6 +248,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
     // A ceiling, never a target. Zero means the tier imposes none.
     crowdCap = QUALITY_ENEMY_LIMIT[next.quality];
+
+    audio.setMusicVolume(VOLUME_LEVEL[next.music]);
+    audio.setSfxVolume(VOLUME_LEVEL[next.sfx]);
 
     if (!next.screenShake) {
       // Otherwise whatever offset was in flight stays applied for good.
@@ -260,9 +276,11 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     gems.spawn(x, z, value);
     shards.burst(x, z, shardRandom);
     kills++;
+    sfx.play('kill');
   };
 
   const onHit = (x: number, z: number, amount: number, critical: boolean): void => {
+    sfx.play(critical ? 'crit' : 'hit');
     if (!numbersAllowed) return;
     // Criticals always show; ordinary hits get a budget. The flash still confirms
     // every one of them landed, so what is dropped is noise rather than information.
@@ -315,6 +333,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   refreshLoadout();
 
   const presentLevel = (): void => {
+    sfx.play('levelUp');
     const cards = offerCards(loadout, cardRng, 3);
     levelUp.show(progression.level, cards, (index) => {
       const card = cards[index];
@@ -388,6 +407,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           type.shotDamage,
         );
       }
+      if (intents.shooterCount > 0) sfx.play('shoot');
+
       let slamDamage = 0;
       for (let i = 0; i < intents.slammerCount; i++) {
         const boss = intents.slammers[i];
@@ -398,6 +419,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           slamDamage += type.slamDamage;
         }
         addShake(shake, 1);
+        sfx.play('slam');
       }
 
       stepWeapons(
@@ -443,6 +465,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           stats.regenPerSecond,
         ) + applyDirectDamage(shotDamage + slamDamage);
 
+      if (hurt > 0) sfx.play('hurt');
       if (shakeAllowed) {
         if (hurt > 0) addShake(shake, HURT_SHAKE);
         if (combat.kills > 0) addShake(shake, KILL_SHAKE);
@@ -462,9 +485,20 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         2.2 * stats.magnetMultiplier,
       );
       if (collected > 0) {
+        sfx.play('pickup');
         pendingLevels += addExperience(progression, collected);
         if (pendingLevels > 0 && !levelUp.visible) presentLevel();
       }
+
+      censusOf(enemies, census);
+      if (census.bosses > lastBossCount) sfx.play('bossArrive');
+      lastBossCount = census.bosses;
+      if (census.telegraphing > 0) sfx.play('telegraph');
+
+      // The band comes in as the run tightens: drums alone at the start, the zurna
+      // once there is pressure, cymbals in the late minutes. Tied to the clock rather
+      // than to the crowd, so it rises steadily instead of flickering with the wave.
+      music.setIntensity(Math.min(1, elapsed / (RUN_SECONDS * 0.55)) + census.bosses * 0.3);
 
       hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
       hero.update(stepSeconds);
@@ -477,9 +511,18 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       else if (elapsed >= RUN_SECONDS) outcome = 'won';
 
       if (outcome !== 'running' && !summary.visible) {
+        music.stop();
+        sfx.play(outcome === 'won' ? 'win' : 'lose');
+
+        const folded = recordRun(record, elapsed, outcome === 'won');
+        record = folded.record;
+        saveRecord(record);
+
         summary.show(
           {
             survived: outcome === 'won',
+            bestSeconds: record.bestSeconds,
+            improved: folded.improved,
             seconds: elapsed,
             level: progression.level,
             kills,
@@ -504,6 +547,10 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       // Polled here rather than in `update`, because `update` is exactly what stops
       // while paused — a pad could otherwise pause the game and never resume it.
       input.pollPause();
+      // Driven from render rather than from the step, because the step is what stops
+      // while paused — the music would cut out mid-bar on every pause.
+      if (!shell.blocking && outcome === 'running') music.update();
+      audio.tick(1 / 60);
 
       hero.root.position.set(
         THREE.MathUtils.lerp(player.previousX, player.x, alpha),
@@ -539,7 +586,6 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
     detail(): string {
       const info = view.renderer.info.render;
-      censusOf(enemies, census);
       const build = [...loadout.weapons.entries()]
         .map(([id, level]) => `${id}${String(level)}`)
         .join(' ');
@@ -557,6 +603,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     },
 
     dispose(): void {
+      music.dispose();
+      sfx.dispose();
+      audio.dispose();
       input.dispose();
       shell.dispose();
       disposeItemIcons();

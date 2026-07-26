@@ -4,9 +4,11 @@ import {
   DEFAULT_BINDINGS,
   QUALITY_IDS,
   saveSettings,
+  VOLUME_IDS,
   type ActionId,
   type QualityId,
   type Settings,
+  type VolumeId,
 } from '../core/settings';
 import { LANGUAGE_IDS, LANGUAGE_NAMES, setLanguage, t, type LanguageId } from '../core/strings';
 
@@ -139,6 +141,8 @@ interface Options {
   readonly hooks: ShellHooks;
   /** Skips the title screen — used by "play again", which has already been asked. */
   readonly startImmediately?: boolean;
+  /** Click feedback. Optional, so the shell stays testable without an audio context. */
+  readonly onSound?: (id: 'select' | 'confirm') => void;
   readonly parent?: HTMLElement;
 }
 
@@ -168,7 +172,10 @@ export function createShell(options: Options): Shell {
     element.className = 'sh-button';
     element.textContent = label;
     if (primary) element.dataset.primary = 'true';
-    element.addEventListener('click', onClick);
+    element.addEventListener('click', () => {
+      options.onSound?.(primary ? 'confirm' : 'select');
+      onClick();
+    });
     return element;
   };
 
@@ -194,6 +201,7 @@ export function createShell(options: Options): Shell {
       chip.textContent = labelOf(value);
       chip.setAttribute('aria-pressed', String(value === selected));
       chip.addEventListener('click', () => {
+        options.onSound?.('select');
         onPick(value);
       });
       choice.appendChild(chip);
@@ -361,6 +369,26 @@ export function createShell(options: Options): Shell {
         settings.quality,
         (id) => {
           settings.quality = id;
+          commit();
+        },
+      ),
+      choiceRow<VolumeId>(
+        t('settings.music'),
+        VOLUME_IDS,
+        (id) => t(`volume.${id}`),
+        settings.music,
+        (id) => {
+          settings.music = id;
+          commit();
+        },
+      ),
+      choiceRow<VolumeId>(
+        t('settings.sfx'),
+        VOLUME_IDS,
+        (id) => t(`volume.${id}`),
+        settings.sfx,
+        (id) => {
+          settings.sfx = id;
           commit();
         },
       ),

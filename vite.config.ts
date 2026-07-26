@@ -19,8 +19,9 @@ export default defineConfig({
   },
   test: {
     // The simulation is pure TypeScript with no `three` or DOM dependency, so the
-    // fast node environment is all we need. Browser-level checks come from the
-    // Playwright smoke test added in a later phase.
+    // fast node environment is all we need. Browser-level checks live in
+    // `tests/*.spec.ts` and run under Playwright; the include below is what keeps the
+    // two suites from trying to run each other's files.
     environment: 'node',
     include: ['tests/**/*.test.ts'],
   },

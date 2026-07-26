@@ -25,6 +25,23 @@ export const QUALITY_ENEMY_LIMIT: Readonly<Record<QualityId, number>> = {
   high: 0,
 };
 
+/**
+ * Volume steps, rather than a slider.
+ *
+ * A slider needs a drag target big enough for a thumb and a live preview to be worth
+ * anything; four labelled steps say the same thing, tap in one go, and read the same
+ * on a phone as on a desktop.
+ */
+export const VOLUME_IDS = ['off', 'low', 'medium', 'high'] as const;
+export type VolumeId = (typeof VOLUME_IDS)[number];
+
+export const VOLUME_LEVEL: Readonly<Record<VolumeId, number>> = {
+  off: 0,
+  low: 0.3,
+  medium: 0.6,
+  high: 1,
+};
+
 export const ACTION_IDS = ['up', 'down', 'left', 'right', 'pause'] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 
@@ -43,17 +60,46 @@ export interface Settings {
   screenShake: boolean;
   damageNumbers: boolean;
   quality: QualityId;
+  music: VolumeId;
+  sfx: VolumeId;
   bindings: Bindings;
 }
 
 const STORAGE_KEY = 'janissary.settings.v1';
+
+/**
+ * A first guess at what this device can draw.
+ *
+ * Only ever used when nothing has been stored — the moment the player picks a tier it
+ * is theirs, and a guess that overrode a choice would be worse than no guess at all.
+ * Core count is a crude proxy, but it is the only signal a browser will give without
+ * either lying or costing a frame to measure, and being wrong here costs a tier rather
+ * than a broken game.
+ */
+export function guessQuality(
+  scope: { hardwareConcurrency?: number; maxTouchPoints?: number } | null = typeof navigator ===
+  'undefined'
+    ? null
+    : navigator,
+): QualityId {
+  if (scope === null) return 'high';
+  const cores = scope.hardwareConcurrency ?? 8;
+  const touch = (scope.maxTouchPoints ?? 0) > 0;
+  if (cores <= 4) return 'low';
+  if (touch) return 'medium';
+  return 'high';
+}
 
 export function defaultSettings(): Settings {
   return {
     language: 'tr',
     screenShake: true,
     damageNumbers: true,
-    quality: 'high',
+    quality: guessQuality(),
+    // Music quieter than effects by default: the effects carry information about what
+    // is happening, and the music does not.
+    music: 'medium',
+    sfx: 'high',
     bindings: { ...DEFAULT_BINDINGS },
   };
 }
@@ -77,6 +123,8 @@ export function parseSettings(raw: unknown): Settings {
   if (typeof record.screenShake === 'boolean') settings.screenShake = record.screenShake;
   if (typeof record.damageNumbers === 'boolean') settings.damageNumbers = record.damageNumbers;
   if (isOneOf(record.quality, QUALITY_IDS)) settings.quality = record.quality;
+  if (isOneOf(record.music, VOLUME_IDS)) settings.music = record.music;
+  if (isOneOf(record.sfx, VOLUME_IDS)) settings.sfx = record.sfx;
 
   if (typeof record.bindings === 'object' && record.bindings !== null) {
     const stored = record.bindings as Record<string, unknown>;

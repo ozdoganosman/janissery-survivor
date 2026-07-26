@@ -62,6 +62,27 @@ export default tseslint.config(
   },
 
   {
+    // Node's globals are typed project-wide so the config files can use them, which
+    // means nothing but a rule stops a browser module reaching for `process` — and
+    // that mistake typechecks cleanly and then fails in front of a player.
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message:
+            'src/ ships to the browser, where `process` does not exist. Read configuration from import.meta.env or from a URL parameter.',
+        },
+        {
+          name: '__dirname',
+          message: 'src/ ships to the browser; there is no filesystem there.',
+        },
+      ],
+    },
+  },
+
+  {
     files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',

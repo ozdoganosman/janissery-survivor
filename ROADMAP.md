@@ -474,19 +474,62 @@ bir run tamamlayıp tamamlayamayacağı hâlâ senin doğrulaman gereken kısım
 
 ---
 
-### Faz 8 — Ses, cila, yayın · ~4–5 gün
+### Faz 8 — Ses, cila, yayın · ✅ tamamlandı
 
-- Ses: WebAudio, prosedürel/ücretsiz SFX; mehter esinli döngüsel müzik.
-  Ses havuzu ile aynı anda 50+ efekt kısılmadan çalar
-- Post-processing: hafif bloom, vinyet — pahalı efektlerden kaçın
-- Mobil: dokunmatik sanal joystick, otomatik kalite düşürme
-- Kayıt: `localStorage` ile ayarlar + en iyi süre
-- Playwright smoke testi: oyunu aç, 30 saniye headless oyna, FPS ve hata
-  yokluğunu doğrula
-- itch.io yayını, GitHub Pages canlı demo linki
-- README: ekran görüntüleri, GIF, oynanış açıklaması
+- [x] Ses: WebAudio, tamamen sentezlenmiş efektler; mehter esinli döngüsel
+      müzik. Ses havuzu ile eşzamanlı ses sayısı sınırlı
+- [x] Cila: vinyet. **Bloom eklenmedi** — gerekçe aşağıda
+- [x] Mobil: dokunmatik çubuk (Faz 2), otomatik kalite tahmini
+- [x] Kayıt: `localStorage` ile ayarlar (Faz 7) + en iyi süre
+- [x] Playwright smoke testi: build'i aç, oyna, hata yokluğunu doğrula
+- [x] README: ekran görüntüleri, oynanış, bilinen sınırlar
+- [ ] itch.io yayını / GitHub Pages canlı demo — **sende bekliyor**
 
-**Çıkış kriteri:** Paylaşılabilir bir link. MVP tamam.
+**Çıkış kriteri durumu:** Paylaşılabilir bir build var ve tek dosyaya
+paketlenip doğrulandı. Canlı link, Pages'in tek seferlik el işi yapılana kadar
+eksik — `GITHUB_TOKEN` bir Pages sitesi oluşturamıyor.
+
+**Sesin nasıl kurulduğu:** Her ses oscillator ve filtreden üretiliyor,
+modellerle aynı gerekçeyle: indirilecek binary yok. Asıl zor kısım sentez
+değil, _hız_: altı silah kalabalık bir sürüye saniyede yüzlerce vuruş
+indiriyor ve her vuruşa bir tık çalan oyun, hiçbir bilgi taşımayan düz bir
+uğultu üretir — hasar sayılarının aynı hatası, başka bir duyuda. Her sesin bir
+asgari aralığı var ve o aralığın içinde gelen düşürülüyor, kuyruğa alınmıyor.
+Aralıklar da eşit değil: vuruş arka plan dokusu, seviye atlama dakikada bir
+olur ve asla kaçırılmamalı.
+
+Müzik zamanlanıyor, döngüye alınmıyor. `setTimeout` onlarca milisaniye
+kayıyor ve dinleyici bunu anında tökezleme olarak duyuyor; WebAudio'nun saati
+kaymıyor. Ölçüler biraz önden yerleştiriliyor, render döngüsü sadece kuyruğu
+dolduruyor. Ritim davulun _düm-tek_'i, makam Hicaz — ikinci ve üçüncü derece
+arasındaki artık ikili, tüm tadın asıldığı aralık — ve solo, zurna yerine dar
+bir bandpass'tan geçen vibratolu testere dişi.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Bloom yok.** Plan "hafif bloom, vinyet" diyordu ve "pahalı efektlerden
+  kaçın" diye ekliyordu; ikisi bu projede çelişiyor. Gerçek bir bloom zinciri
+  kare başına birkaç ek render target ve geçiş demek, ve bu ortamda GPU
+  olmadığı için o maliyeti _ölçemiyorum_. Tamamen kare bütçesi üzerine kurulu
+  bir oyuna ölçemediğim bir maliyeti eklemek yanlış olurdu. Vinyet bir DOM
+  katmanı olarak çiziliyor — bedava, ve işin yarısını gerçekten yapıyor.
+  Parlama yerine zaten additive çizilen mermi, aura ve boss halkası çalışıyor.
+- **Kalite kademesi tahmin ediliyor ama dayatılmıyor.** Çekirdek sayısı kaba
+  bir gösterge, ama tarayıcının bir kare harcamadan verdiği tek sinyal. Yalnız
+  hiçbir şey kaydedilmemişken kullanılıyor: oyuncu bir kademe seçtiği an o
+  kademe onundur.
+- **Düşman paletleri yeniden değerlendi** (Faz 6'dan devreden kalem). Sorun hiç
+  renk tonu değildi — beş yaratık zaten beş ayrı tondaydı. *Değer*di: hepsi
+  aynı orta-koyu bantta yaşıyordu, ve beş yüz gövde üst üste bindiğinde tek bir
+  siyah kütleye ortalanıyordu.
+- **itch.io atlandı.** Pages linki henüz yokken ikinci bir yayın hedefi eklemek,
+  çalışmayan bir şeyi iki yere koymak olurdu.
+
+**Yol boyunca bulunan hata:** Kalite tavanı `?enemies=` ölçüm bayrağını da
+kısıyordu. Faz 7'de tavan ile hedefi ayırmıştım, ama tavanı override'a da
+uygulamıştım — yani "600 düşmanda kare maliyetini ölç" diyen bir istek, düşük
+kademeli bir cihazda sessizce 140'a düşüyor ve ölçüm yalan söylüyordu. Artık
+açık override her ikisini de eziyor.
 
 ---
 
@@ -573,20 +616,20 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 
 ## 8. Sıradaki Adım
 
-**Faz 8** — Ses, cila, yayın: WebAudio efekt havuzu ve mehter esinli döngü,
-hafif bloom/vinyet, en iyi sürenin kaydı, Playwright smoke testi, README ve
-yayın.
-
-Faz 0–7 tamamlandı; her birinin sapmaları kendi bölümünde kayıtlı. Faz 8'e
-devrolan tek açık kalem: 500+ gövdede koyu paletli sıradan düşmanların tek bir
-siyah kütleye dönüşmesi — bir palet geçişi gerektiriyor.
+**MVP tamam.** Faz 0'dan 8'e kadar hepsi bitti; her fazın sapmaları kendi
+bölümünde gerekçesiyle kayıtlı. 495 birim testi ve 4 uçtan uca smoke testi
+yeşil.
 
 **Sende bekleyenler:**
 
-- GitHub Pages'i elle aç (Settings → Pages → Source: GitHub Actions).
+- **GitHub Pages'i aç** (Settings → Pages → Source: GitHub Actions).
   `GITHUB_TOKEN` bir Pages sitesi _oluşturamıyor_, sadece var olana deploy
-  edebiliyor.
-- Gerçek donanımda yüksek düşman sayısında FPS. Bu ortamda GPU yok
-  (headless Chromium SwiftShader ile yazılımdan çiziyor), yani buradaki
-  kare süreleri gerçek performans hakkında hiçbir şey söylemiyor.
-- Hareket hissi ve build çeşitliliği hakkında öznel geri bildirim.
+  edebiliyor. Bu yapılana kadar canlı link yok.
+- **Gerçek donanımda FPS.** Bu repoda hiç ölçülmedi ve ölçülemez: ortamda GPU
+  yok, headless Chromium SwiftShader ile yazılımdan çiziyor. `?enemies=800`
+  ile açıp overlay'deki "worst" değerine bakman gereken tek şey bu.
+- **Öznel geri bildirim:** hareket hissi, build çeşitliliği, zorluk eğrisi ve
+  sesin ses seviyesi. Metrikler bunların hiçbirini ölçmez.
+
+**MVP sonrasına devreden kalem yok** — Faz 6'da açtığım okunabilirlik kalemi
+Faz 8'de kapandı. Yeni fikirler § 4'e yazılır.

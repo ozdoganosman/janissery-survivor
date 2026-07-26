@@ -28,7 +28,11 @@
     "allowImportingTsExtensions": false,
     "forceConsistentCasingInFileNames": true,
 
-    "types": ["vite/client"]
+    // Node's globals are here for the config files that genuinely run in Node.
+    // `src/` must not touch them, and an ESLint rule enforces that rather than
+    // trusting it — `process` in a browser module typechecks and then fails at run
+    // time, which is the worst order for a mistake to be found in.
+    "types": ["vite/client", "node"]
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests", "vite.config.ts", "playwright.config.ts"]
 }

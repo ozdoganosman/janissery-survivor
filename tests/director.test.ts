@@ -186,8 +186,11 @@ describe('effectiveTarget', () => {
     expect(effectiveTarget(late, 0, 140)).toBe(140);
   });
 
-  it('applies the cap to an override too', () => {
-    expect(effectiveTarget(stage, 600, 140)).toBe(140);
+  it('lets an explicit override out from under the cap', () => {
+    // `?enemies=` is for measuring the cost of a chosen crowd on real hardware. A
+    // quality tier quietly shrinking it would make every such measurement a lie.
+    expect(effectiveTarget(stage, 600, 140)).toBe(600);
+    expect(effectiveTarget(stage, 5, 140)).toBe(5);
   });
 
   it('treats zero as "not set" for both', () => {

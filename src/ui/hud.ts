@@ -99,6 +99,23 @@ const STYLE = `
   text-shadow: 0 1px 3px rgba(0,0,0,0.9);
   font-variant-numeric: tabular-nums;
 }
+/* Vignette.
+   A DOM layer rather than a post-processing pass, and that is the whole decision: a
+   real bloom-and-vignette chain costs three extra render targets and several passes
+   per frame, on a project whose entire premise is a frame budget I cannot measure in
+   this environment. A radial gradient over the canvas costs nothing, does the same job
+   for the vignette half, and leaves the glow to the additive materials that already
+   draw the projectiles, the aura and the boss ring. */
+.hud-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 74% 74% at center,
+    rgba(0, 0, 0, 0) 42%,
+    rgba(6, 4, 3, 0.28) 78%,
+    rgba(6, 4, 3, 0.55) 100%
+  );
+}
 /* A red wash on damage: at a glance, from anywhere on the screen, without having to
    be watching the bar. */
 .hud-hurt {
@@ -196,6 +213,7 @@ export function createHud(
   const root = document.createElement('div');
   root.className = 'hud-root';
   root.innerHTML = `
+    <div class="hud-vignette"></div>
     <div class="hud-hurt"></div>
     <div class="hud-xp"><div class="hud-xp-fill"></div></div>
     <div class="hud-top"><span class="hud-level"></span><span class="hud-time"></span></div>

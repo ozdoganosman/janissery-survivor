@@ -34,6 +34,24 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The only check that proves the pieces are wired to each other: it opens the
+      # built bundle in a real browser and plays it. Chromium here has no GPU and
+      # falls back to software rasterisation, so the suite deliberately asserts
+      # nothing about frame rate — only that the game runs, draws and stays quiet.
+      - name: Install Playwright's browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end smoke test
+        run: npm run test:e2e
+
+      - name: Upload smoke-test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
       # Bundle size is a stated performance budget, so surface it on every run rather
       # than waiting for someone to notice the game got slow to load.
       - name: Report bundle size

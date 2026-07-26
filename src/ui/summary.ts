@@ -15,6 +15,9 @@ export interface RunSummary {
   readonly kills: number;
   readonly weapons: readonly string[];
   readonly passives: readonly string[];
+  /** Longest run so far, in seconds. Zero when there is nothing to compare against. */
+  readonly bestSeconds: number;
+  readonly improved: boolean;
 }
 
 export interface SummaryScreen {
@@ -58,6 +61,7 @@ const STYLE = `
   font-variant-numeric: tabular-nums;
 }
 .sm-label { color: #8d8175; text-align: right; }
+.sm-label[data-fresh] { color: #e0b34a; }
 .sm-value { text-align: left; }
 .sm-build { font-size: 12px; color: #b9ad9c; line-height: 1.7; max-width: 340px; }
 .sm-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
@@ -100,9 +104,7 @@ export function createSummaryScreen(parent: HTMLElement = document.body): Summar
     },
 
     show(summary, onRestart, onQuit): void {
-      const minutes = Math.floor(summary.seconds / 60);
-      const seconds = Math.floor(summary.seconds % 60);
-      const clock = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      const clock = asClock(summary.seconds);
 
       overlay.replaceChildren();
 
@@ -115,6 +117,10 @@ export function createSummaryScreen(parent: HTMLElement = document.body): Summar
       stats.className = 'sm-stats';
       const rows: [string, string][] = [
         [t('summary.time'), clock],
+        [
+          summary.improved ? t('summary.newBest') : t('summary.best'),
+          summary.bestSeconds > 0 ? asClock(summary.bestSeconds) : '--:--',
+        ],
         [t('summary.level'), String(summary.level)],
         [t('summary.kills'), String(summary.kills)],
       ];
@@ -122,6 +128,7 @@ export function createSummaryScreen(parent: HTMLElement = document.body): Summar
         const key = document.createElement('span');
         key.className = 'sm-label';
         key.textContent = label;
+        if (summary.improved && label === t('summary.newBest')) key.dataset.fresh = 'true';
         const val = document.createElement('span');
         val.className = 'sm-value';
         val.textContent = value;
@@ -169,4 +176,10 @@ export function createSummaryScreen(parent: HTMLElement = document.body): Summar
       style.remove();
     },
   };
+}
+
+function asClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  return `${String(minutes).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }

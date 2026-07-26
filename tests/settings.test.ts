@@ -9,6 +9,7 @@ import {
   parseSettings,
   QUALITY_ENEMY_LIMIT,
   QUALITY_IDS,
+  guessQuality,
   saveSettings,
   type Bindings,
 } from '../src/core/settings';
@@ -66,6 +67,35 @@ describe('defaults', () => {
     // Zero is "no ceiling"; a number here would silently cap the game everyone else
     // is meant to get.
     expect(QUALITY_ENEMY_LIMIT.high).toBe(0);
+  });
+});
+
+describe('guessQuality', () => {
+  it('drops to the lowest tier on a weak device', () => {
+    expect(guessQuality({ hardwareConcurrency: 4, maxTouchPoints: 5 })).toBe('low');
+    expect(guessQuality({ hardwareConcurrency: 2, maxTouchPoints: 0 })).toBe('low');
+  });
+
+  it('takes a touch device down a tier even when it has cores', () => {
+    expect(guessQuality({ hardwareConcurrency: 8, maxTouchPoints: 5 })).toBe('medium');
+  });
+
+  it('leaves a desktop alone', () => {
+    expect(guessQuality({ hardwareConcurrency: 12, maxTouchPoints: 0 })).toBe('high');
+  });
+
+  it('assumes the best when the browser will not say', () => {
+    // A missing signal must not quietly cap a capable machine.
+    expect(guessQuality({})).toBe('high');
+    expect(guessQuality(null)).toBe('high');
+  });
+
+  it('is only a starting point, never an override', () => {
+    // The moment the player picks a tier it is theirs; a guess that overrode a stored
+    // choice would be worse than no guess at all.
+    for (const quality of QUALITY_IDS) {
+      expect(parseSettings({ quality }).quality).toBe(quality);
+    }
   });
 });
 
