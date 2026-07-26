@@ -31,8 +31,6 @@ const DEFAULT_VIEW_HEIGHT_UNITS = 26;
 /** Ortho cameras do not scale with distance, so this only needs to clear the geometry. */
 const CAMERA_DISTANCE = 80;
 
-const GROUND_SIZE = 400;
-
 export interface WorldView {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
@@ -90,18 +88,9 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
   sun.position.set(-30, 60, 20);
   scene.add(sun);
 
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
-    new THREE.MeshLambertMaterial({ color: 0x4e6b3a }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-
-  // Faint grid. Without any reference marks a flat colour plane gives no sense of
-  // motion, so movement tuning in the next phase would be guesswork.
-  const grid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE / 2, 0x3d5530, 0x445e35);
-  grid.position.y = 0.01;
-  scene.add(grid);
+  // No ground here. A fixed plane cannot serve a world the player walks thousands of
+  // units across, so the ground belongs to `world/ground.ts`, which follows the
+  // player. Scenes that want a floor ask for one.
 
   let viewHeightUnits = DEFAULT_VIEW_HEIGHT_UNITS;
 
@@ -146,10 +135,6 @@ export function createWorldView(canvas: HTMLCanvasElement): WorldView {
       renderer.render(scene, camera);
     },
     dispose() {
-      ground.geometry.dispose();
-      ground.material.dispose();
-      grid.geometry.dispose();
-      (grid.material as THREE.Material).dispose();
       renderer.dispose();
     },
   };

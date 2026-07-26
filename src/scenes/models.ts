@@ -4,6 +4,7 @@ import { createVoxelArmy, type VoxelArmy } from '../render/voxel/instanced';
 import { WORLD_Y_TO_SCREEN_Y, WORLD_Z_TO_SCREEN_Y } from '../render/scene';
 import { getVoxelModel, MODEL_IDS } from '../render/voxel/models';
 import { createVoxelRig, type VoxelRig } from '../render/voxel/rig';
+import { createStaticGround } from '../render/world/ground';
 import type { GameScene, SceneFactory } from './types';
 
 /**
@@ -56,6 +57,11 @@ export const createModelsScene: SceneFactory = (view, params): GameScene => {
   const zoom = readPositiveInt(params.get('zoom'), Math.round(fitted));
   view.setViewHeight(zoom);
   view.cameraTarget.set(0, 0, (SHOWCASE_Z + armyBackZ) / 2);
+
+  // The shared view no longer ships a floor, since the play world needs one that
+  // follows the player. A developer scene just wants something to stand on.
+  const ground = createStaticGround();
+  for (const object of ground.objects) view.scene.add(object);
 
   const showcases: Showcase[] = MODEL_IDS.map((id, index) => {
     const rig = createVoxelRig(getVoxelModel(id));
@@ -150,6 +156,7 @@ export const createModelsScene: SceneFactory = (view, params): GameScene => {
       window.removeEventListener('keydown', onKeyDown);
       for (const { rig } of showcases) rig.dispose();
       for (const army of armies) army.dispose();
+      ground.dispose();
     },
   };
 };

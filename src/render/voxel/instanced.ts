@@ -14,8 +14,8 @@ import { WALK_ARM_SWING, WALK_BOB, WALK_LEG_SWING } from './animator';
  * floats of traffic, purely to make limbs swing. That is a large slice of a 16.7 ms
  * budget spent on something the vertex shader can derive for free.
  *
- * So instead of `instanceMatrix`, each figure's state lives in five small instance
- * attributes — position, facing, phase offset, speed, tint — and the vertex shader
+ * So instead of `instanceMatrix`, each figure's state lives in six small instance
+ * attributes — position, facing, phase offset, speed, scale, tint — and the vertex shader
  * builds the transform: rotate the limb about its pivot, squash and bob the body,
  * turn the figure to face its heading, translate into the world. Walking then costs
  * *zero* per-frame CPU work; only a single shared `uTime` uniform advances. Moving a
@@ -68,6 +68,8 @@ export interface VoxelArmy {
   ): void;
   /** Multiplied into the figure's colours. Use for elites and hit flashes. */
   setTint(index: number, r: number, g: number, b: number): void;
+  /** Uniform size multiplier about the figure's feet. Defaults to 1. */
+  setScale(index: number, scale: number): void;
   /** Pushes buffered writes to the GPU. Call once per frame after all edits. */
   flush(): void;
   /** Advances the shared animation clock. */
@@ -124,6 +126,7 @@ attribute vec3 aPos;
 attribute float aFacing;
 attribute float aPhase;
 attribute float aSpeed;
+attribute float aScale;
 attribute vec3 aTint;
 uniform float uTime;
 uniform vec3 uPivot;
@@ -148,13 +151,15 @@ export function createVoxelArmy(model: BuiltModel, options: VoxelArmyOptions): V
   const facingData = new Float32Array(capacity);
   const phaseData = new Float32Array(capacity);
   const speedData = new Float32Array(capacity);
+  const scaleData = new Float32Array(capacity).fill(1);
 
   const aPos = new THREE.InstancedBufferAttribute(positionData, 3);
   const aTint = new THREE.InstancedBufferAttribute(tintData, 3);
   const aFacing = new THREE.InstancedBufferAttribute(facingData, 1);
   const aPhase = new THREE.InstancedBufferAttribute(phaseData, 1);
   const aSpeed = new THREE.InstancedBufferAttribute(speedData, 1);
-  const attributes = [aPos, aTint, aFacing, aPhase, aSpeed];
+  const aScale = new THREE.InstancedBufferAttribute(scaleData, 1);
+  const attributes = [aPos, aTint, aFacing, aPhase, aSpeed, aScale];
   for (const attribute of attributes) attribute.setUsage(THREE.DynamicDrawUsage);
 
   // A single uniform object shared by every part material, so advancing the clock is
@@ -200,11 +205,11 @@ export function createVoxelArmy(model: BuiltModel, options: VoxelArmyOptions): V
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
         /* glsl */ `
-        vec3 jsLocal = jsLimb * position + uPivot;
+        vec3 jsLocal = (jsLimb * position + uPivot) * aScale;
         // Squash about the feet, then bob; both scaled by jsMoving so a standing
         // figure is perfectly still.
         jsLocal.y *= 1.0 - 0.025 * cos(2.0 * JS_TAU * jsPhase) * jsMoving;
-        jsLocal.y += uBobAmp * abs(sin(JS_TAU * jsPhase)) * jsMoving;
+        jsLocal.y += uBobAmp * abs(sin(JS_TAU * jsPhase)) * jsMoving * aScale;
         vec3 transformed = jsFaceY(jsLocal, aFacing) + aPos;
         `,
       );
@@ -224,6 +229,7 @@ export function createVoxelArmy(model: BuiltModel, options: VoxelArmyOptions): V
     geometry.setAttribute('aFacing', aFacing);
     geometry.setAttribute('aPhase', aPhase);
     geometry.setAttribute('aSpeed', aSpeed);
+    geometry.setAttribute('aScale', aScale);
 
     const mesh = new THREE.InstancedMesh(geometry, material, capacity);
     // InstancedMesh allocates its matrix buffer zero-filled, and a zero matrix
@@ -281,6 +287,12 @@ export function createVoxelArmy(model: BuiltModel, options: VoxelArmyOptions): V
       tintData[base] = r;
       tintData[base + 1] = g;
       tintData[base + 2] = b;
+      dirty = true;
+    },
+
+    setScale(index, scale): void {
+      assertIndex(index);
+      scaleData[index] = scale;
       dirty = true;
     },
 

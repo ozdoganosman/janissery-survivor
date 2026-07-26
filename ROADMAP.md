@@ -156,19 +156,37 @@ rasterizasyonu (SwiftShader) kullanıyor, GPU yok. Gerçek donanımda ölçülme
 
 ---
 
-### Faz 2 — Oyuncu, kamera, dünya · ~3–4 gün
+### Faz 2 — Oyuncu, kamera, dünya · ✅ tamamlandı
 
-- 8 yönlü hareket (WASD + oklar + gamepad sol analog), ivmesiz ve anında —
-  VS'nin oynanış hissi kesin kontrole dayanır
-- Kamera takibi: yumuşak lerp, ölü bölge (dead zone), hafif bakış-ileri kayması
-- Harita: **Kırık Surlar** — sonsuz kaydırılan zemin (tiling), dekoratif
-  voxel öğeler (sur parçaları, servi, kandil) sınırsız alanda dağılım
-- Karakter animasyon durum makinesi: idle ↔ walk ↔ hit
-- `?debug=1` ile geliştirici overlay: pozisyon, FPS, sayaçlar
+- [x] 8 yönlü hareket (WASD + oklar + gamepad sol analog), ivmesiz ve anında
+- [x] Kamera takibi: üstel yumuşatma + hıza göre bakış-ileri kayması
+- [x] Harita: **Kırık Surlar** — oyuncuyu takip eden zemin, hücre tabanlı
+      deterministik dekor (sur parçası, servi, kandil)
+- [x] Animasyon durum makinesi: idle ↔ walk
+- [x] `?debug=1` overlay: pozisyon, hız, dekor sayısı, draw call, tohum
 
-**Çıkış kriteri:** Boş dünyada dolaşmak akıcı ve tatmin edici hissettiriyor.
-(Bu subjektif kriter ciddiye alınmalı — burada iyi hissettirmiyorsa
-düşman eklemek kurtarmaz.)
+**Çıkış kriteri:** Boş dünyada dolaşmak akıcı hissettiriyor. Bu subjektif kriter
+**senin doğrulaman gereken** tek madde — ben ancak hareketin doğru olduğunu
+ölçebilirim, iyi hissettirdiğini değil.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Ölü bölge (dead zone) eklenmedi.** Kurarken görüldü ki ölü bölge, oyuncu
+  durduğunda onu ekranın merkezinden kaydırıyor; etrafının sarılması üzerine
+  kurulu bir oyunda bu, ekranın bir tarafına diğerinden fazla uyarı süresi
+  vermek demek. Yalnızca yumuşatma titremeyi zaten kaldırıyor.
+- **`hit` animasyonu bağlanmadı.** Henüz hasar kaynağı yok; durum makinesi
+  hazır, Faz 4'te hasar boru hattıyla birlikte bağlanacak.
+- **Sonsuz zemin "tiling" ile değil, oyuncuyu takip eden tek düzlemle
+  yapıldı.** Düzlem yalnızca tam grid karesi adımlarıyla kayıyor: sürekli
+  kaydırmak grid çizgilerini oyuncunun altında sürükler ve hareket hissini
+  tamamen yok ederdi.
+
+**Yol boyunca bulunan hata:** Dekor hücrelerini tohumlayan hash zayıftı — 13×13
+lük bir blokta 169 hücrenin yalnızca 123'ü farklı değer üretiyordu. Çarpışma,
+iki farklı hücrede birebir aynı harabenin bitmesi demek, yani gözle görülür
+tekrar eden bir manzara. İki koordinat XOR'lanıp bir kez karıştırılıyordu;
+her koordinat ayrı ayrı avalanche'a sokulunca 90 601 hücrede sıfır çarpışma.
 
 ---
 

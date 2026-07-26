@@ -1,96 +1,103 @@
 import * as THREE from 'three';
-import { createRng } from '../core/rng';
-import { createVoxelArmy } from '../render/voxel/instanced';
+import { createInput } from '../core/input';
+import { seedFromString } from '../core/rng';
 import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
+import { createWorld } from '../render/world/ground';
+import {
+  createCameraFocus,
+  createPlayer,
+  stepCameraFocus,
+  stepPlayer,
+  PLAYER_SPEED,
+} from '../sim/player';
 import type { GameScene, SceneFactory } from './types';
 
 /**
- * The default view.
+ * The play view.
  *
- * Not yet a game: the player is not controllable and the enemies do not pursue. What
- * this scene is for is showing both rendering paths side by side under the real camera
- * — one rigged figure walking a circle, a ring of instanced figures walking their own
- * — so that any discrepancy between the CPU and GPU walk cycles is obvious rather than
- * discovered later with hundreds of enemies on screen. Phase 2 replaces the circling
- * with input.
+ * Movement, camera and world only — there are no enemies and nothing can hurt the
+ * player yet. That is the point of this phase: whether walking around is pleasant is
+ * a question best answered before anything is chasing you, because if the movement is
+ * wrong no amount of combat rescues it.
+ *
+ * `?seed=word` picks the scenery layout, and the same word always gives the same
+ * ruins.
  */
 
-const HERO_ORBIT_RADIUS = 5.5;
-const HERO_ORBIT_SECONDS = 14;
+/** Speed below which the figure is considered to be standing still. */
+const IDLE_THRESHOLD = 0.05;
 
-const ENEMY_COUNT = 14;
-const ENEMY_ORBIT_RADIUS = 10.5;
-const ENEMY_ORBIT_SECONDS = 34;
+export const createPlayScene: SceneFactory = (view, params): GameScene => {
+  const seedParam = params.get('seed');
+  const worldSeed = seedParam === null ? 0x4a4e15 : seedFromString(seedParam);
 
-export const createPlayScene: SceneFactory = (view): GameScene => {
-  const heroModel = getVoxelModel('yeniceri');
-  const enemyModel = getVoxelModel('karakoncolos');
+  const world = createWorld(worldSeed);
+  for (const object of world.objects) view.scene.add(object);
 
-  const hero = createVoxelRig(heroModel);
-  hero.play('walk');
+  const hero = createVoxelRig(getVoxelModel('yeniceri'));
   view.scene.add(hero.root);
 
-  const enemies = createVoxelArmy(enemyModel, { capacity: ENEMY_COUNT });
-  for (const mesh of enemies.meshes) view.scene.add(mesh);
-  enemies.setCount(ENEMY_COUNT);
+  const input = createInput();
+  const player = createPlayer(0, 0);
+  const focus = createCameraFocus(0, 0);
 
-  // Phase offsets from a fixed seed: without them every figure lands the same foot on
-  // the same frame and the ring reads as one object rather than as a crowd.
-  const rng = createRng(0x4a4e15);
-  const enemyPhases = Array.from({ length: ENEMY_COUNT }, () => rng.next());
-
-  let heroAngle = 0;
-  let previousHeroAngle = 0;
-  let enemyAngle = 0;
-  let previousEnemyAngle = 0;
-
-  const heroPosition = new THREE.Vector3();
-
-  const placeEnemies = (baseAngle: number): void => {
-    for (let i = 0; i < ENEMY_COUNT; i++) {
-      const spread = (i / ENEMY_COUNT) * Math.PI * 2;
-      const angle = baseAngle + spread;
-      const x = Math.sin(angle) * ENEMY_ORBIT_RADIUS;
-      const z = Math.cos(angle) * ENEMY_ORBIT_RADIUS;
-      // Facing is the tangent of the circle, which is the heading a walker would have.
-      enemies.setInstance(i, x, 0, z, angle + Math.PI / 2, 1.1, enemyPhases[i]);
-    }
-    enemies.flush();
-  };
+  world.update(player.x, player.z);
 
   return {
     update(stepSeconds: number): void {
-      previousHeroAngle = heroAngle;
-      previousEnemyAngle = enemyAngle;
-      heroAngle += (Math.PI * 2 * stepSeconds) / HERO_ORBIT_SECONDS;
-      enemyAngle += (Math.PI * 2 * stepSeconds) / ENEMY_ORBIT_SECONDS;
+      const intent = input.sample();
+      stepPlayer(player, intent.moveX, intent.moveZ, stepSeconds);
+      stepCameraFocus(focus, player, stepSeconds);
+
+      // The animation follows measured speed rather than the key being held, so a
+      // player pushed or slowed later still animates truthfully.
+      hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
       hero.update(stepSeconds);
-      enemies.advance(stepSeconds);
+
+      world.update(player.x, player.z);
     },
 
     render(alpha: number): void {
-      const angle = THREE.MathUtils.lerp(previousHeroAngle, heroAngle, alpha);
-      heroPosition.set(Math.sin(angle) * HERO_ORBIT_RADIUS, 0, Math.cos(angle) * HERO_ORBIT_RADIUS);
-      hero.root.position.copy(heroPosition);
-      hero.root.rotation.y = angle + Math.PI / 2;
+      hero.root.position.set(
+        THREE.MathUtils.lerp(player.previousX, player.x, alpha),
+        0,
+        THREE.MathUtils.lerp(player.previousZ, player.z, alpha),
+      );
+      // Interpolating the raw angles would spin the figure the long way round
+      // whenever a turn crosses the +/-pi seam, so blend the shortest arc instead.
+      hero.root.rotation.y =
+        player.previousFacing + shortestArc(player.previousFacing, player.facing) * alpha;
 
-      placeEnemies(THREE.MathUtils.lerp(previousEnemyAngle, enemyAngle, alpha));
+      view.cameraTarget.set(
+        THREE.MathUtils.lerp(focus.previousX, focus.x, alpha),
+        0,
+        THREE.MathUtils.lerp(focus.previousZ, focus.z, alpha),
+      );
 
-      // Keep the hero framed without pinning the camera to it; a little lag reads as
-      // weight and stops the world sliding under a motionless character.
-      view.cameraTarget.lerp(heroPosition, 0.06);
       view.render();
     },
 
     detail(): string {
       const info = view.renderer.info.render;
-      return `draw calls ${info.calls}  tris ${info.triangles}\nhero ${hero.animation}  enemies ${enemies.count}`;
+      return [
+        `pos ${player.x.toFixed(1)}, ${player.z.toFixed(1)}`,
+        `speed ${player.speed.toFixed(2)} / ${PLAYER_SPEED.toFixed(1)}  ${hero.animation}`,
+        `props ${world.propCount}  draw calls ${info.calls}`,
+        `tris ${info.triangles}  seed ${worldSeed}`,
+      ].join('\n');
     },
 
     dispose(): void {
+      input.dispose();
       hero.dispose();
-      enemies.dispose();
+      world.dispose();
     },
   };
 };
+
+/** Signed shortest angular distance from `from` to `to`, in [-pi, pi). */
+function shortestArc(from: number, to: number): number {
+  const TAU = Math.PI * 2;
+  return ((((to - from + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
+}

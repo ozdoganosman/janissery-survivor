@@ -1,4 +1,7 @@
+import kandilJson from '../../../data/models/kandil.json';
 import karakoncolosJson from '../../../data/models/karakoncolos.json';
+import serviJson from '../../../data/models/servi.json';
+import surJson from '../../../data/models/sur.json';
 import yeniceriJson from '../../../data/models/yeniceri.json';
 import { buildVoxelModel, type BuiltModel } from './builder';
 import { parseVoxelModel } from './schema';
@@ -12,13 +15,20 @@ import { parseVoxelModel } from './schema';
  * which is what lets the instanced renderer draw an army from one buffer.
  */
 
+/** Models with limbs, shown side by side in the model debug scene. */
 export const MODEL_IDS = ['yeniceri', 'karakoncolos'] as const;
 
-export type ModelId = (typeof MODEL_IDS)[number];
+/** Single-part scenery. Kept apart so the debug scene does not parade the trees. */
+export const PROP_MODEL_IDS = ['sur', 'servi', 'kandil'] as const;
+
+export type ModelId = (typeof MODEL_IDS)[number] | (typeof PROP_MODEL_IDS)[number];
 
 const SOURCES: Readonly<Record<ModelId, unknown>> = {
   yeniceri: yeniceriJson,
   karakoncolos: karakoncolosJson,
+  sur: surJson,
+  servi: serviJson,
+  kandil: kandilJson,
 };
 
 const cache = new Map<ModelId, BuiltModel>();
