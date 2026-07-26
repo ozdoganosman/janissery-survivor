@@ -1,0 +1,26 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Test artifacts
+test-results/
+playwright-report/
