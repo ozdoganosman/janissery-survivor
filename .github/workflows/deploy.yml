@@ -42,13 +42,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      # `enablement` turns Pages on for the repository if it is not already, using
-      # GitHub Actions as the build source. Without it the first run fails with
-      # "Get Pages site failed / Not Found" and someone has to flip the switch by
-      # hand in Settings before any deploy can succeed.
+      # Requires Pages to already be enabled on the repository, with the build
+      # source set to GitHub Actions (Settings -> Pages -> Source: GitHub Actions).
+      # That is a one-time manual step and cannot be automated from here: creating a
+      # Pages site needs repository admin rights, which the workflow's GITHUB_TOKEN
+      # does not have even with `permissions: pages: write`. Passing
+      # `enablement: true` was tried and fails with "Create Pages site failed:
+      # Resource not accessible by integration".
+      #
+      # Until that switch is flipped, this workflow fails here on every push. That
+      # failure is the intended signal that deployment is not configured yet.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -6,6 +6,15 @@ mekaniklerine dayanan 3D tarayıcı oyunu.
 > Durum: **Faz 0 tamam** — altyapı kuruldu, oyun mekaniği henüz yok.
 > Plan için [ROADMAP.md](ROADMAP.md).
 
+> [!IMPORTANT]
+> **Canlı demo henüz yayında değil.** Pages deploy workflow'u hazır ama tek
+> seferlik bir el işi bekliyor: **Settings → Pages → Source: "GitHub Actions"**.
+> Bu adım otomatikleştirilemiyor; Pages sitesi oluşturmak repo admin yetkisi
+> istiyor, workflow'un `GITHUB_TOKEN`'ı ise `permissions: pages: write` verilse
+> bile buna sahip değil. Anahtar çevrilene kadar deploy workflow'u her push'ta
+> bu adımda kırmızı kalır — bu kasıtlı, kurulumun eksik olduğunu gösteren sinyal.
+> Çevrildikten sonra push'lar otomatik yayına gider.
+
 ## Özet
 
 - **Platform:** Web (tarayıcı), masaüstü öncelikli
