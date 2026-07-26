@@ -20,6 +20,9 @@ import { getVoxelModel } from '../voxel/models';
 /** Walk cycles per second at the enemy's full speed. */
 const WALK_CYCLES_AT_FULL_SPEED = 1.35;
 
+/** How far a struck enemy brightens. Enough to read in a crowd, short of washing out. */
+const FLASH_BRIGHTNESS = 3.5;
+
 export interface HordeView {
   readonly objects: readonly THREE.Object3D[];
   /**
@@ -64,7 +67,7 @@ export function createHordeView(enemyCapacity: number, gemCapacity: number): Hor
   let elapsed = 0;
 
   const renderEnemies = (enemies: EnemyPool, alpha: number, armyRef: VoxelArmy): void => {
-    const { x, z, previousX, previousZ, facing, phase, speed, count } = enemies;
+    const { x, z, previousX, previousZ, facing, phase, speed, flash, count } = enemies;
     armyRef.setCount(Math.min(count, armyRef.capacity));
     const drawn = Math.min(count, armyRef.capacity);
     for (let i = 0; i < drawn; i++) {
@@ -77,6 +80,10 @@ export function createHordeView(enemyCapacity: number, gemCapacity: number): Hor
         speed[i] > 0 ? WALK_CYCLES_AT_FULL_SPEED : 0,
         phase[i],
       );
+      // The tint multiplies the model's own colours, so a struck enemy blanches
+      // toward white without losing its silhouette.
+      const lift = 1 + flash[i] * FLASH_BRIGHTNESS;
+      armyRef.setTint(i, lift, lift, lift);
     }
     armyRef.flush();
   };

@@ -50,6 +50,12 @@ const SEPARATION_STRENGTH = 1.35;
 /** Enemies stop closing once this near the player, so they surround rather than stack. */
 const CONTACT_DISTANCE = 0.85;
 
+/** How fast a shove bleeds off, per second. */
+const KNOCKBACK_DECAY = 9;
+
+/** How long the white hit flash lasts. Long enough to register, short enough not to smear. */
+const FLASH_SECONDS = 0.14;
+
 export interface EnemyStats {
   readonly speed: number;
   readonly health: number;
@@ -74,6 +80,16 @@ export class EnemyPool {
   readonly phase: Float32Array;
   /** Speed actually achieved last step, for driving the walk animation. */
   readonly speed: Float32Array;
+  /**
+   * Hit flash, 1 at the moment of impact and decaying to 0.
+   *
+   * With hundreds of enemies overlapping, a hit that changes only a health number the
+   * player cannot see is indistinguishable from a miss. The flash is the receipt.
+   */
+  readonly flash: Float32Array;
+  /** Knockback velocity, decaying. Separate from steering so a shove overrides intent. */
+  readonly knockX: Float32Array;
+  readonly knockZ: Float32Array;
   readonly generation: Uint32Array;
 
   constructor(capacity: number = ENEMY_CAPACITY) {
@@ -89,6 +105,9 @@ export class EnemyPool {
     this.health = new Float32Array(capacity);
     this.phase = new Float32Array(capacity);
     this.speed = new Float32Array(capacity);
+    this.flash = new Float32Array(capacity);
+    this.knockX = new Float32Array(capacity);
+    this.knockZ = new Float32Array(capacity);
     this.generation = new Uint32Array(capacity);
   }
 
@@ -114,6 +133,9 @@ export class EnemyPool {
     this.health[index] = stats.health;
     this.phase[index] = phase;
     this.speed[index] = 0;
+    this.flash[index] = 0;
+    this.knockX[index] = 0;
+    this.knockZ[index] = 0;
     this.generation[index]++;
     return index;
   }
@@ -136,6 +158,9 @@ export class EnemyPool {
       this.health[index] = this.health[last];
       this.phase[index] = this.phase[last];
       this.speed[index] = this.speed[last];
+      this.flash[index] = this.flash[last];
+      this.knockX[index] = this.knockX[last];
+      this.knockZ[index] = this.knockZ[last];
       this.generation[index] = this.generation[last];
     }
   }
@@ -158,7 +183,7 @@ export function stepEnemies(
   stepSeconds: number,
   stats: EnemyStats = KARAKONCOLOS,
 ): void {
-  const { x, z, previousX, previousZ, facing, speed, count } = pool;
+  const { x, z, previousX, previousZ, facing, speed, flash, knockX, knockZ, count } = pool;
 
   for (let i = 0; i < count; i++) {
     previousX[i] = x[i];
@@ -222,6 +247,23 @@ export function stepEnemies(
       facing[i] = Math.atan2(moveX, moveZ);
     } else {
       speed[i] = 0;
+    }
+
+    // Knockback is applied on top of, not instead of, steering: a shoved enemy keeps
+    // trying to close, which reads as staggering rather than as being switched off.
+    if (knockX[i] !== 0 || knockZ[i] !== 0) {
+      x[i] += knockX[i] * stepSeconds;
+      z[i] += knockZ[i] * stepSeconds;
+      const decay = Math.exp(-KNOCKBACK_DECAY * stepSeconds);
+      knockX[i] *= decay;
+      knockZ[i] *= decay;
+      if (Math.abs(knockX[i]) < 0.01) knockX[i] = 0;
+      if (Math.abs(knockZ[i]) < 0.01) knockZ[i] = 0;
+    }
+
+    if (flash[i] > 0) {
+      flash[i] -= stepSeconds / FLASH_SECONDS;
+      if (flash[i] < 0) flash[i] = 0;
     }
   }
 }

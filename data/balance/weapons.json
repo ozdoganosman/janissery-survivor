@@ -1,0 +1,80 @@
+{
+  "yatagan": {
+    "name": "Yatağan",
+    "motion": "sweep",
+    "cooldown": 1.05,
+    "damage": 13,
+    "area": 2.5,
+    "speed": 7.5,
+    "amount": 1,
+    "pierce": 999,
+    "duration": 0.34,
+    "knockback": 3.2,
+    "hitInterval": 0.34
+  },
+  "tirkes": {
+    "name": "Tirkeş",
+    "motion": "linear",
+    "cooldown": 0.72,
+    "damage": 11,
+    "area": 0.42,
+    "speed": 17,
+    "amount": 1,
+    "pierce": 2,
+    "duration": 1.4,
+    "knockback": 1.1,
+    "hitInterval": 0.08
+  },
+  "mehter": {
+    "name": "Mehter Davulu",
+    "motion": "ring",
+    "cooldown": 2.9,
+    "damage": 9,
+    "area": 7.5,
+    "speed": 11,
+    "amount": 1,
+    "pierce": 999,
+    "duration": 0.68,
+    "knockback": 8.5,
+    "hitInterval": 0.68
+  },
+  "nazar": {
+    "name": "Nazar Boncuğu",
+    "motion": "orbit",
+    "cooldown": 3.4,
+    "damage": 8,
+    "area": 0.46,
+    "speed": 3.1,
+    "amount": 3,
+    "pierce": 999,
+    "duration": 2.6,
+    "knockback": 1.4,
+    "hitInterval": 0.42
+  },
+  "sahi": {
+    "name": "Şahi Topu",
+    "motion": "lob",
+    "cooldown": 2.2,
+    "damage": 26,
+    "area": 3.1,
+    "speed": 9,
+    "amount": 1,
+    "pierce": 999,
+    "duration": 1.05,
+    "knockback": 5.5,
+    "hitInterval": 1.05
+  },
+  "kandil": {
+    "name": "Kandil",
+    "motion": "aura",
+    "cooldown": 0.45,
+    "damage": 5,
+    "area": 2.8,
+    "speed": 0,
+    "amount": 1,
+    "pierce": 999,
+    "duration": 0.45,
+    "knockback": 0,
+    "hitInterval": 0.45
+  }
+}

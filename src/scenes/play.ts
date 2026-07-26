@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { createInput } from '../core/input';
 import { createRng, seedFromString } from '../core/rng';
+import { createDamageNumbers } from '../render/fx/damage-numbers';
+import { createProjectileView } from '../render/fx/projectiles-view';
 import { createShardField } from '../render/fx/shards';
 import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
@@ -14,7 +16,24 @@ import {
   spawnRing,
   stepEnemies,
 } from '../sim/enemies';
+import {
+  addShake,
+  createHitStop,
+  createScreenShake,
+  requestHitStop,
+  stepHitStop,
+  stepShake,
+} from '../sim/feedback';
 import { GEM_CAPACITY, GemPool, stepGems } from '../sim/pickups';
+import {
+  createCombatReport,
+  PROJECTILE_CAPACITY,
+  ProjectilePool,
+  resetCombatReport,
+  resolveHits,
+  stepProjectiles,
+} from '../sim/projectiles';
+import { equip, stepWeapons, WEAPON_IDS, weaponStats, type WeaponId } from '../sim/weapons';
 import {
   createCameraFocus,
   createPlayer,
@@ -52,16 +71,25 @@ const DEFAULT_TARGET_ENEMIES = 300;
 /** Enemies added per second while below target. */
 const SPAWN_RATE = 55;
 
+/** The player's attack profile. Passives and weapon levels will feed this in phase 5. */
+const ATTACK = {
+  base: 0,
+  multiplier: 1,
+  criticalChance: 0.12,
+  criticalMultiplier: 2,
+};
+
 /**
- * Placeholder weapon: a damaging aura around the player.
+ * Ordinary damage numbers allowed per simulation step.
  *
- * Scaffolding, not design. This phase builds the machinery of dying — releasing the
- * pool slot, dropping the gem, bursting the shards — and none of it can be exercised,
- * measured or even seen without something that kills. Phase 4 replaces this with the
- * real weapon set, at which point it becomes the Kandil rather than a debug tool.
+ * At sixty steps a second this is still far more than the eye can follow, which is
+ * the point: it caps the worst case without thinning the feedback in normal play.
  */
-const AURA_RADIUS = 2.6;
-const AURA_DAMAGE_PER_SECOND = 26;
+const MAX_NUMBERS_PER_STEP = 3;
+
+/** Shake added by one kill, and by one critical. Kept small; they stack by maximum. */
+const KILL_SHAKE = 0.16;
+const CRIT_SHAKE = 0.4;
 
 export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const seedParam = params.get('seed');
@@ -79,6 +107,13 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
   const shards = createShardField(0x6b5f80);
   view.scene.add(shards.object);
+
+  const projectiles = new ProjectilePool(PROJECTILE_CAPACITY);
+  const projectileView = createProjectileView(PROJECTILE_CAPACITY);
+  for (const object of projectileView.objects) view.scene.add(object);
+
+  const damageNumbers = createDamageNumbers();
+  view.scene.add(damageNumbers.object);
 
   // Touch is bound to the canvas, not the window, so on-screen buttons stay tappable
   // instead of every tap being swallowed as a steer.
@@ -99,45 +134,69 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const effectRng = runRng.fork();
   const shardRandom = (): number => effectRng.next();
 
+  // `?weapons=yatagan,tirkes` isolates a subset. The phase's exit criterion asks
+  // whether each weapon holds up alone, and that cannot be judged with five others
+  // clearing the screen first.
+  const weaponParam = params.get('weapons');
+  const carried: WeaponId[] =
+    weaponParam === null
+      ? [...WEAPON_IDS]
+      : weaponParam
+          .split(',')
+          .map((name) => name.trim())
+          .filter((name): name is WeaponId => (WEAPON_IDS as readonly string[]).includes(name));
+  const weapons = (carried.length > 0 ? carried : [...WEAPON_IDS]).map(equip);
+
+  const shake = createScreenShake();
+  const hitStop = createHitStop();
+  const combat = createCombatReport();
+  const combatRng = runRng.fork();
+
   let spawnCredit = 0;
   let experience = 0;
   let kills = 0;
+  let numbersThisStep = 0;
 
   world.update(player.x, player.z);
 
-  /**
-   * Damages everything inside the aura and retires whatever it finishes off.
-   *
-   * Iterating without incrementing after a kill is deliberate: the pool swaps the
-   * last enemy into the vacated slot, so the same index must be examined again.
-   */
-  const applyAura = (stepSeconds: number): void => {
-    const damage = AURA_DAMAGE_PER_SECOND * stepSeconds;
-    const radiusSq = AURA_RADIUS * AURA_RADIUS;
-
-    for (let i = 0; i < enemies.count;) {
-      const dx = enemies.x[i] - player.x;
-      const dz = enemies.z[i] - player.z;
-      if (dx * dx + dz * dz > radiusSq) {
-        i++;
-        continue;
-      }
-
-      enemies.health[i] -= damage;
-      if (enemies.health[i] > 0) {
-        i++;
-        continue;
-      }
-
-      gems.spawn(enemies.x[i], enemies.z[i], 1);
-      shards.burst(enemies.x[i], enemies.z[i], shardRandom);
-      kills++;
-      enemies.kill(i);
-    }
+  /** Everything that happens when a weapon finishes an enemy off. */
+  const onKill = (x: number, z: number): void => {
+    gems.spawn(x, z, 1);
+    shards.burst(x, z, shardRandom);
+    kills++;
   };
+
+  /**
+   * Shows a number for a hit — but not for every hit.
+   *
+   * Six weapons striking a packed crowd land hundreds of hits a second. Drawing a
+   * number for each turns the area around the player into an unreadable smear of
+   * digits, which conveys strictly less than showing a handful would. Criticals
+   * always appear, because they are the thing worth noticing; ordinary hits get a
+   * budget per step and the rest are silently dropped. The flash still confirms
+   * every one of them landed.
+   */
+  const onHit = (x: number, z: number, amount: number, critical: boolean): void => {
+    if (critical) {
+      damageNumbers.push(x, z, amount, true);
+      return;
+    }
+    if (numbersThisStep >= MAX_NUMBERS_PER_STEP) return;
+    numbersThisStep++;
+    damageNumbers.push(x, z, amount, false);
+  };
+
+  // Passed as a function so the damage pipeline decides whether a hit *can* crit
+  // while the run's own seeded stream decides the roll, keeping replays identical.
+  const rollCritical = (): boolean => combatRng.chance(ATTACK.criticalChance);
 
   return {
     update(stepSeconds: number): void {
+      // Hit-stop freezes the world without touching the step length: shortening steps
+      // is exactly what the fixed timestep exists to prevent. Rendering continues, so
+      // the freeze reads as impact rather than as a dropped frame.
+      if (stepHitStop(hitStop, stepSeconds)) return;
+
       const intent = input.sample();
       stepPlayer(player, intent.moveX, intent.moveZ, stepSeconds);
       stepCameraFocus(focus, player, stepSeconds);
@@ -161,13 +220,39 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       grid.rebuild(enemies.count, enemies.x, enemies.z);
       stepEnemies(enemies, grid, player.x, player.z, stepSeconds, KARAKONCOLOS);
 
-      applyAura(stepSeconds);
+      stepWeapons(
+        weapons,
+        projectiles,
+        enemies,
+        player.x,
+        player.z,
+        player.facing,
+        stepSeconds,
+        combatRng,
+      );
+      stepProjectiles(projectiles, player.x, player.z, stepSeconds);
+
+      resetCombatReport(combat);
+      numbersThisStep = 0;
+      // The grid was built before the enemies moved, but they move at most 0.04 units
+      // in a step — far less than the smallest hit radius — so rebuilding a second
+      // time would cost more than the accuracy is worth.
+      resolveHits(projectiles, enemies, grid, ATTACK, combat, onKill, onHit, rollCritical);
+
+      if (combat.kills > 0) addShake(shake, KILL_SHAKE);
+      if (combat.criticals > 0) {
+        addShake(shake, CRIT_SHAKE);
+        requestHitStop(hitStop);
+      }
+      stepShake(shake, stepSeconds, effectRng);
+
       experience += stepGems(gems, player.x, player.z, stepSeconds);
 
       hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
       hero.update(stepSeconds);
       horde.advance(stepSeconds);
       shards.advance(stepSeconds);
+      damageNumbers.advance(stepSeconds);
       world.update(player.x, player.z);
     },
 
@@ -183,13 +268,17 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         player.previousFacing + shortestArc(player.previousFacing, player.facing) * alpha;
 
       view.cameraTarget.set(
-        THREE.MathUtils.lerp(focus.previousX, focus.x, alpha),
+        THREE.MathUtils.lerp(focus.previousX, focus.x, alpha) +
+          THREE.MathUtils.lerp(shake.previousOffsetX, shake.offsetX, alpha),
         0,
-        THREE.MathUtils.lerp(focus.previousZ, focus.z, alpha),
+        THREE.MathUtils.lerp(focus.previousZ, focus.z, alpha) +
+          THREE.MathUtils.lerp(shake.previousOffsetZ, shake.offsetZ, alpha),
       );
 
       horde.render(enemies, gems, alpha);
+      projectileView.render(projectiles, alpha);
       shards.render(alpha);
+      damageNumbers.render();
       touchOverlay.render(input.touchStick);
       view.render();
     },
@@ -199,7 +288,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       return [
         `pos ${player.x.toFixed(1)}, ${player.z.toFixed(1)}  spd ${player.speed.toFixed(1)}/${PLAYER_SPEED.toFixed(1)}`,
         `enemies ${enemies.count}/${targetEnemies}  kills ${kills}`,
-        `gems ${gems.count}  xp ${experience}  shards ${shards.count}`,
+        `weapons ${weapons.map((w) => weaponStats(w.id).name).join(' ')}`,
+        `shots ${projectiles.count}  dmg/s ${Math.round(combat.damageDealt * 60)}  gems ${gems.count}  xp ${experience}`,
         `props ${world.propCount}  draw calls ${info.calls}  tris ${info.triangles}`,
       ].join('\n');
     },
@@ -209,6 +299,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       touchOverlay.dispose();
       hero.dispose();
       horde.dispose();
+      projectileView.dispose();
+      damageNumbers.dispose();
       shards.dispose();
       world.dispose();
     },

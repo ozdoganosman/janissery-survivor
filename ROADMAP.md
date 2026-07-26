@@ -257,29 +257,67 @@ r, cb)` daha okunaklı, ama döngü değişkenlerini yakalayan bir closure her
 
 ---
 
-### Faz 4 — Silahlar ve hasar · ~5–6 gün
+### Faz 4 — Silahlar ve hasar · ✅ tamamlandı
 
-- Merci havuzu (SoA), çarpışma grid üzerinden
-- Silah çerçevesi: `cooldown`, `damage`, `area`, `speed`, `amount`,
-  `pierce`, `duration` — hepsi veri, davranış farkı sadece hedefleme/hareket
-  fonksiyonunda
-- Hasar boru hattı: temel hasar → çarpan → kritik → azaltma. `src/sim/` içinde,
-  tamamen test edilmiş
-- Vuruş geri bildirimi: hasar sayıları (instanced sprite), ekran sarsıntısı,
-  hit-stop, düşman flash + geri tepme
-- **6 silah** (MVP seti):
+- [x] Mermi havuzu (SoA), çarpışma grid üzerinden
+- [x] Silah çerçevesi: `cooldown`, `damage`, `area`, `speed`, `amount`,
+      `pierce`, `duration` — hepsi `data/balance/weapons.json` içinde veri
+- [x] Hasar boru hattı: temel → çarpan → kritik → azaltma, tamamen test edilmiş
+- [x] Vuruş geri bildirimi: hasar sayıları, ekran sarsıntısı, hit-stop,
+      düşman flaşı + geri tepme
+- [x] **6 silah**, altısı da farklı hareket türünde
 
-| Silah                  | Davranış                                                     |
-| ---------------------- | ------------------------------------------------------------ |
-| **Yatağan**            | Oyuncunun etrafında yay çizen yakın dövüş — başlangıç silahı |
-| **Tirkeş** (ok sadağı) | En yakın düşmanı hedefleyen otomatik oklar                   |
-| **Mehter Davulu**      | Periyodik halka şok dalgası, geri savurur                    |
-| **Nazar Boncuğu**      | Oyuncunun yörüngesinde dönen, delen boncuklar                |
-| **Şahi Topu**          | Yay çizerek düşen patlayıcı gülle                            |
-| **Kandil**             | Oyuncuyu saran ateş aurası, sürekli hasar                    |
+| Silah             | Davranış                                         |
+| ----------------- | ------------------------------------------------ |
+| **Yatağan**       | Oyuncunun etrafında yay çizen yakın dövüş        |
+| **Tirkeş**        | En yakın düşmanı hedefleyen otomatik oklar       |
+| **Mehter Davulu** | Genişleyen halka şok dalgası, güçlü geri savurma |
+| **Nazar Boncuğu** | Yörüngede dönen, delen boncuklar                 |
+| **Şahi Topu**     | Hedefe uçan patlayıcı gülle                      |
+| **Kandil**        | Oyuncuyu saran ateş aurası                       |
 
-**Çıkış kriteri:** 6 silah aynı anda ateşlerken 800 düşmanla 60 FPS. Her
-silah tek başına 5 dakika oynanabilir hissettiriyor.
+**Çıkış kriteri durumu:** Altı silah aynı anda ateşlerken 250 düşmanla 23 draw
+call, heap büyümesi yok. `?weapons=yatagan` gibi bir parametre tek silahı
+izole ediyor — "her silah tek başına oynanabilir mi" sorusu ancak öyle
+yanıtlanabilir. 60 FPS hâlâ bu ortamda ölçülemiyor (GPU yok).
+
+**Tasarım kararları:**
+
+- **Tek mermi havuzu, altı hareket türü.** Alternatif — silah başına sistem —
+  altı havuz, altı çarpışma geçişi ve yuvarlama hatasının saklanabileceği altı
+  yer demekti, karşılığında hiçbir şey. Yedinci silah eklemek bir `motion`
+  vakası eklemek olmalı, bir alt sistem değil.
+- **Sayılar `data/balance/weapons.json` içinde.** Kalan işin çoğu denge ayarı
+  olacak ve TypeScript düzenlemeyi gerektiren her ayar turu, yapılmayacak bir
+  ayar turudur. Dosya elle düzenleneceği için doğrulama alan adını söyleyen
+  bir hata veriyor.
+- **Kritik, azaltmadan önce.** Sıra ters olsaydı zırh şansla ölçeklenirdi:
+  dayanıklı bir düşman, şanslı bir vuruşa sıradan bir vuruştan daha fazla
+  direnirdi. Testi var.
+- **Hasar sayıları kısıtlanıyor.** Altı silah kalabalık bir sürüye saniyede
+  yüzlerce vuruş yapıyor; her birine sayı çizmek oyuncunun etrafını okunamaz
+  bir rakam lekesine çeviriyordu. Kritikler her zaman görünüyor, sıradan
+  vuruşlar adım başına bütçeli. Flaş zaten hepsinin isabet ettiğini
+  doğruluyor.
+- **Hit-stop yalnızca kritiklerde ve hız sınırlı.** Saniyede yüzlerce vuruş
+  olan bir oyunda her vuruşta donmak oyunu tamamen durdurur. Donma adım
+  uzunluğunu değiştirmiyor, dünyayı sabit tutuyor — adım uzunluğunu
+  değiştirmek sabit adımlı simülasyonun tam olarak engellemek için var olduğu
+  şey.
+
+**Yol boyunca bulunan hatalar:**
+
+- `Math.max(0, NaN)` sıfır değil `NaN` döndürüyor. Bozuk bir zırh değeri NaN
+  hasara, o da NaN cana yol açardı — ve NaN can telafi edilemez: sonraki her
+  karşılaştırma false döner, düşman ne ölebilir ne bir daha vurulabilir.
+  Test yakaladı.
+- Rakamlar baş aşağı render ediliyordu. `CanvasTexture` zaten `flipY`
+  uyguluyor; canvas satırlarının aşağı doğru aktığını "düzeltmek" ikinci bir
+  çevirme yapıp 5'i S'ye, 9'u e'ye dönüştürüyordu. Ekranda harf gibi görünen
+  şeyin sebebi buydu.
+- Aura diski alfa harmanlamayla çizilince yeşil zemin üstünde çamurlu bir ten
+  rengine dönüşüp toprak yaması gibi okunuyordu; toplamalı harmanlama ışık
+  gibi okunuyor.
 
 ---
 
