@@ -82,20 +82,32 @@ Her fazın sonunda çalışan, elle oynanabilir bir build olur — hiçbir faz
 
 ---
 
-### Faz 0 — İskelet ve altyapı · ~2–3 gün
+### Faz 0 — İskelet ve altyapı · ✅ tamamlandı
 
 Oyun yok, ama her şeyin üzerine kurulacağı zemin var.
 
-- Vite + TypeScript + strict mode kurulumu
-- ESLint + Prettier, `npm run check` tek komutla tip + lint + test
-- Vitest kurulumu, `src/sim/` için ilk saçma-basit test (pipeline'ın çalıştığını
-  kanıtlamak için)
-- Sabit adımlı ana döngü (`accumulator` pattern), interpolasyonlu render
-- Boş sahne: ortografik kamera, ışık, zemin düzlemi, `Stats` FPS sayacı
-- GitHub Actions: push'ta `npm run check` + build
-- GitHub Pages'e otomatik deploy (`main` branch)
+- [x] Vite + TypeScript + strict mode kurulumu
+- [x] ESLint + Prettier, `npm run check` tek komutla tip + lint + format + test
+- [x] Vitest kurulumu ve ilk testler (35 test: döngü + RNG)
+- [x] Sabit adımlı ana döngü (`accumulator` pattern), interpolasyonlu render
+- [x] Boş sahne: ortografik kamera, ışık, zemin düzlemi, frame süresi overlay'i
+- [x] GitHub Actions: push'ta `npm run check` + build, bundle boyutu raporu
+- [x] GitHub Pages'e otomatik deploy
 
 **Çıkış kriteri:** Boş yeşil zeminli sahne canlı URL'de açılıyor, CI yeşil.
+
+**Planlanandan sapmalar** (bilinçli):
+
+- Testler `src/sim/` yerine `src/core/` için yazıldı — `sim/` henüz yok. Amaç
+  (test pipeline'ının çalıştığını kanıtlamak) karşılandı.
+- `Stats.js` yerine kendi overlay'imiz yazıldı: ortalama FPS değil **en kötü
+  frame'i** ve düşen frame sayısını raporluyor. Periyodik hitch'ler ortalamada
+  görünmez, ve sıcak döngüdeki hatalı tahsis deseni tam olarak periyodik hitch
+  üretir.
+- `src/sim/` içinde `three` import yasağı ESLint kuralı olarak eklendi ve gerçek
+  bir ihlal denemesiyle doğrulandı — yani kural sadece yazılı değil, işliyor.
+- `noUncheckedIndexedAccess` bilinçli olarak kapalı; gerekçe `tsconfig.json`
+  içinde yorumda.
 
 ---
 
