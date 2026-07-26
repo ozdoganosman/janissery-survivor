@@ -24,7 +24,16 @@ import {
   stepHitStop,
   stepShake,
 } from '../sim/feedback';
+import {
+  applyCard,
+  createLoadout,
+  derivedStats,
+  effectiveWeapon,
+  offerCards,
+} from '../sim/loadout';
 import { GEM_CAPACITY, GemPool, stepGems } from '../sim/pickups';
+import { createCameraFocus, createPlayer, stepCameraFocus, stepPlayer } from '../sim/player';
+import { addExperience, createProgression, levelProgress } from '../sim/progression';
 import {
   createCombatReport,
   PROJECTILE_CAPACITY,
@@ -33,27 +42,22 @@ import {
   resolveHits,
   stepProjectiles,
 } from '../sim/projectiles';
-import { equip, stepWeapons, WEAPON_IDS, weaponStats, type WeaponId } from '../sim/weapons';
-import {
-  createCameraFocus,
-  createPlayer,
-  PLAYER_SPEED,
-  stepCameraFocus,
-  stepPlayer,
-} from '../sim/player';
 import { SpatialGrid } from '../sim/spatial';
+import { createVitals, heal, stepVitals } from '../sim/vitals';
+import { equip, stepWeapons, type WeaponId, type WeaponStats } from '../sim/weapons';
+import { createHud } from '../ui/hud';
+import { createLevelUpScreen } from '../ui/level-up';
 import { createTouchStickOverlay } from '../ui/touch-stick';
 import type { GameScene, SceneFactory } from './types';
 
 /**
- * The play view.
+ * A run.
  *
- * `?seed=word` fixes the scenery layout and the spawn pattern, so a run replays
- * exactly. `?enemies=N` sets the crowd the spawner maintains, which is how the
- * phase's performance budget gets measured on real hardware.
+ * `?seed=word` fixes the scenery, the spawns and the card offers, so a run replays
+ * exactly. `?enemies=N` sets the crowd the spawner maintains, for measuring the
+ * performance budget on real hardware.
  */
 
-/** Speed below which the figure is considered to be standing still. */
 const IDLE_THRESHOLD = 0.05;
 
 /** Grid cell size. Larger than the separation radius, so crowding needs only 3x3 cells. */
@@ -65,31 +69,26 @@ const SPAWN_RADIUS = 34;
 /** Past this the player has outrun them for good and the slots are better reused. */
 const DESPAWN_RADIUS = 52;
 
-/** Crowd the spawner maintains by default. */
 const DEFAULT_TARGET_ENEMIES = 300;
-
-/** Enemies added per second while below target. */
 const SPAWN_RATE = 55;
-
-/** The player's attack profile. Passives and weapon levels will feed this in phase 5. */
-const ATTACK = {
-  base: 0,
-  multiplier: 1,
-  criticalChance: 0.12,
-  criticalMultiplier: 2,
-};
 
 /**
  * Ordinary damage numbers allowed per simulation step.
  *
- * At sixty steps a second this is still far more than the eye can follow, which is
- * the point: it caps the worst case without thinning the feedback in normal play.
+ * Six weapons striking a packed crowd land hundreds of hits a second; drawing a
+ * number for each turns the ground around the player into an unreadable smear.
  */
 const MAX_NUMBERS_PER_STEP = 3;
 
-/** Shake added by one kill, and by one critical. Kept small; they stack by maximum. */
 const KILL_SHAKE = 0.16;
 const CRIT_SHAKE = 0.4;
+const HURT_SHAKE = 0.75;
+
+const CRITICAL_CHANCE = 0.12;
+const CRITICAL_MULTIPLIER = 2;
+
+/** How long a run lasts before it counts as survived. */
+const RUN_SECONDS = 15 * 60;
 
 export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const seedParam = params.get('seed');
@@ -115,68 +114,61 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const damageNumbers = createDamageNumbers();
   view.scene.add(damageNumbers.object);
 
-  // Touch is bound to the canvas, not the window, so on-screen buttons stay tappable
-  // instead of every tap being swallowed as a steer.
   const input = createInput(window, view.renderer.domElement);
   const touchOverlay = createTouchStickOverlay();
+  const hud = createHud();
+  const levelUp = createLevelUpScreen();
 
   const player = createPlayer(0, 0);
   const focus = createCameraFocus(0, 0);
+  const vitals = createVitals();
 
   const enemies = new EnemyPool(ENEMY_CAPACITY);
   const gems = new GemPool(GEM_CAPACITY);
   const grid = new SpatialGrid(GRID_CELL_SIZE, ENEMY_CAPACITY);
 
-  // Separate streams: adding a spawn roll must not shift the shard scatter, or two
-  // runs of one seed would diverge the moment the spawn table changed.
+  // Separate streams, so adding a spawn roll cannot shift the card offers and a seed
+  // keeps meaning the same run after a balance change to an unrelated system.
   const runRng = createRng(worldSeed);
   const spawnRng = runRng.fork();
   const effectRng = runRng.fork();
+  const combatRng = runRng.fork();
+  const cardRng = runRng.fork();
   const shardRandom = (): number => effectRng.next();
 
-  // `?weapons=yatagan,tirkes` isolates a subset. The phase's exit criterion asks
-  // whether each weapon holds up alone, and that cannot be judged with five others
-  // clearing the screen first.
-  const weaponParam = params.get('weapons');
-  const carried: WeaponId[] =
-    weaponParam === null
-      ? [...WEAPON_IDS]
-      : weaponParam
-          .split(',')
-          .map((name) => name.trim())
-          .filter((name): name is WeaponId => (WEAPON_IDS as readonly string[]).includes(name));
-  const weapons = (carried.length > 0 ? carried : [...WEAPON_IDS]).map(equip);
+  // One weapon to start. Handing over all six leaves the card screen nothing to give,
+  // and the card screen is the shape of the whole run.
+  const loadout = createLoadout('yatagan');
+  const equipped = new Map<WeaponId, ReturnType<typeof equip>>([['yatagan', equip('yatagan')]]);
+  let stats = derivedStats(loadout);
 
+  const progression = createProgression();
   const shake = createScreenShake();
   const hitStop = createHitStop();
   const combat = createCombatReport();
-  const combatRng = runRng.fork();
 
   let spawnCredit = 0;
-  let experience = 0;
   let kills = 0;
   let numbersThisStep = 0;
+  let elapsed = 0;
+  let pendingLevels = 0;
+  let outcome: 'running' | 'won' | 'lost' = 'running';
 
   world.update(player.x, player.z);
 
-  /** Everything that happens when a weapon finishes an enemy off. */
+  /** A weapon's stats as the player currently has them: its level plus every passive. */
+  const resolveWeapon = (id: WeaponId): WeaponStats =>
+    effectiveWeapon(id, loadout.weapons.get(id) ?? 1, stats);
+
   const onKill = (x: number, z: number): void => {
     gems.spawn(x, z, 1);
     shards.burst(x, z, shardRandom);
     kills++;
   };
 
-  /**
-   * Shows a number for a hit — but not for every hit.
-   *
-   * Six weapons striking a packed crowd land hundreds of hits a second. Drawing a
-   * number for each turns the area around the player into an unreadable smear of
-   * digits, which conveys strictly less than showing a handful would. Criticals
-   * always appear, because they are the thing worth noticing; ordinary hits get a
-   * budget per step and the rest are silently dropped. The flash still confirms
-   * every one of them landed.
-   */
   const onHit = (x: number, z: number, amount: number, critical: boolean): void => {
+    // Criticals always show; ordinary hits get a budget. The flash still confirms
+    // every one of them landed, so what is dropped is noise rather than information.
     if (critical) {
       damageNumbers.push(x, z, amount, true);
       return;
@@ -186,25 +178,51 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     damageNumbers.push(x, z, amount, false);
   };
 
-  // Passed as a function so the damage pipeline decides whether a hit *can* crit
-  // while the run's own seeded stream decides the roll, keeping replays identical.
-  const rollCritical = (): boolean => combatRng.chance(ATTACK.criticalChance);
+  const rollCritical = (): boolean => combatRng.chance(CRITICAL_CHANCE);
+
+  const presentLevel = (): void => {
+    const cards = offerCards(loadout, cardRng, 3);
+    levelUp.show(progression.level, cards, (index) => {
+      const card = cards[index];
+      if (card === undefined) return;
+
+      if (applyCard(loadout, card)) {
+        heal(vitals, vitals.maxHealth);
+      } else if (card.kind === 'weapon' && !equipped.has(card.id)) {
+        equipped.set(card.id, equip(card.id));
+      }
+
+      // Recomputed on every choice rather than cached per frame: a passive has to
+      // take effect on the next shot, not the next level.
+      stats = derivedStats(loadout);
+      pendingLevels--;
+      levelUp.hide();
+      // Several levels can land in one step — a heap of gems — and each is owed its
+      // own screen rather than all but the last being lost.
+      if (pendingLevels > 0) presentLevel();
+    });
+  };
 
   return {
     update(stepSeconds: number): void {
-      // Hit-stop freezes the world without touching the step length: shortening steps
-      // is exactly what the fixed timestep exists to prevent. Rendering continues, so
-      // the freeze reads as impact rather than as a dropped frame.
+      // The card screen stops the world. Being killed while reading a choice would
+      // teach the player not to read it.
+      if (levelUp.visible || outcome !== 'running') return;
       if (stepHitStop(hitStop, stepSeconds)) return;
 
+      elapsed += stepSeconds;
+
       const intent = input.sample();
-      stepPlayer(player, intent.moveX, intent.moveZ, stepSeconds);
+      stepPlayer(
+        player,
+        intent.moveX * stats.moveSpeedMultiplier,
+        intent.moveZ * stats.moveSpeedMultiplier,
+        stepSeconds,
+      );
       stepCameraFocus(focus, player, stepSeconds);
 
       despawnDistant(enemies, player.x, player.z, DESPAWN_RADIUS);
 
-      // Fractional credit, so a rate finer than one per step does not round down to
-      // zero every step and stall the wave entirely.
       spawnCredit += SPAWN_RATE * stepSeconds;
       const room = targetEnemies - enemies.count;
       const wanted = Math.min(Math.floor(spawnCredit), room);
@@ -212,8 +230,6 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         spawnCredit -= wanted;
         spawnRing(enemies, spawnRng, player.x, player.z, SPAWN_RADIUS, wanted);
       } else if (room <= 0) {
-        // Do not bank credit while at capacity, or the moment a gap opens the whole
-        // backlog arrives at once.
         spawnCredit = 0;
       }
 
@@ -221,7 +237,8 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       stepEnemies(enemies, grid, player.x, player.z, stepSeconds, KARAKONCOLOS);
 
       stepWeapons(
-        weapons,
+        [...equipped.values()],
+        resolveWeapon,
         projectiles,
         enemies,
         player.x,
@@ -234,11 +251,33 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
       resetCombatReport(combat);
       numbersThisStep = 0;
-      // The grid was built before the enemies moved, but they move at most 0.04 units
-      // in a step — far less than the smallest hit radius — so rebuilding a second
-      // time would cost more than the accuracy is worth.
-      resolveHits(projectiles, enemies, grid, ATTACK, combat, onKill, onHit, rollCritical);
+      resolveHits(
+        projectiles,
+        enemies,
+        grid,
+        {
+          base: 0,
+          multiplier: 1,
+          criticalChance: CRITICAL_CHANCE,
+          criticalMultiplier: CRITICAL_MULTIPLIER,
+        },
+        combat,
+        onKill,
+        onHit,
+        rollCritical,
+      );
 
+      const hurt = stepVitals(
+        vitals,
+        grid,
+        player.x,
+        player.z,
+        stepSeconds,
+        stats.armour,
+        stats.regenPerSecond,
+      );
+
+      if (hurt > 0) addShake(shake, HURT_SHAKE);
       if (combat.kills > 0) addShake(shake, KILL_SHAKE);
       if (combat.criticals > 0) {
         addShake(shake, CRIT_SHAKE);
@@ -246,7 +285,17 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       }
       stepShake(shake, stepSeconds, effectRng);
 
-      experience += stepGems(gems, player.x, player.z, stepSeconds);
+      const collected = stepGems(
+        gems,
+        player.x,
+        player.z,
+        stepSeconds,
+        2.2 * stats.magnetMultiplier,
+      );
+      if (collected > 0) {
+        pendingLevels += addExperience(progression, collected);
+        if (pendingLevels > 0 && !levelUp.visible) presentLevel();
+      }
 
       hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
       hero.update(stepSeconds);
@@ -254,6 +303,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       shards.advance(stepSeconds);
       damageNumbers.advance(stepSeconds);
       world.update(player.x, player.z);
+
+      if (vitals.dead) outcome = 'lost';
+      else if (elapsed >= RUN_SECONDS) outcome = 'won';
     },
 
     render(alpha: number): void {
@@ -262,8 +314,6 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         0,
         THREE.MathUtils.lerp(player.previousZ, player.z, alpha),
       );
-      // Interpolating raw angles would spin the figure the long way round whenever a
-      // turn crosses the +/-pi seam, so blend the shortest arc instead.
       hero.root.rotation.y =
         player.previousFacing + shortestArc(player.previousFacing, player.facing) * alpha;
 
@@ -280,23 +330,39 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       shards.render(alpha);
       damageNumbers.render();
       touchOverlay.render(input.touchStick);
+      hud.update({
+        health: vitals.health,
+        maxHealth: vitals.maxHealth,
+        level: progression.level,
+        experienceFraction: levelProgress(progression),
+        secondsElapsed: elapsed,
+        hurt: vitals.hurtFlash * 0.9,
+      });
       view.render();
     },
 
     detail(): string {
       const info = view.renderer.info.render;
+      const build = [...loadout.weapons.entries()]
+        .map(([id, level]) => `${id}${String(level)}`)
+        .join(' ');
+      const passives = [...loadout.passives.entries()]
+        .map(([id, level]) => `${id}${String(level)}`)
+        .join(' ');
       return [
-        `pos ${player.x.toFixed(1)}, ${player.z.toFixed(1)}  spd ${player.speed.toFixed(1)}/${PLAYER_SPEED.toFixed(1)}`,
-        `enemies ${enemies.count}/${targetEnemies}  kills ${kills}`,
-        `weapons ${weapons.map((w) => weaponStats(w.id).name).join(' ')}`,
-        `shots ${projectiles.count}  dmg/s ${Math.round(combat.damageDealt * 60)}  gems ${gems.count}  xp ${experience}`,
-        `props ${world.propCount}  draw calls ${info.calls}  tris ${info.triangles}`,
+        `hp ${String(Math.ceil(vitals.health))}/${String(vitals.maxHealth)}  lv ${String(progression.level)}  xp ${String(progression.lifetime)}  ${outcome}`,
+        `build ${build}`,
+        `passives ${passives === '' ? '-' : passives}`,
+        `enemies ${String(enemies.count)}/${String(targetEnemies)}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
+        `draw calls ${String(info.calls)}  tris ${String(info.triangles)}`,
       ].join('\n');
     },
 
     dispose(): void {
       input.dispose();
       touchOverlay.dispose();
+      hud.dispose();
+      levelUp.dispose();
       hero.dispose();
       horde.dispose();
       projectileView.dispose();

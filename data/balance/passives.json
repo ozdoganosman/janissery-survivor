@@ -1,0 +1,58 @@
+{
+  "kalkan": {
+    "name": "Kalkan",
+    "describe": "Gelen hasarı azaltır",
+    "stat": "armour",
+    "perLevel": 1,
+    "maxLevel": 5
+  },
+  "sekban": {
+    "name": "Sekban Çizmesi",
+    "describe": "Hareket hızı",
+    "stat": "moveSpeedMultiplier",
+    "perLevel": 0.07,
+    "maxLevel": 5
+  },
+  "muska": {
+    "name": "Muska",
+    "describe": "Silahlar daha sık ateşler",
+    "stat": "cooldownMultiplier",
+    "perLevel": -0.07,
+    "maxLevel": 5
+  },
+  "kandilYagi": {
+    "name": "Kandil Yağı",
+    "describe": "Toplama menzili",
+    "stat": "magnetMultiplier",
+    "perLevel": 0.35,
+    "maxLevel": 5
+  },
+  "serbet": {
+    "name": "Şerbet",
+    "describe": "Can yenilenmesi",
+    "stat": "regenPerSecond",
+    "perLevel": 0.35,
+    "maxLevel": 5
+  },
+  "bileyiTasi": {
+    "name": "Bileyi Taşı",
+    "describe": "Hasar",
+    "stat": "damageMultiplier",
+    "perLevel": 0.1,
+    "maxLevel": 5
+  },
+  "durbun": {
+    "name": "Dürbün",
+    "describe": "Etki alanı",
+    "stat": "areaMultiplier",
+    "perLevel": 0.1,
+    "maxLevel": 5
+  },
+  "tilsim": {
+    "name": "Tılsım",
+    "describe": "Mermi sayısı",
+    "stat": "amountBonus",
+    "perLevel": 1,
+    "maxLevel": 3
+  }
+}

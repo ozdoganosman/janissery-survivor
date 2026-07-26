@@ -87,7 +87,7 @@ describe('stepWeapons', () => {
     const stats = weaponStats('tirkes');
     const steps = Math.round(stats.cooldown / TICK_SECONDS) * 3;
     for (let i = 0; i < steps; i++) {
-      fired += stepWeapons([weapon], projectiles, enemies, 0, 0, 0, TICK_SECONDS, rng);
+      fired += stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 0, TICK_SECONDS, rng);
     }
     expect(fired).toBeGreaterThanOrEqual(3);
     expect(fired).toBeLessThanOrEqual(4);
@@ -106,7 +106,17 @@ describe('stepWeapons', () => {
     const enemies = new EnemyPool(8);
     const weapon = equip('tirkes');
     weapon.cooldownRemaining = 0;
-    const fired = stepWeapons([weapon], projectiles, enemies, 0, 0, 0, 10, createRng(2));
+    const fired = stepWeapons(
+      [weapon],
+      weaponStats,
+      projectiles,
+      enemies,
+      0,
+      0,
+      0,
+      10,
+      createRng(2),
+    );
     expect(fired).toBe(1);
     expect(weapon.cooldownRemaining).toBeCloseTo(weaponStats('tirkes').cooldown, 6);
   });
@@ -116,7 +126,7 @@ describe('stepWeapons', () => {
     const enemies = new EnemyPool(8);
     const weapon = equip('nazar');
     weapon.cooldownRemaining = 0;
-    stepWeapons([weapon], projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(3));
+    stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(3));
     expect(projectiles.count).toBe(weaponStats('nazar').amount);
   });
 
@@ -127,7 +137,7 @@ describe('stepWeapons', () => {
     enemies.spawn(6, 0, 0); // near, to the right
     const weapon = equip('tirkes');
     weapon.cooldownRemaining = 0;
-    stepWeapons([weapon], projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(4));
+    stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(4));
 
     // Auto-aim is what makes an auto-firing weapon feel like help rather than noise.
     expect(projectiles.velocityX[0]).toBeGreaterThan(0);
@@ -139,7 +149,7 @@ describe('stepWeapons', () => {
     const enemies = new EnemyPool(8);
     const weapon = equip('tirkes');
     weapon.cooldownRemaining = 0;
-    stepWeapons([weapon], projectiles, enemies, 0, 0, 1.2, TICK_SECONDS, createRng(5));
+    stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 1.2, TICK_SECONDS, createRng(5));
     expect(projectiles.count).toBe(1);
     expect(Number.isFinite(projectiles.velocityX[0])).toBe(true);
   });
@@ -149,7 +159,7 @@ describe('stepWeapons', () => {
     const enemies = new EnemyPool(8);
     const weapon = equip('nazar');
     weapon.cooldownRemaining = 0;
-    stepWeapons([weapon], projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(6));
+    stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(6));
 
     const angles = Array.from(projectiles.angle.subarray(0, projectiles.count)).sort(
       (a, b) => a - b,
@@ -165,7 +175,7 @@ describe('stepWeapons', () => {
     const enemies = new EnemyPool(8);
     const weapon = equip('nazar');
     weapon.cooldownRemaining = 0;
-    stepWeapons([weapon], projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(7));
+    stepWeapons([weapon], weaponStats, projectiles, enemies, 0, 0, 0, TICK_SECONDS, createRng(7));
     expect(projectiles.count).toBe(2);
   });
 });

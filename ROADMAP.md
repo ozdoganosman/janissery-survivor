@@ -321,19 +321,44 @@ yanıtlanabilir. 60 FPS hâlâ bu ortamda ölçülemiyor (GPU yok).
 
 ---
 
-### Faz 5 — Run içi ilerleyiş · ~4–5 gün
+### Faz 5 — Run içi ilerleyiş · ✅ tamamlandı
 
-- XP / seviye eğrisi, level-up'ta oyun durur
-- **Seçim ekranı:** 3–4 kart, ağırlıklı rastgele havuz, banish/reroll yok (MVP)
-- Silah seviyeleri 1→8, her seviye veri tablosundan gelen bir stat artışı
-- **8 pasif eşya:** Kalkan (zırh), Sekban Çizmesi (hız), Muska (bekleme
-  süresi), Kandil Yağı (toplama menzili), Şerbet (yenilenme), Bileği Taşı
-  (hasar), Dürbün (alan), Tılsım (mermi sayısı)
-- Sandık / yerde toplanabilirler: cevher, altın, tavuk (can), mıknatıs
-- Evolüsyon sistemi **MVP dışı** — Faz 8'e sonrası olarak not edildi
+- [x] XP / seviye eğrisi, level-up'ta oyun durur
+- [x] Seçim ekranı: 3 kart, ağırlıklı rastgele havuz
+- [x] Silah seviyeleri 1→8, her seviye veri tablosundan
+- [x] 8 pasif eşya (Kalkan, Sekban Çizmesi, Muska, Kandil Yağı, Şerbet,
+      Bileyi Taşı, Dürbün, Tılsım)
+- [x] **Oyuncu canı ve temas hasarı** — plan dışıydı, bkz. aşağı
 
-**Çıkış kriteri:** 15 dakikalık bir run baştan sona oynanabiliyor, build
-çeşitliliği hissediliyor.
+**Çıkış kriteri durumu:** Run baştan sona oynanıyor — tek silahla başlıyor,
+mücevher topluyor, seviye atlıyor, kart seçiyor, hasar alıyor, ölebiliyor.
+15 dakika hayatta kalmak kazanmak sayılıyor. Build çeşitliliğinin _hissedilip_
+hissedilmediği subjektif ve senin doğrulaman gereken kısım.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Oyuncu canı bu faza çekildi.** Plan bunu hiçbir faza yazmamıştı, ama Faz
+  5'in kendi maddeleri onu varsayıyordu: Kalkan zırh veriyor, Şerbet can
+  yeniliyor, tavuk can dolduruyor — hiçbiri var olmayan bir büyüklüğü tarif
+  edemez. Ayrıca kaybedilemeyen bir run, run değildir. Temas hasarı seçildi:
+  bu düşmanların ne hazırlığı ne menzili var, tehdit sadece dokunulmak — ve
+  türün hareket odaklılığını anlamlı kılan tam olarak bu.
+- **Kalabalık hasarı doğrusal değil.** Her ek gövde giderek daha az ekliyor ve
+  altıdan sonrası hiç eklemiyor. Doğrusal olsaydı, geç oyunun tamamı
+  sarılmaktan ibaret olan bir oyunda ilk sarılma anı anında ölümcül olurdu ve
+  öncesinde yapılan hiçbir şey önemli olmazdı.
+- **Minimal HUD eklendi** (plana göre Faz 7). Görülemeyen can yönetilemez ve
+  oyuncuyu öldürülebilir yapan faz buydu; en azı bu fazla birlikte gitmeliydi.
+- **Altın ve sandık atlandı.** Altın meta-progression'ı besliyor, o da MVP
+  dışında; hiçbir şey yapmayan bir para birimi eklemek olurdu.
+- **Kart havuzunda yeni edinimler yükseltmelerden ağır basıyor.** Üç kez
+  "+5 hasar" gösteren bir ekran teknik olarak seçim sunmuş, gerçekte hiçbir
+  şey sunmamıştır.
+
+**Yol boyunca bulunan hata:** `Math.max(0, NaN)` yine `NaN` — bu kez zırh
+değerinde. Faz 4'te hasar boru hattında bulunan hatanın aynısı, farklı bir
+sınırda tekrarlanmıştı. NaN can sıfıra hiç ulaşamaz, yani oyuncu hem
+öldürülemez hem de çalışan bir can çubuğu göremez hale gelirdi. Test yakaladı.
 
 ---
 

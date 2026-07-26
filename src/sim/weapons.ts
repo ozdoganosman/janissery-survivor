@@ -39,6 +39,23 @@ export interface WeaponStats {
   readonly knockback: number;
   /** Minimum seconds between one hitbox damaging twice. */
   readonly hitInterval: number;
+  /**
+   * Additive stat deltas for levels 2 upward, one entry per level.
+   *
+   * Additive rather than multiplicative so the table reads as "level four adds five
+   * damage" instead of asking whoever is tuning it to compound factors in their head.
+   */
+  readonly levels: readonly WeaponLevelDelta[];
+}
+
+export interface WeaponLevelDelta {
+  readonly cooldown?: number;
+  readonly damage?: number;
+  readonly area?: number;
+  readonly speed?: number;
+  readonly amount?: number;
+  readonly pierce?: number;
+  readonly duration?: number;
 }
 
 const MOTION_BY_NAME: Readonly<Record<string, MotionKind>> = {
@@ -92,9 +109,29 @@ export function parseWeaponStats(id: string, raw: unknown): WeaponStats {
     return value;
   };
 
+  const rawLevels = record.levels;
+  const levels: WeaponLevelDelta[] = [];
+  if (rawLevels !== undefined) {
+    if (!Array.isArray(rawLevels)) throw new WeaponError(id, 'levels must be an array');
+    rawLevels.forEach((entry, index) => {
+      if (typeof entry !== 'object' || entry === null) {
+        throw new WeaponError(id, `levels[${String(index)}] must be an object`);
+      }
+      const delta: Record<string, number> = {};
+      for (const [key, value] of Object.entries(entry as Record<string, unknown>)) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          throw new WeaponError(id, `levels[${String(index)}].${key} must be a finite number`);
+        }
+        delta[key] = value;
+      }
+      levels.push(delta);
+    });
+  }
+
   return {
     name,
     motion: MOTION_BY_NAME[motionName],
+    levels,
     cooldown: number('cooldown'),
     damage: number('damage'),
     area: number('area'),
@@ -134,10 +171,15 @@ export function equip(id: WeaponId): EquippedWeapon {
 /**
  * Ticks every equipped weapon and fires the ones that are ready.
  *
+ * @param resolve Supplies each weapon's stats *as the player currently has them* —
+ *   its level plus every passive folded in. Passing a resolver rather than reading
+ *   the base table means levelling a weapon or picking up a whetstone takes effect
+ *   here with no change to this function.
  * @returns How many weapons fired, for the overlay.
  */
 export function stepWeapons(
   weapons: readonly EquippedWeapon[],
+  resolve: (id: WeaponId) => WeaponStats,
   projectiles: ProjectilePool,
   enemies: EnemyPool,
   playerX: number,
@@ -151,7 +193,7 @@ export function stepWeapons(
     weapon.cooldownRemaining -= stepSeconds;
     if (weapon.cooldownRemaining > 0) continue;
 
-    const stats = TABLE[weapon.id];
+    const stats = resolve(weapon.id);
     weapon.cooldownRemaining += stats.cooldown;
     // A weapon whose cooldown elapsed several times during a stall fires once, not a
     // burst: catching up would turn a dropped frame into a damage spike.

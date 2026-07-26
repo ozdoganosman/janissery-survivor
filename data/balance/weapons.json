@@ -10,7 +10,30 @@
     "pierce": 999,
     "duration": 0.34,
     "knockback": 3.2,
-    "hitInterval": 0.34
+    "hitInterval": 0.34,
+    "levels": [
+      {
+        "damage": 5
+      },
+      {
+        "area": 0.5
+      },
+      {
+        "damage": 6
+      },
+      {
+        "cooldown": -0.12
+      },
+      {
+        "damage": 7
+      },
+      {
+        "area": 0.6
+      },
+      {
+        "damage": 9
+      }
+    ]
   },
   "tirkes": {
     "name": "Tirkeş",
@@ -23,7 +46,30 @@
     "pierce": 2,
     "duration": 1.4,
     "knockback": 1.1,
-    "hitInterval": 0.08
+    "hitInterval": 0.08,
+    "levels": [
+      {
+        "damage": 4
+      },
+      {
+        "amount": 1
+      },
+      {
+        "damage": 5
+      },
+      {
+        "pierce": 1
+      },
+      {
+        "damage": 6
+      },
+      {
+        "amount": 1
+      },
+      {
+        "damage": 8
+      }
+    ]
   },
   "mehter": {
     "name": "Mehter Davulu",
@@ -36,7 +82,30 @@
     "pierce": 999,
     "duration": 0.68,
     "knockback": 8.5,
-    "hitInterval": 0.68
+    "hitInterval": 0.68,
+    "levels": [
+      {
+        "damage": 4
+      },
+      {
+        "area": 1.4
+      },
+      {
+        "damage": 5
+      },
+      {
+        "cooldown": -0.35
+      },
+      {
+        "damage": 6
+      },
+      {
+        "area": 1.8
+      },
+      {
+        "damage": 8
+      }
+    ]
   },
   "nazar": {
     "name": "Nazar Boncuğu",
@@ -49,7 +118,30 @@
     "pierce": 999,
     "duration": 2.6,
     "knockback": 1.4,
-    "hitInterval": 0.42
+    "hitInterval": 0.42,
+    "levels": [
+      {
+        "damage": 3
+      },
+      {
+        "amount": 1
+      },
+      {
+        "damage": 4
+      },
+      {
+        "duration": 0.8
+      },
+      {
+        "damage": 5
+      },
+      {
+        "amount": 1
+      },
+      {
+        "damage": 7
+      }
+    ]
   },
   "sahi": {
     "name": "Şahi Topu",
@@ -62,7 +154,30 @@
     "pierce": 999,
     "duration": 1.05,
     "knockback": 5.5,
-    "hitInterval": 1.05
+    "hitInterval": 1.05,
+    "levels": [
+      {
+        "damage": 10
+      },
+      {
+        "area": 0.6
+      },
+      {
+        "damage": 12
+      },
+      {
+        "cooldown": -0.3
+      },
+      {
+        "damage": 14
+      },
+      {
+        "amount": 1
+      },
+      {
+        "damage": 18
+      }
+    ]
   },
   "kandil": {
     "name": "Kandil",
@@ -75,6 +190,29 @@
     "pierce": 999,
     "duration": 0.45,
     "knockback": 0,
-    "hitInterval": 0.45
+    "hitInterval": 0.45,
+    "levels": [
+      {
+        "damage": 2
+      },
+      {
+        "area": 0.5
+      },
+      {
+        "damage": 3
+      },
+      {
+        "cooldown": -0.06
+      },
+      {
+        "damage": 3
+      },
+      {
+        "area": 0.6
+      },
+      {
+        "damage": 5
+      }
+    ]
   }
 }
