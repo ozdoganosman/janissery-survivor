@@ -35,6 +35,13 @@ const STYLE = `
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: #efe7d6;
 }
+/* The hidden attribute hides an element through a user-agent rule, and any author
+   display declaration beats it. Without this the overlay never actually goes away:
+   it stops showing cards but keeps painting a 78% black wash and a blur over the
+   whole game, which reads as a broken renderer rather than as a stuck dialog. */
+.ju-overlay[hidden] {
+  display: none;
+}
 .ju-title {
   text-align: center;
   font-size: 13px;
