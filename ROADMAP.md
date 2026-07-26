@@ -202,24 +202,58 @@ her koordinat ayrı ayrı avalanche'a sokulunca 90 601 hücrede sıfır çarpı�
 
 ---
 
-### Faz 3 — Düşman sürüsü ve performans · ~5–6 gün
+### Faz 3 — Düşman sürüsü ve performans · ✅ tamamlandı
 
 Projenin teknik omurgası. Burada başarısız olursak konsept web'de yürümez.
 
-- SoA düşman havuzu (sabit kapasite 2000, hiç `new` yok)
-- Spawn sistemi: kamera görüş alanının hemen dışında, ekran kenarına dağılmış
-- Yapay zeka: oyuncuya doğru yönel + **komşu itmesi** (separation) — üst üste
-  binmeyi engeller, sürünün "kalabalık" hissini verir
-- Uzamsal hash grid: düşman-oyuncu ve düşman-mermi sorguları O(1)
-- Ölüm: parçalanma efekti, XP mücevheri (_cevher_) düşürme
-- Instanced render, düşman tipi başına tek draw call
+- [x] SoA düşman havuzu (kapasite 2000, sıcak döngüde hiç `new` yok)
+- [x] Spawn sistemi: görüş alanının dışında bir halka üzerinde
+- [x] Yapay zeka: oyuncuya yönelme + komşu itmesi (separation)
+- [x] Uzamsal hash grid: sınırsız dünyada O(1) yakınlık sorgusu
+- [x] Ölüm: parçalanma efekti + XP mücevheri düşürme ve toplama
+- [x] Instanced render
 
-**Çıkış kriteri:** 800 düşman aynı anda kovalarken 60 FPS, Chrome
-Performance panelinde GC sawtooth yok.
+**Çıkış kriteri — ölçüldü:**
 
-**Risk (en yüksek):** Separation davranışı O(n²)'e kaçabilir. Azaltma: grid
-komşuluğu ile sınırla, düşman başına en fazla 8 komşu değerlendir. Faz sonunda
-1500 düşmanla stres testi yap.
+| Ölçüm                                 | Sonuç                                            |
+| ------------------------------------- | ------------------------------------------------ |
+| Simülasyon, 800 düşman + 400 mücevher | **0.83 ms/adım** (bütçe 16.67)                   |
+| Adım başına tahsis                    | **79 bayt** — GC sonrası heap başlangıca dönüyor |
+| Ölçeklenme 200 → 1500 düşman          | **doğrusal** (2× sayı ≈ 2× maliyet)              |
+| 1500 düşman, sıkışık                  | 1.86 ms/adım                                     |
+| Draw call, 300 düşman                 | 19 (bütçe <60)                                   |
+
+**Risk kapandı.** Plandaki en yüksek risk "separation O(n²)'e kaçabilir" idi.
+200/400/800/1500 düşmanda, hem dağınık hem sıkışık halde ölçüldü: maliyet
+sayıyla doğrusal artıyor. Grid komşuluğu + düşman başına en fazla 8 komşu
+sınırı bunu garanti ediyor.
+
+**FPS hâlâ doğrulanamadı** — bu ortamda GPU yok (SwiftShader yazılım
+rasterizasyonu). Ölçebildiğim şey simülasyonun frame bütçesinin %5'ini
+kullandığı ve tahsis etmediği; kalanı GPU'ya bağlı.
+
+**Plandan sapmalar** (gerekçeleriyle):
+
+- **Geçici hasar aurası eklendi.** Faz 3 ölmenin _makinesini_ kuruyor (havuz
+  slotunun serbest bırakılması, mücevher düşmesi, parçalanma) ama silahlar
+  Faz 4'te. Öldüren bir şey olmadan bu makinenin hiçbiri çalıştırılamaz,
+  ölçülemez, hatta görülemezdi. Faz 4'te gerçek silah setiyle değişecek ve
+  Kandil'e dönüşecek.
+- **Uzamsal sorgu callback yerine imleç (cursor) API'si.** `forEachNear(x, z,
+r, cb)` daha okunaklı, ama döngü değişkenlerini yakalayan bir closure her
+  çağrıda tahsis eder — düşman başına, adım başına. Saniyede 800 closure × 60
+  tam olarak bütçenin yasakladığı testere deseni.
+- **Grid, hücre dizisi değil hash.** Dünya sınırsız; oyuncu orijinden binlerce
+  birim uzaklaşabiliyor, dolayısıyla hücre ayrılacak bir dikdörtgen yok.
+  Çarpışan hücreler fazladan aday üretir ama asla yanlış cevap vermez: her
+  aday gerçek hücre koordinatını taşıyor ve eşleşmezse eleniyor. Bu kontrol
+  aynı zamanda bir varlığın iki kez ziyaret edilmesini engelliyor — yoksa tek
+  bir komşu iki kat kuvvetle iterdi.
+- **Silme, mezar taşı değil son elemanla takas.** İterasyon yoğun bir döngü
+  olarak kalıyor ve render katmanı instance slotlarını doğrudan dizi
+  indekslerine eşleyebiliyor. Bedeli: bir indeks yalnızca üretildiği adım
+  içinde geçerli. Faz 4'ün delen silahları neyi vurduğunu hatırlayacağı için
+  her slot bir `generation` sayacı taşıyor.
 
 ---
 

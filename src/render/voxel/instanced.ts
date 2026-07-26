@@ -70,7 +70,13 @@ export interface VoxelArmy {
   setTint(index: number, r: number, g: number, b: number): void;
   /** Uniform size multiplier about the figure's feet. Defaults to 1. */
   setScale(index: number, scale: number): void;
-  /** Pushes buffered writes to the GPU. Call once per frame after all edits. */
+  /**
+   * Pushes buffered writes to the GPU. Call once per frame after all edits.
+   *
+   * Only the live prefix `[0, count)` is uploaded. With a 2000-slot pool holding 800
+   * enemies, uploading the whole buffer would push 60% dead bytes across the bus
+   * every frame for nothing.
+   */
   flush(): void;
   /** Advances the shared animation clock. */
   advance(elapsedSeconds: number): void;
@@ -298,7 +304,11 @@ export function createVoxelArmy(model: BuiltModel, options: VoxelArmyOptions): V
 
     flush(): void {
       if (!dirty) return;
-      for (const attribute of attributes) attribute.needsUpdate = true;
+      for (const attribute of attributes) {
+        attribute.clearUpdateRanges();
+        if (count > 0) attribute.addUpdateRange(0, count * attribute.itemSize);
+        attribute.needsUpdate = true;
+      }
       dirty = false;
     },
 
