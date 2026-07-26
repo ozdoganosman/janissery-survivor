@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A push to a branch that already has an open PR would otherwise run this twice.
+# Cancelling superseded runs also stops a queue building up during rapid pushes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `ci` rather than `install`: it fails loudly when package-lock.json has drifted
+      # out of sync with package.json instead of quietly resolving new versions.
+      - run: npm ci
+
+      - name: Run checks
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      # Bundle size is a stated performance budget, so surface it on every run rather
+      # than waiting for someone to notice the game got slow to load.
+      - name: Report bundle size
+        run: |
+          {
+            echo "### Bundle size"
+            echo
+            echo '| File | Raw | Gzip |'
+            echo '| --- | --- | --- |'
+            find dist -name '*.js' -not -name '*.map' -o -name '*.html' | sort | while read -r f; do
+              raw=$(wc -c < "$f")
+              gz=$(gzip -c "$f" | wc -c)
+              printf '| `%s` | %s KB | %s KB |\n' \
+                "${f#dist/}" \
+                "$(awk "BEGIN{printf \"%.1f\", $raw/1024}")" \
+                "$(awk "BEGIN{printf \"%.1f\", $gz/1024}")"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

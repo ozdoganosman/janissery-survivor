@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta
+      name="description"
+      content="Yeniçeri konseptli, mitolojik Osmanlı temalı 3D tarayıcı hayatta kalma oyunu."
+    />
+    <title>Janissary Survivor</title>
+    <!-- Inline so the browser's automatic /favicon.ico request cannot 404. A blocky
+         janissary silhouette: white cap, face, red kaftan. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%231a1410'/><rect x='6' y='1' width='4' height='5' fill='%23f2efe6'/><rect x='5' y='6' width='6' height='4' fill='%23e8d8b8'/><rect x='4' y='10' width='8' height='5' fill='%23b03a2e'/></svg>"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #1a1410;
+      }
+
+      /* Sits below the canvas so it shows only until the first frame is drawn. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        color: #d8f0c0;
+        font:
+          14px/1.6 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        text-align: center;
+      }
+
+      #viewport {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* The camera is fixed and the game is played with keys, so browser touch
+           gestures over the canvas are only ever accidental input. */
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot">yükleniyor…</div>
+    <canvas id="viewport"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

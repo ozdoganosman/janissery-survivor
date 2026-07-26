@@ -10,14 +10,14 @@
 Bu kararlar roadmap'in temelini oluşturur; değişirlerse fazlar yeniden
 değerlendirilmelidir.
 
-| Konu | Karar | Gerekçe |
-|---|---|---|
-| Hedef platform | **Web** (masaüstü tarayıcı öncelikli, mobil web "nice to have") | Dağıtım maliyeti sıfır, iterasyon hızlı |
-| Render | **Three.js + TypeScript + Vite** | En hafif bundle, `InstancedMesh` ile kalabalık sürü kontrolü, tam kontrol |
-| Modeller | **Prosedürel voxel** — JSON tanım + kod builder | Binary asset yok, git-diff okunabilir, rigging gereksiz |
-| Kamera | **Top-down, hafif eğimli ortografik** (~55° pitch) | Sürü okunabilirliği + 3D görsellik; çarpışma XZ düzleminde 2D kalır |
-| Tema | **Fantastik/mitolojik Osmanlı** | Yaratıcı alan geniş, tarihsel hassasiyet riski yok |
-| MVP | Tek harita, 15 dakikalık run, meta-progression yok | Gerçekçi dikey dilim |
+| Konu           | Karar                                                           | Gerekçe                                                                   |
+| -------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Hedef platform | **Web** (masaüstü tarayıcı öncelikli, mobil web "nice to have") | Dağıtım maliyeti sıfır, iterasyon hızlı                                   |
+| Render         | **Three.js + TypeScript + Vite**                                | En hafif bundle, `InstancedMesh` ile kalabalık sürü kontrolü, tam kontrol |
+| Modeller       | **Prosedürel voxel** — JSON tanım + kod builder                 | Binary asset yok, git-diff okunabilir, rigging gereksiz                   |
+| Kamera         | **Top-down, hafif eğimli ortografik** (~55° pitch)              | Sürü okunabilirliği + 3D görsellik; çarpışma XZ düzleminde 2D kalır       |
+| Tema           | **Fantastik/mitolojik Osmanlı**                                 | Yaratıcı alan geniş, tarihsel hassasiyet riski yok                        |
+| MVP            | Tek harita, 15 dakikalık run, meta-progression yok              | Gerçekçi dikey dilim                                                      |
 
 ### Neden voxel bu proje için doğru karar
 
@@ -30,7 +30,7 @@ Minecraft tarzı blok estetiği burada estetik bir tercihten fazlası:
   (yürüme = bacak salınımı, saldırı = kol yayı). Tam Minecraft mantığı.
 - **Performans bedava** — tüm düşmanlar tek `InstancedMesh` ile çizilir, çünkü
   hepsi aynı geometriyi paylaşır. Renk varyasyonu instance attribute ile.
-- **Kimlik net okunur** — beyaz *börk*, kırmızı kaftan, yatağan silueti blok
+- **Kimlik net okunur** — beyaz _börk_, kırmızı kaftan, yatağan silueti blok
   çözünürlüğünde bile tanınır.
 
 ---
@@ -63,14 +63,14 @@ sağlar ve en büyük kalite kazancıdır.
 
 ### Performans bütçeleri (Faz 3'ten itibaren her fazın çıkış kriteri)
 
-| Metrik | Hedef |
-|---|---|
-| FPS @ 800 düşman | ≥ 60 (orta seviye laptop, entegre GPU) |
-| FPS @ 300 düşman | ≥ 60 (mobil web) |
-| Draw call | < 60 |
-| Frame başına heap tahsisi | ~0 (sıcak döngüde) |
-| Bundle (gzip) | < 2 MB |
-| Boş ekrandan oynanabilire | < 2 sn |
+| Metrik                    | Hedef                                  |
+| ------------------------- | -------------------------------------- |
+| FPS @ 800 düşman          | ≥ 60 (orta seviye laptop, entegre GPU) |
+| FPS @ 300 düşman          | ≥ 60 (mobil web)                       |
+| Draw call                 | < 60                                   |
+| Frame başına heap tahsisi | ~0 (sıcak döngüde)                     |
+| Bundle (gzip)             | < 2 MB                                 |
+| Boş ekrandan oynanabilire | < 2 sn                                 |
 
 ---
 
@@ -153,7 +153,7 @@ Projenin teknik omurgası. Burada başarısız olursak konsept web'de yürümez.
 - Yapay zeka: oyuncuya doğru yönel + **komşu itmesi** (separation) — üst üste
   binmeyi engeller, sürünün "kalabalık" hissini verir
 - Uzamsal hash grid: düşman-oyuncu ve düşman-mermi sorguları O(1)
-- Ölüm: parçalanma efekti, XP mücevheri (*cevher*) düşürme
+- Ölüm: parçalanma efekti, XP mücevheri (_cevher_) düşürme
 - Instanced render, düşman tipi başına tek draw call
 
 **Çıkış kriteri:** 800 düşman aynı anda kovalarken 60 FPS, Chrome
@@ -177,14 +177,14 @@ komşuluğu ile sınırla, düşman başına en fazla 8 komşu değerlendir. Faz
   hit-stop, düşman flash + geri tepme
 - **6 silah** (MVP seti):
 
-| Silah | Davranış |
-|---|---|
-| **Yatağan** | Oyuncunun etrafında yay çizen yakın dövüş — başlangıç silahı |
-| **Tirkeş** (ok sadağı) | En yakın düşmanı hedefleyen otomatik oklar |
-| **Mehter Davulu** | Periyodik halka şok dalgası, geri savurur |
-| **Nazar Boncuğu** | Oyuncunun yörüngesinde dönen, delen boncuklar |
-| **Şahi Topu** | Yay çizerek düşen patlayıcı gülle |
-| **Kandil** | Oyuncuyu saran ateş aurası, sürekli hasar |
+| Silah                  | Davranış                                                     |
+| ---------------------- | ------------------------------------------------------------ |
+| **Yatağan**            | Oyuncunun etrafında yay çizen yakın dövüş — başlangıç silahı |
+| **Tirkeş** (ok sadağı) | En yakın düşmanı hedefleyen otomatik oklar                   |
+| **Mehter Davulu**      | Periyodik halka şok dalgası, geri savurur                    |
+| **Nazar Boncuğu**      | Oyuncunun yörüngesinde dönen, delen boncuklar                |
+| **Şahi Topu**          | Yay çizerek düşen patlayıcı gülle                            |
+| **Kandil**             | Oyuncuyu saran ateş aurası, sürekli hasar                    |
 
 **Çıkış kriteri:** 6 silah aynı anda ateşlerken 800 düşmanla 60 FPS. Her
 silah tek başına 5 dakika oynanabilir hissettiriyor.
@@ -213,13 +213,13 @@ silah tek başına 5 dakika oynanabilir hissettiriyor.
   (tip, oran, formasyon, elit şansı) — tamamen veri
 - **5 düşman tipi:**
 
-| Düşman | Rol |
-|---|---|
-| **Karakoncolos** | Temel kovalayıcı, kalabalık dolgusu |
-| **Cin** | Hızlı, düzensiz zigzag hareket |
-| **Gulyabani** | Yavaş, dayanıklı, büyük — sürüde duvar oluşturur |
-| **Şahmeran Yavrusu** | Çok hızlı, dalgalı hat izler |
-| **Alkarısı** | Mesafe koruyan menzilli saldırgan |
+| Düşman               | Rol                                              |
+| -------------------- | ------------------------------------------------ |
+| **Karakoncolos**     | Temel kovalayıcı, kalabalık dolgusu              |
+| **Cin**              | Hızlı, düzensiz zigzag hareket                   |
+| **Gulyabani**        | Yavaş, dayanıklı, büyük — sürüde duvar oluşturur |
+| **Şahmeran Yavrusu** | Çok hızlı, dalgalı hat izler                     |
+| **Alkarısı**         | Mesafe koruyan menzilli saldırgan                |
 
 - Formasyonlar: halka kuşatma, duvar akını, tek yönlü kalabalık
 - Elit varyantlar: instance rengi + stat çarpanı ile (yeni model gerekmez)
@@ -227,8 +227,7 @@ silah tek başına 5 dakika oynanabilir hissettiriyor.
   telegraph'lı saldırılar
 - Kazanma/kayıp durumu, run özet ekranı
 
-**Çıkış kriteri:** Zorluk eğrisi ilk 3 dakikada kolay, 8. dakikada yoğun,
-14. dakikada zorlayıcı. Kazanmak mümkün ama garanti değil.
+**Çıkış kriteri:** Zorluk eğrisi ilk 3 dakikada kolay, 8. dakikada yoğun, 14. dakikada zorlayıcı. Kazanmak mümkün ama garanti değil.
 
 ---
 
@@ -322,14 +321,14 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 
 ## 6. Risk Kaydı
 
-| Risk | Etki | Azaltma |
-|---|---|---|
-| Sürü performansı web'de yetmez | Kritik | Faz 3 erken ve tam bütçe kontrolüyle; SoA + instancing baştan |
-| Prosedürel animasyon cansız durur | Yüksek | Faz 1 debug sahnesinde erken görsel doğrulama; squash/stretch |
-| Denge sıkıcı çıkar (build çeşitliliği yok) | Yüksek | Faz 5'ten sonra her faz sonunda tam run oyna; tablolar veri olarak |
-| Kapsam kayması (özellik ekleme isteği) | Yüksek | MVP sonrası listesi yukarıda; yeni fikir oraya yazılır, MVP'ye girmez |
-| Mobil web performansı | Orta | Kalite kademesi + düşman limiti; mobil MVP'de "çalışıyor" yeterli |
-| Ses varlıkları | Düşük | Prosedürel/ücretsiz SFX; müzik en sona bırakıldı |
+| Risk                                       | Etki   | Azaltma                                                               |
+| ------------------------------------------ | ------ | --------------------------------------------------------------------- |
+| Sürü performansı web'de yetmez             | Kritik | Faz 3 erken ve tam bütçe kontrolüyle; SoA + instancing baştan         |
+| Prosedürel animasyon cansız durur          | Yüksek | Faz 1 debug sahnesinde erken görsel doğrulama; squash/stretch         |
+| Denge sıkıcı çıkar (build çeşitliliği yok) | Yüksek | Faz 5'ten sonra her faz sonunda tam run oyna; tablolar veri olarak    |
+| Kapsam kayması (özellik ekleme isteği)     | Yüksek | MVP sonrası listesi yukarıda; yeni fikir oraya yazılır, MVP'ye girmez |
+| Mobil web performansı                      | Orta   | Kalite kademesi + düşman limiti; mobil MVP'de "çalışıyor" yeterli     |
+| Ses varlıkları                             | Düşük  | Prosedürel/ücretsiz SFX; müzik en sona bırakıldı                      |
 
 ---
 

@@ -3,7 +3,8 @@
 Yeniçeri konseptli, fantastik/mitolojik Osmanlı temalı, **Vampire Survivors**
 mekaniklerine dayanan 3D tarayıcı oyunu.
 
-> Durum: **planlama** — henüz kod yok. Yol haritası için [ROADMAP.md](ROADMAP.md).
+> Durum: **Faz 0 tamam** — altyapı kuruldu, oyun mekaniği henüz yok.
+> Plan için [ROADMAP.md](ROADMAP.md).
 
 ## Özet
 
@@ -24,5 +25,51 @@ kalmak kazanmak demektir.
 
 ## Geliştirme
 
-Henüz kurulum adımı yok. Faz 0 tamamlandığında bu bölüm `npm install` /
-`npm run dev` komutlarıyla güncellenecek.
+Node 22 gerekir (bkz. `.nvmrc`).
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+```
+
+| Komut             | Ne yapar                                        |
+| ----------------- | ----------------------------------------------- |
+| `npm run dev`     | Vite geliştirme sunucusu, HMR açık              |
+| `npm run build`   | Tip kontrolü + üretim build'i (`dist/`)         |
+| `npm run preview` | Build edilmiş çıktıyı yerelde sunar             |
+| `npm test`        | Vitest birim testleri                           |
+| `npm run check`   | Tip + lint + format + test — CI'ın çalıştırdığı |
+
+`npm run check` push öncesi çalıştırılması beklenen tek komuttur; CI de aynısını
+yapar.
+
+### URL parametreleri
+
+| Parametre  | Etki                                                            |
+| ---------- | --------------------------------------------------------------- |
+| `?debug=1` | Frame süresi overlay'ini açar (dev'de zaten açık)               |
+| `?seed=x`  | Run'ı verilen tohumla başlatır — bir hatayı tekrar üretmek için |
+
+## Mimari
+
+Ayrıntılar [ROADMAP.md](ROADMAP.md) § 2'de. Günlük çalışmayı etkileyen tek
+kural:
+
+> **`src/sim/` içinde `three` import edilmez.**
+
+Simülasyon renderer'dan bağımsız kalır ki oyun mantığı tarayıcı olmadan test
+edilebilsin. Bu kural ESLint tarafından zorunlu tutulur (`no-restricted-imports`),
+yani ihlal CI'da hata verir.
+
+```
+src/
+  core/    saat, girdi, havuzlar, RNG — renderer'dan bağımsız
+  sim/     oyun mantığı; three import ETMEZ, tamamen test edilebilir
+  render/  three.js: kamera, voxel builder, efektler
+  dev/     geliştirici araçları (perf overlay)
+tests/     sim ve core birim testleri
+```
+
+## Lisans
+
+Henüz belirlenmedi.
