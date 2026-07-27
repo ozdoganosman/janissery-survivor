@@ -157,7 +157,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
   // Rendered before the shell exists, so the title screen is already on top of a
   // finished HUD rather than appearing over a row that pops in a frame later.
-  const icons = renderItemIcons();
+  const icons = renderItemIcons(view.renderer);
 
   const input = createInput(window, view.renderer.domElement, {
     bindings: settings.bindings,

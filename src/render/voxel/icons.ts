@@ -45,23 +45,18 @@ function models(): Map<ItemIconId, BuiltModel> {
 /**
  * Renders every icon and returns them as data URIs.
  *
- * One renderer for all fourteen, disposed before returning. Creating a WebGL context
- * per icon is how a phone runs out of contexts and the whole HUD goes blank.
+ * Uses the game's own renderer, into an offscreen render target. The first version
+ * built a second `WebGLRenderer` for this, which works on a desktop and is a real
+ * hazard on a phone: mobile browsers cap how many WebGL contexts a page may hold, and
+ * on some of them creating one past the cap silently evicts the *oldest* — which is
+ * the game's. That failure looks like a grey screen, not like an error, so it is worth
+ * designing out rather than catching.
+ *
+ * Reading pixels back and re-encoding through a 2D canvas costs one extra copy of a
+ * 96x96 image, fourteen times, once. That is nothing against the alternative.
  */
-export function renderItemIcons(): ReadonlyMap<ItemIconId, string> {
+export function renderItemIcons(renderer: THREE.WebGLRenderer): ReadonlyMap<ItemIconId, string> {
   if (cache.size > 0) return cache;
-
-  let renderer: THREE.WebGLRenderer;
-  try {
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  } catch {
-    // A browser that refuses a second context still gets a playable game; the HUD
-    // falls back to text labels.
-    return cache;
-  }
-
-  renderer.setSize(ICON_SIZE, ICON_SIZE, false);
-  renderer.setClearAlpha(0);
 
   const scene = new THREE.Scene();
   // Brighter than the world lighting, and deliberately. The roster's palettes are dark
@@ -82,6 +77,28 @@ export function renderItemIcons(): ReadonlyMap<ItemIconId, string> {
 
   const group = new THREE.Group();
   scene.add(group);
+
+  const target = new THREE.WebGLRenderTarget(ICON_SIZE, ICON_SIZE, {
+    depthBuffer: true,
+    stencilBuffer: false,
+    // Without this the target stays linear, and the bytes read back out of it get
+    // written straight into an sRGB canvas — which comes out visibly darker than the
+    // same render sent to the screen. Rendering to a canvas hid this, because the
+    // renderer's own output colour space did the conversion on the way.
+    colorSpace: THREE.SRGBColorSpace,
+  });
+  const pixels = new Uint8Array(ICON_SIZE * ICON_SIZE * 4);
+  const flipped = new Uint8ClampedArray(ICON_SIZE * ICON_SIZE * 4);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = ICON_SIZE;
+  canvas.height = ICON_SIZE;
+  const context = canvas.getContext('2d');
+  if (context === null) return cache;
+
+  const previousClearColour = new THREE.Color();
+  renderer.getClearColor(previousClearColour);
+  const previousClearAlpha = renderer.getClearAlpha();
 
   const box = new THREE.Box3();
   const centre = new THREE.Vector3();
@@ -134,15 +151,31 @@ export function renderItemIcons(): ReadonlyMap<ItemIconId, string> {
     camera.bottom = -half;
     camera.updateProjectionMatrix();
 
+    renderer.setRenderTarget(target);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
     renderer.render(scene, camera);
-    cache.set(id, renderer.domElement.toDataURL('image/png'));
+    renderer.readRenderTargetPixels(target, 0, 0, ICON_SIZE, ICON_SIZE, pixels);
+
+    // WebGL's origin is bottom-left and a canvas's is top-left, so the rows go in
+    // backwards. Copying row by row is the fix; flipping with a CSS transform later
+    // would leave the data itself upside down for anything that reads it.
+    for (let y = 0; y < ICON_SIZE; y++) {
+      const source = (ICON_SIZE - 1 - y) * ICON_SIZE * 4;
+      flipped.set(pixels.subarray(source, source + ICON_SIZE * 4), y * ICON_SIZE * 4);
+    }
+    context.putImageData(new ImageData(flipped, ICON_SIZE, ICON_SIZE), 0, 0);
+    cache.set(id, canvas.toDataURL('image/png'));
 
     for (const mesh of meshes) (mesh.material as THREE.Material).dispose();
   }
 
+  // Handed back exactly as it was found: the game renders to the screen next frame,
+  // and a renderer left pointed at a disposed target draws nothing at all.
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(previousClearColour, previousClearAlpha);
   group.clear();
-  renderer.dispose();
-  renderer.forceContextLoss();
+  target.dispose();
   return cache;
 }
 
