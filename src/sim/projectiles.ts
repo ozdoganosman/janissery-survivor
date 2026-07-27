@@ -247,7 +247,15 @@ export function resolveHits(
   grid: SpatialGrid,
   attack: AttackProfile,
   report: CombatReport,
-  onKill: (x: number, z: number, experience: number) => void,
+  /**
+   * Called with the dying enemy's slot, before it is removed.
+   *
+   * The index is passed as well as the position so a caller can read anything else it
+   * needs from the pool — the renderer wants the creature's kind, facing and size to
+   * play a death out of. It is only valid for the duration of the call: the very next
+   * statement recycles the slot.
+   */
+  onKill: (index: number, x: number, z: number, experience: number) => void,
   onHit: (x: number, z: number, amount: number, critical: boolean) => void,
   rollCritical: () => boolean,
   defence: DefenceProfile = NO_DEFENCE,
@@ -312,7 +320,7 @@ export function resolveHits(
       if (enemies.health[enemy] <= 0) {
         // Read before the kill: swap-removal overwrites the slot, so asking
         // afterwards would report whichever enemy was moved into it.
-        onKill(enemies.x[enemy], enemies.z[enemy], enemies.experienceOf(enemy));
+        onKill(enemy, enemies.x[enemy], enemies.z[enemy], enemies.experienceOf(enemy));
         report.kills++;
         enemies.kill(enemy);
       }

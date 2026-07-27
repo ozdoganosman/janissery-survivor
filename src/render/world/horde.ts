@@ -3,6 +3,7 @@ import { BEHAVIOUR, ENEMY_TYPES } from '../../sim/enemy-types';
 import type { EnemyShotPool } from '../../sim/enemy-shots';
 import type { EnemyPool } from '../../sim/enemies';
 import type { GemPool } from '../../sim/pickups';
+import { createCorpsePose, type CorpseField } from '../fx/corpses';
 import type { ShadowField } from '../fx/shadows';
 import { createVoxelArmy } from '../voxel/instanced';
 import { getVoxelModel, type ModelId } from '../voxel/models';
@@ -29,6 +30,16 @@ const WALK_CYCLES_AT_FULL_SPEED = 1.35;
 const FLASH_BRIGHTNESS = 3.5;
 
 /**
+ * How much a struck enemy swells, at the instant of the hit.
+ *
+ * The flash alone says a hit landed but nothing about the body taking it, and in a
+ * crowd of four hundred a colour change on one figure among many is easy to miss where
+ * a change in *silhouette* is not. Small on purpose: this fires several times a second
+ * per enemy late in a run, and anything larger turns the horde into a boiling mass.
+ */
+const HIT_PUNCH = 0.16;
+
+/**
  * Elites wear gold.
  *
  * The tint multiplies the model's own colours, and the roster's palettes are dark
@@ -51,6 +62,21 @@ const BOSS_TINT: readonly [number, number, number] = [1.95, 1.05, 0.85];
 /** Most instances the telegraph can draw. More bosses than this never coexist. */
 const MAX_TELEGRAPHS = 16;
 
+/**
+ * The distinct models the roster uses, and which one each kind draws with.
+ *
+ * Shared rather than recomputed, because the corpse field has to bucket bodies exactly
+ * the way the horde buckets the living — a death that picked a different army would
+ * play a Karakoncolos collapsing where a Cin fell.
+ */
+export const HORDE_MODEL_IDS: readonly ModelId[] = [
+  ...new Set(ENEMY_TYPES.map((type) => type.model)),
+] as ModelId[];
+
+export const MODEL_INDEX_OF_KIND: readonly number[] = ENEMY_TYPES.map((type) =>
+  HORDE_MODEL_IDS.indexOf(type.model as ModelId),
+);
+
 export interface HordeView {
   readonly objects: readonly THREE.Object3D[];
   advance(stepSeconds: number): void;
@@ -60,6 +86,7 @@ export interface HordeView {
     shots: EnemyShotPool,
     alpha: number,
     shadows: ShadowField | null,
+    corpses: CorpseField | null,
   ): void;
   dispose(): void;
 }
@@ -69,13 +96,12 @@ export function createHordeView(
   gemCapacity: number,
   shotCapacity: number,
 ): HordeView {
-  // One army per distinct model. Every kind is resolved to its army index once, here,
-  // rather than looked up per enemy per frame.
-  const modelIds = [...new Set(ENEMY_TYPES.map((type) => type.model))] as ModelId[];
-  const armies = modelIds.map((id) =>
+  // One army per distinct model. Every kind is resolved to its army index once, at
+  // module load, rather than looked up per enemy per frame.
+  const armies = HORDE_MODEL_IDS.map((id) =>
     createVoxelArmy(getVoxelModel(id), { capacity: enemyCapacity }),
   );
-  const armyOfKind = ENEMY_TYPES.map((type) => modelIds.indexOf(type.model as ModelId));
+  const armyOfKind = MODEL_INDEX_OF_KIND;
   const cursors = new Int32Array(armies.length);
 
   const gemGeometry = new THREE.BoxGeometry(0.34, 0.34, 0.34);
@@ -151,9 +177,15 @@ export function createHordeView(
   const quaternion = new THREE.Quaternion();
   const euler = new THREE.Euler();
   const scale = new THREE.Vector3(1, 1, 1);
+  const corpsePose = createCorpsePose();
   let elapsed = 0;
 
-  const renderEnemies = (enemies: EnemyPool, alpha: number, shadows: ShadowField | null): void => {
+  const renderEnemies = (
+    enemies: EnemyPool,
+    alpha: number,
+    shadows: ShadowField | null,
+    corpses: CorpseField | null,
+  ): void => {
     cursors.fill(0);
     let telegraphs = 0;
 
@@ -175,7 +207,9 @@ export function createHordeView(
         type.speed > 0 ? (enemies.speed[i] / type.speed) * WALK_CYCLES_AT_FULL_SPEED : 0;
 
       army.setInstance(slot, x, 0, z, enemies.facing[i], cycles, enemies.phase[i]);
-      army.setScale(slot, enemies.scale[i]);
+      // The flash already decays over the same window, so the punch rides it for free
+      // and the two land and fade together as one reaction.
+      army.setScale(slot, enemies.scale[i] * (1 + enemies.flash[i] * HIT_PUNCH));
 
       // Added from here rather than from the scene, because this loop already has the
       // interpolated position and the creature's own size in hand.
@@ -214,6 +248,27 @@ export function createHordeView(
         fillMesh.setMatrixAt(telegraphs, matrix);
 
         telegraphs++;
+      }
+    }
+
+    // The dead go into the same armies as the living, straight after them. They are
+    // instances in buffers that were already being drawn, so a screen full of falling
+    // bodies costs no extra draw call at all.
+    if (corpses !== null) {
+      for (let i = 0; i < corpses.count; i++) {
+        const pose = corpses.poseOf(i, corpsePose);
+        const armyIndex = pose.model;
+        const army = armies[armyIndex] as (typeof armies)[number] | undefined;
+        if (army === undefined) continue;
+        const slot = cursors[armyIndex];
+        if (slot >= army.capacity) continue;
+        cursors[armyIndex] = slot + 1;
+
+        // Speed 0, so the shader collapses the walk cycle to a neutral stand: a corpse
+        // must not keep marching on its way down.
+        army.setInstance(slot, pose.x, pose.y, pose.z, pose.facing, 0, 0);
+        army.setScale(slot, pose.scale);
+        army.setTint(slot, pose.shade, pose.shade * 0.94, pose.shade * 0.94);
       }
     }
 
@@ -277,8 +332,8 @@ export function createHordeView(
       for (const army of armies) army.advance(stepSeconds);
     },
 
-    render(enemies, gems, shots, alpha, shadows): void {
-      renderEnemies(enemies, alpha, shadows);
+    render(enemies, gems, shots, alpha, shadows, corpses): void {
+      renderEnemies(enemies, alpha, shadows, corpses);
       renderGems(gems, alpha);
       renderShots(shots, alpha);
     },

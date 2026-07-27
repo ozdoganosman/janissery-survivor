@@ -8,7 +8,8 @@ import { createShadowField } from '../render/fx/shadows';
 import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
 import { createWorld } from '../render/world/ground';
-import { createHordeView } from '../render/world/horde';
+import { createCorpseField } from '../render/fx/corpses';
+import { createHordeView, MODEL_INDEX_OF_KIND } from '../render/world/horde';
 import { createDirector, effectiveTarget, stageAt, stepDirector } from '../sim/director';
 import {
   censusOf,
@@ -145,6 +146,9 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const shadows = createShadowField(ENEMY_CAPACITY + 1);
   view.scene.add(shadows.object);
 
+  // No meshes of its own: the horde draws the dead into the armies it already has.
+  const corpses = createCorpseField();
+
   const projectiles = new ProjectilePool(PROJECTILE_CAPACITY);
   const projectileView = createProjectileView(PROJECTILE_CAPACITY);
   for (const object of projectileView.objects) view.scene.add(object);
@@ -277,9 +281,18 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
 
   // The pool is asked what the corpse was worth rather than assuming one gem: a
   // Gulyabani and an elite are the reason to fight through a wall instead of round it.
-  const onKill = (x: number, z: number, value: number): void => {
+  const onKill = (index: number, x: number, z: number, value: number): void => {
     gems.spawn(x, z, value);
     shards.burst(x, z, shardRandom);
+    // Read now, not later: the very next statement in `resolveHits` recycles the slot
+    // and everything here would then describe whichever enemy was moved into it.
+    corpses.add(
+      MODEL_INDEX_OF_KIND[enemies.kind[index]] ?? 0,
+      x,
+      z,
+      enemies.facing[index],
+      enemies.scale[index],
+    );
     kills++;
     sfx.play('kill');
   };
@@ -521,6 +534,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       hero.update(stepSeconds);
       horde.advance(stepSeconds);
       shards.advance(stepSeconds);
+      corpses.advance(stepSeconds);
       damageNumbers.advance(stepSeconds);
       world.update(player.x, player.z);
 
@@ -588,7 +602,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       // Filled by the horde and then by the hero, so every figure on the ground is in
       // one buffer and goes out in one draw call.
       shadows.begin();
-      horde.render(enemies, gems, enemyShots, alpha, shadows);
+      horde.render(enemies, gems, enemyShots, alpha, shadows, corpses);
       shadows.add(hero.root.position.x, hero.root.position.z, 0.62);
       shadows.end();
 
