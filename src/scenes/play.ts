@@ -518,19 +518,19 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       // than to the crowd, so it rises steadily instead of flickering with the wave.
       music.setIntensity(Math.min(1, elapsed / (RUN_SECONDS * 0.55)) + census.bosses * 0.3);
 
-      // The hero's animation, in priority order.
+      // The hero's animation.
       //
-      // The attack pose was written in phase 1 and then never played for eight
-      // phases: the yatagan swung in the model debug scene and nowhere else. Weapons
-      // fire on their own, so the swing is driven by the weapon step's own report of
-      // how many went off — and only when the last swing has finished, because six
-      // weapons late in a run fire many times a second and restarting the pose on
-      // every shot would freeze the arm at the start of its arc forever.
-      if (hurt > 0) hero.play('hit');
-      else if (fired > 0 && hero.finished) hero.play('attack');
-      else if (hero.finished || (hero.animation !== 'attack' && hero.animation !== 'hit')) {
-        hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
-      }
+      // The legs always play locomotion; the swing rides on top of it. The previous
+      // version asked `fired > 0 && hero.finished` and therefore never swung at all:
+      // `finished` is only ever true for a one-shot, and a walking hero is playing a
+      // loop, so the test could not pass. The sword stayed at his side for eight
+      // phases and this one.
+      hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
+      // Being hit outranks swinging: a recoil that a strike paints over reads as
+      // nothing having happened.
+      if (hurt > 0) hero.strike('hit');
+      else if (fired > 0 && hero.overlay !== 'hit') hero.strike('attack');
+
       hero.update(stepSeconds);
       horde.advance(stepSeconds);
       shards.advance(stepSeconds);
@@ -635,6 +635,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         `build ${build}`,
         `passives ${passives === '' ? '-' : passives}`,
         `enemies ${String(enemies.count)}/${String(effectiveTarget(stageAt(elapsed), targetEnemies, crowdCap))}  kills ${String(kills)}  shots ${String(projectiles.count)}`,
+        `hero ${hero.animation}${hero.overlay === null ? '' : `+${hero.overlay}`}`,
         `elites ${String(census.elites)}  bosses ${String(census.bosses)}  winding up ${String(census.telegraphing)}  enemy shots ${String(enemyShots.count)}`,
         `draw calls ${String(info.calls)}  tris ${String(info.triangles)}`,
       ].join('\n');

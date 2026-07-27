@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { BuiltModel, BuiltPart } from './builder';
-import { ANIMATION_RATE, poseFor, type AnimationKind, type Pose } from './animator';
+import { ANIMATION_RATE, layerUpperBody, poseFor, type AnimationKind, type Pose } from './animator';
 
 /**
  * One voxel figure as ordinary scene objects.
@@ -20,12 +20,27 @@ export interface VoxelRig {
   /** Which animation is playing. */
   readonly animation: AnimationKind;
   /**
-   * Switches animation.
+   * Switches the locomotion animation: `walk` or `idle`.
    *
-   * One-shot animations (`attack`, `hit`) restart from the beginning; looping ones
-   * keep their phase so that walk → idle → walk does not jerk.
+   * The phase is kept across a switch so that walk → idle → walk does not jerk.
    */
   play(kind: AnimationKind): void;
+  /**
+   * Starts a one-shot on the upper body, over whatever the legs are doing.
+   *
+   * Separate from `play` because a swing is something the figure does *while* moving.
+   * Driven as a whole-body animation it stopped the legs dead, and the first version
+   * of the trigger could not fire at all: it asked `finished`, which is only ever true
+   * for a one-shot, so a walking figure never passed the test and the sword never left
+   * its side.
+   *
+   * Restarts if one is already playing. A second strike arriving mid-swing means the
+   * weapons are firing faster than the arm can travel, and cutting the old arc short
+   * is better than dropping the new one.
+   */
+  strike(kind: 'attack' | 'hit'): void;
+  /** The one-shot currently on the upper body, or null. */
+  get overlay(): AnimationKind | null;
   /** Advances the animation clock. Call once per simulation step. */
   update(stepSeconds: number): void;
   /** True when a one-shot animation has finished. Always false while looping. */
@@ -54,6 +69,9 @@ export function createVoxelRig(model: BuiltModel): VoxelRig {
 
   const parts: RiggedPart[] = model.parts.map((part) => {
     const node = new THREE.Mesh(part.geometry, material);
+    // Named after the role it plays, so the figure can be inspected in a scene graph
+    // and so a test can find the sword arm without counting children.
+    node.name = part.role;
     // Geometry is pivot-relative, so placing the node at the pivot puts the boxes
     // back where the author drew them, and local rotation now turns about the pivot.
     node.position.copy(part.pivot);
@@ -63,6 +81,8 @@ export function createVoxelRig(model: BuiltModel): VoxelRig {
 
   let animation: AnimationKind = 'idle';
   let phase = 0;
+  let overlay: AnimationKind | null = null;
+  let overlayPhase = 0;
 
   const applyPose = (pose: Pose): void => {
     for (const { part, node } of parts) {
@@ -92,6 +112,21 @@ export function createVoxelRig(model: BuiltModel): VoxelRig {
 
   applyPose(poseFor(animation, 0));
 
+  /**
+   * The pose to draw: the legs' animation, with any strike layered on the arms.
+   *
+   * The layer fades out over the last fifth of the swing rather than ending on the
+   * frame it completes, which is what stops the arm from teleporting back into its
+   * walking swing.
+   */
+  const currentPose = (): Pose => {
+    const lower = poseFor(animation, phase);
+    if (overlay === null) return lower;
+    const FADE_FROM = 0.8;
+    const weight = overlayPhase < FADE_FROM ? 1 : 1 - (overlayPhase - FADE_FROM) / (1 - FADE_FROM);
+    return layerUpperBody(lower, poseFor(overlay, overlayPhase), weight);
+  };
+
   return {
     root,
 
@@ -103,11 +138,21 @@ export function createVoxelRig(model: BuiltModel): VoxelRig {
       return ONE_SHOT.has(animation) && phase >= 1;
     },
 
+    get overlay() {
+      return overlay;
+    },
+
     play(kind: AnimationKind): void {
       if (kind === animation && !ONE_SHOT.has(kind)) return;
       animation = kind;
       if (ONE_SHOT.has(kind)) phase = 0;
-      applyPose(poseFor(animation, phase));
+      applyPose(currentPose());
+    },
+
+    strike(kind): void {
+      overlay = kind;
+      overlayPhase = 0;
+      applyPose(currentPose());
     },
 
     update(stepSeconds: number): void {
@@ -119,7 +164,13 @@ export function createVoxelRig(model: BuiltModel): VoxelRig {
       } else if (phase > 1) {
         phase = 1;
       }
-      applyPose(poseFor(animation, phase));
+
+      if (overlay !== null) {
+        overlayPhase += stepSeconds * ANIMATION_RATE[overlay];
+        if (overlayPhase >= 1) overlay = null;
+      }
+
+      applyPose(currentPose());
     },
 
     dispose(): void {

@@ -159,6 +159,40 @@ function easeOutCubic(t: number): number {
 export const ANIMATION_RATE: Readonly<Record<AnimationKind, number>> = {
   idle: 0.35,
   walk: 1.55,
-  attack: 1.6,
+  // A snap, not a sweep. At 1.6 the swing took most of a second, which is longer than
+  // the gap between shots once a build has a few weapons — the arm would still be
+  // travelling when the next one fired.
+  attack: 2.2,
   hit: 3.2,
 };
+
+/**
+ * Puts one pose's arms and head on another pose's legs.
+ *
+ * A swing has to be something the figure does *while* running, not instead of running.
+ * Played as a whole-body animation it stops the legs dead, and a character sliding
+ * across the ground with still legs is the exact "sliding statue" this project's
+ * squash and bob exist to avoid — so the strike becomes an upper-body layer over
+ * whatever the legs are already doing.
+ *
+ * The split is at the waist because that is where it is free: the arms and head carry
+ * the whole read of an attack, and the legs, bob and squash carry the whole read of
+ * locomotion, so neither half needs anything from the other.
+ *
+ * `weight` fades the upper half in and out, which is what keeps the arm from snapping
+ * back to its walking swing the instant the strike ends.
+ */
+export function layerUpperBody(lower: Pose, upper: Pose, weight = 1): Pose {
+  const w = weight <= 0 ? 0 : weight >= 1 ? 1 : weight;
+  if (w === 0) return lower;
+  const mix = (a: number, b: number): number => a + (b - a) * w;
+  return {
+    armLeft: mix(lower.armLeft, upper.armLeft),
+    armRight: mix(lower.armRight, upper.armRight),
+    head: mix(lower.head, upper.head),
+    legLeft: lower.legLeft,
+    legRight: lower.legRight,
+    bobY: lower.bobY,
+    squashY: lower.squashY,
+  };
+}

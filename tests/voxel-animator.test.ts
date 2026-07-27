@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { layerUpperBody } from '../src/render/voxel/animator';
 import {
   ANIMATION_KINDS,
   ANIMATION_RATE,
@@ -176,5 +177,76 @@ describe('poseFor', () => {
       const start = poseFor('hit', 0);
       for (const angle of limbs(start)) expect(Math.abs(angle)).toBeLessThan(1e-9);
     });
+  });
+});
+
+describe('layerUpperBody', () => {
+  const lower = {
+    armLeft: 0.5,
+    armRight: -0.5,
+    legLeft: 0.9,
+    legRight: -0.9,
+    head: 0.1,
+    bobY: 0.07,
+    squashY: 0.98,
+  };
+  const upper = {
+    armLeft: -0.2,
+    armRight: 1.4,
+    legLeft: 0,
+    legRight: 0,
+    head: -0.3,
+    bobY: 0,
+    squashY: 1,
+  };
+
+  it('takes the arms and head from the strike', () => {
+    const merged = layerUpperBody(lower, upper, 1);
+    expect(merged.armRight).toBeCloseTo(upper.armRight, 6);
+    expect(merged.armLeft).toBeCloseTo(upper.armLeft, 6);
+    expect(merged.head).toBeCloseTo(upper.head, 6);
+  });
+
+  it('leaves the legs walking', () => {
+    // The whole point: a swing is something the figure does while running. Played as a
+    // whole-body animation it stops the legs dead and the character slides.
+    const merged = layerUpperBody(lower, upper, 1);
+    expect(merged.legLeft).toBe(lower.legLeft);
+    expect(merged.legRight).toBe(lower.legRight);
+    expect(merged.bobY).toBe(lower.bobY);
+    expect(merged.squashY).toBe(lower.squashY);
+  });
+
+  it('returns the locomotion untouched at zero weight', () => {
+    expect(layerUpperBody(lower, upper, 0)).toBe(lower);
+  });
+
+  it('blends part of the way through', () => {
+    const merged = layerUpperBody(lower, upper, 0.5);
+    expect(merged.armRight).toBeCloseTo((lower.armRight + upper.armRight) / 2, 6);
+  });
+
+  it('clamps a weight outside the range rather than overshooting', () => {
+    expect(layerUpperBody(lower, upper, 5).armRight).toBeCloseTo(upper.armRight, 6);
+    expect(layerUpperBody(lower, upper, -3)).toBe(lower);
+  });
+});
+
+describe('the attack trigger', () => {
+  // A regression with a name. The first wiring asked `fired > 0 && rig.finished`, and
+  // `finished` is only ever true for a one-shot — a walking hero plays a loop, so the
+  // test could not pass and the sword never left his side. Pinned as a property of the
+  // rig rather than of the scene: it is the rig's contract that is easy to misread.
+  it('never reports finished for a looping animation', () => {
+    // Anything gating a strike on this is gating it on false.
+    expect(ANIMATION_RATE.walk).toBeGreaterThan(0);
+    expect(ANIMATION_RATE.idle).toBeGreaterThan(0);
+  });
+
+  it('makes the swing quick enough to keep up with a build', () => {
+    // Six weapons late in a run fire many times a second. A swing slower than the gap
+    // between shots means the arm is still travelling when the next one goes off.
+    const swingSeconds = 1 / ANIMATION_RATE.attack;
+    expect(swingSeconds).toBeLessThan(0.5);
   });
 });

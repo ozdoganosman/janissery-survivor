@@ -178,3 +178,25 @@ test('a browser that forbids the gamepad still plays', async ({ browser }) => {
   expect(errors).toEqual([]);
   await context.close();
 });
+
+test('the hero actually swings while his weapons fire', async ({ page }) => {
+  // The regression this pins shipped and was reported by the person playing it: "the
+  // character does nothing when attacking". The trigger asked the rig whether its
+  // animation had `finished`, which is only ever true for a one-shot — a walking hero
+  // plays a loop, so the condition could not pass and the sword never moved. Unit
+  // tests covered the rig and still missed it, because the fault was in the wiring.
+  await page.goto('/?debug=1&seed=swing&go=1');
+  await page.waitForTimeout(2500);
+
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(120);
+    const overlay = (await page.locator('#perf-overlay').textContent()) ?? '';
+    const match = /hero (\S+)/.exec(overlay);
+    if (match !== null) seen.add(match[1]);
+  }
+
+  // Weapons fire on their own from the first second, so a swing must appear without
+  // the test pressing anything.
+  expect([...seen].some((state) => state.includes('+attack'))).toBe(true);
+});
