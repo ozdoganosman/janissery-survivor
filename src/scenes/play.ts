@@ -4,6 +4,7 @@ import { createRng, seedFromString } from '../core/rng';
 import { createDamageNumbers } from '../render/fx/damage-numbers';
 import { createProjectileView } from '../render/fx/projectiles-view';
 import { createShardField } from '../render/fx/shards';
+import { createShadowField } from '../render/fx/shadows';
 import { getVoxelModel } from '../render/voxel/models';
 import { createVoxelRig } from '../render/voxel/rig';
 import { createWorld } from '../render/world/ground';
@@ -140,6 +141,10 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   const shards = createShardField(0x6b5f80);
   view.scene.add(shards.object);
 
+  // One more than the crowd, for the hero.
+  const shadows = createShadowField(ENEMY_CAPACITY + 1);
+  view.scene.add(shadows.object);
+
   const projectiles = new ProjectilePool(PROJECTILE_CAPACITY);
   const projectileView = createProjectileView(PROJECTILE_CAPACITY);
   for (const object of projectileView.objects) view.scene.add(object);
@@ -173,7 +178,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
     if (levelUp.visible || summary.visible) return;
     shell.togglePause();
   });
-  const levelUp = createLevelUpScreen();
+  const levelUp = createLevelUpScreen(document.body, icons);
   const summary = createSummaryScreen();
 
   // `?go=1` skips the title screen. "Play again" reloads with it set, so a restart
@@ -233,7 +238,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
   let elapsed = startSeconds;
   let pendingLevels = 0;
   let outcome: 'running' | 'won' | 'lost' = 'running';
-  const census = { elites: 0, bosses: 0, telegraphing: 0 };
+  const census = { elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 };
   let lastBossCount = 0;
 
   // Resolved settings, refreshed whenever the panel changes one. Read in the hot loop,
@@ -422,7 +427,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         sfx.play('slam');
       }
 
-      stepWeapons(
+      const fired = stepWeapons(
         [...equipped.values()],
         resolveWeapon,
         projectiles,
@@ -500,7 +505,19 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       // than to the crowd, so it rises steadily instead of flickering with the wave.
       music.setIntensity(Math.min(1, elapsed / (RUN_SECONDS * 0.55)) + census.bosses * 0.3);
 
-      hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
+      // The hero's animation, in priority order.
+      //
+      // The attack pose was written in phase 1 and then never played for eight
+      // phases: the yatagan swung in the model debug scene and nowhere else. Weapons
+      // fire on their own, so the swing is driven by the weapon step's own report of
+      // how many went off — and only when the last swing has finished, because six
+      // weapons late in a run fire many times a second and restarting the pose on
+      // every shot would freeze the arm at the start of its arc forever.
+      if (hurt > 0) hero.play('hit');
+      else if (fired > 0 && hero.finished) hero.play('attack');
+      else if (hero.finished || (hero.animation !== 'attack' && hero.animation !== 'hit')) {
+        hero.play(player.speed > IDLE_THRESHOLD ? 'walk' : 'idle');
+      }
       hero.update(stepSeconds);
       horde.advance(stepSeconds);
       shards.advance(stepSeconds);
@@ -568,7 +585,13 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
           THREE.MathUtils.lerp(shake.previousOffsetZ, shake.offsetZ, alpha),
       );
 
-      horde.render(enemies, gems, enemyShots, alpha);
+      // Filled by the horde and then by the hero, so every figure on the ground is in
+      // one buffer and goes out in one draw call.
+      shadows.begin();
+      horde.render(enemies, gems, enemyShots, alpha, shadows);
+      shadows.add(hero.root.position.x, hero.root.position.z, 0.62);
+      shadows.end();
+
       projectileView.render(projectiles, alpha);
       shards.render(alpha);
       damageNumbers.render();
@@ -580,6 +603,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
         experienceFraction: levelProgress(progression),
         secondsElapsed: elapsed,
         hurt: vitals.hurtFlash * 0.9,
+        bossHealth: census.bossHealth,
       });
       view.render();
     },
@@ -618,6 +642,7 @@ export const createPlayScene: SceneFactory = (view, params): GameScene => {
       projectileView.dispose();
       damageNumbers.dispose();
       shards.dispose();
+      shadows.dispose();
       world.dispose();
     },
   };

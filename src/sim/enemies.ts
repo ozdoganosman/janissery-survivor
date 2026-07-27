@@ -616,16 +616,35 @@ export interface HordeCensus {
   bosses: number;
   /** Enemies mid wind-up, so a telegraph that never appears is visible as a zero. */
   telegraphing: number;
+  /**
+   * Health of the most wounded boss, as a fraction of its own maximum, or -1 when
+   * there is no boss.
+   *
+   * The most wounded rather than the first, because that is the one the player is
+   * fighting: when two are on the field the untouched one arriving from off screen
+   * would otherwise reset the bar to full.
+   */
+  bossHealth: number;
 }
 
 export function censusOf(pool: EnemyPool, into: HordeCensus): HordeCensus {
   into.elites = 0;
   into.bosses = 0;
   into.telegraphing = 0;
+  into.bossHealth = -1;
+
   for (let i = 0; i < pool.count; i++) {
     into.elites += pool.elite[i];
-    if (pool.typeOf(i).behaviour === BEHAVIOUR.boss) into.bosses++;
     if (pool.telegraph[i] > 0) into.telegraphing++;
+
+    const type = pool.typeOf(i);
+    if (type.behaviour !== BEHAVIOUR.boss) continue;
+    into.bosses++;
+    // Against the type's own maximum, so a boss released with a health multiplier
+    // still starts its bar full instead of overflowing it.
+    const maximum = type.health <= 0 ? 1 : type.health;
+    const fraction = Math.min(1, Math.max(0, pool.health[i] / maximum));
+    if (into.bossHealth < 0 || fraction < into.bossHealth) into.bossHealth = fraction;
   }
   return into;
 }

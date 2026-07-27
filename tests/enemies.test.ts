@@ -291,7 +291,7 @@ describe('censusOf', () => {
     pool.spawn(0, 0, 0, enemyTypeIndex('gulyabaniAgasi'));
     pool.telegraph[2] = 0.9;
 
-    const census = censusOf(pool, { elites: 0, bosses: 0, telegraphing: 0 });
+    const census = censusOf(pool, { elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 });
     expect(census.elites).toBe(countElites(pool));
     expect(census.bosses).toBe(countBosses(pool));
     expect(census.elites).toBe(1);
@@ -299,18 +299,53 @@ describe('censusOf', () => {
     expect(census.telegraphing).toBe(1);
   });
 
+  it('reports the boss health the player is actually whittling down', () => {
+    const pool = new EnemyPool(16);
+    const kind = enemyTypeIndex('gulyabaniAgasi');
+    const full = enemyType('gulyabaniAgasi').health;
+
+    pool.spawn(0, 0, 0, kind);
+    pool.spawn(0, 0, 0, kind);
+    pool.health[1] = full * 0.25;
+
+    const census = censusOf(pool, { elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 });
+    // The most wounded, not the first: a second boss arriving untouched from off
+    // screen would otherwise snap the bar back to full mid-fight.
+    expect(census.bossHealth).toBeCloseTo(0.25, 4);
+  });
+
+  it('reports no boss health when there is no boss', () => {
+    const pool = new EnemyPool(8);
+    pool.spawn(0, 0, 0, enemyTypeIndex('cin'));
+    const census = censusOf(pool, { elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 });
+    expect(census.bossHealth).toBe(-1);
+  });
+
+  it('keeps boss health inside the bar it draws', () => {
+    // A boss released with a health multiplier starts above its type's maximum, and a
+    // fraction over 1 would overflow the fill it drives.
+    const pool = new EnemyPool(8);
+    pool.spawn(0, 0, 0, enemyTypeIndex('gulyabaniAgasi'), false, 2.5);
+    const census = censusOf(pool, { elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 });
+    expect(census.bossHealth).toBe(1);
+
+    pool.health[0] = -50;
+    censusOf(pool, census);
+    expect(census.bossHealth).toBe(0);
+  });
+
   it('resets the target rather than accumulating into it', () => {
     // It is written to be reused across frames, so a stale count would only show up
     // as a debug readout that climbs forever.
     const pool = new EnemyPool(8);
     pool.spawn(0, 0, 0, enemyTypeIndex('cin'), true);
-    const census = { elites: 99, bosses: 99, telegraphing: 99 };
+    const census = { elites: 99, bosses: 99, telegraphing: 99, bossHealth: 99 };
     censusOf(pool, census);
-    expect(census).toEqual({ elites: 1, bosses: 0, telegraphing: 0 });
+    expect(census).toEqual({ elites: 1, bosses: 0, telegraphing: 0, bossHealth: -1 });
 
     pool.kill(0);
     censusOf(pool, census);
-    expect(census).toEqual({ elites: 0, bosses: 0, telegraphing: 0 });
+    expect(census).toEqual({ elites: 0, bosses: 0, telegraphing: 0, bossHealth: -1 });
   });
 });
 

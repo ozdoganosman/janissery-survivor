@@ -3,6 +3,7 @@ import { BEHAVIOUR, ENEMY_TYPES } from '../../sim/enemy-types';
 import type { EnemyShotPool } from '../../sim/enemy-shots';
 import type { EnemyPool } from '../../sim/enemies';
 import type { GemPool } from '../../sim/pickups';
+import type { ShadowField } from '../fx/shadows';
 import { createVoxelArmy } from '../voxel/instanced';
 import { getVoxelModel, type ModelId } from '../voxel/models';
 
@@ -53,7 +54,13 @@ const MAX_TELEGRAPHS = 16;
 export interface HordeView {
   readonly objects: readonly THREE.Object3D[];
   advance(stepSeconds: number): void;
-  render(enemies: EnemyPool, gems: GemPool, shots: EnemyShotPool, alpha: number): void;
+  render(
+    enemies: EnemyPool,
+    gems: GemPool,
+    shots: EnemyShotPool,
+    alpha: number,
+    shadows: ShadowField | null,
+  ): void;
   dispose(): void;
 }
 
@@ -146,7 +153,7 @@ export function createHordeView(
   const scale = new THREE.Vector3(1, 1, 1);
   let elapsed = 0;
 
-  const renderEnemies = (enemies: EnemyPool, alpha: number): void => {
+  const renderEnemies = (enemies: EnemyPool, alpha: number, shadows: ShadowField | null): void => {
     cursors.fill(0);
     let telegraphs = 0;
 
@@ -169,6 +176,12 @@ export function createHordeView(
 
       army.setInstance(slot, x, 0, z, enemies.facing[i], cycles, enemies.phase[i]);
       army.setScale(slot, enemies.scale[i]);
+
+      // Added from here rather than from the scene, because this loop already has the
+      // interpolated position and the creature's own size in hand.
+      if (shadows !== null) {
+        shadows.add(x, z, type.radius);
+      }
 
       const lift = 1 + enemies.flash[i] * FLASH_BRIGHTNESS;
       const tint =
@@ -264,8 +277,8 @@ export function createHordeView(
       for (const army of armies) army.advance(stepSeconds);
     },
 
-    render(enemies, gems, shots, alpha): void {
-      renderEnemies(enemies, alpha);
+    render(enemies, gems, shots, alpha, shadows): void {
+      renderEnemies(enemies, alpha, shadows);
       renderGems(gems, alpha);
       renderShots(shots, alpha);
     },

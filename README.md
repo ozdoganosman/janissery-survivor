@@ -52,8 +52,8 @@ kaldığını söyler.
     <td width="50%"><img alt="Oyun içi görünüm" src="docs/media/play.png"></td>
   </tr>
   <tr>
-    <td><img alt="Gulyabani Ağası" src="docs/media/boss.png"></td>
-    <td><img alt="Run özeti" src="docs/media/summary.png"></td>
+    <td><img alt="Gulyabani Ağası ve slam halkası" src="docs/media/boss.png"></td>
+    <td><img alt="Seviye atlama kartları" src="docs/media/cards.png"></td>
   </tr>
 </table>
 

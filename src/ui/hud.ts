@@ -1,4 +1,5 @@
 import { t } from '../core/strings';
+import { enemyType } from '../sim/enemy-types';
 import type { ItemIconId } from '../render/voxel/icons';
 
 /**
@@ -29,6 +30,8 @@ export interface Hud {
     secondsElapsed: number;
     /** 0 when unhurt, rising to 1 at the moment of a hit. */
     hurt: number;
+    /** Boss health as a fraction of its own maximum, or -1 when no boss is alive. */
+    bossHealth: number;
   }): void;
   /** Redraws the carried items. Called on a build change, not per frame. */
   setLoadout(items: readonly HudItem[]): void;
@@ -124,6 +127,45 @@ const STYLE = `
   background: radial-gradient(ellipse at center, rgba(184,57,44,0) 45%, rgba(184,57,44,0.55) 100%);
   opacity: 0;
 }
+/* The boss bar.
+   Across the top rather than over the boss: a Gulyabani Agasi has 2600 health and the
+   fight lasts a minute, and a bar floating on a creature that is often half off screen
+   is one the player cannot watch while also not standing in the ring. */
+.hud-boss {
+  position: absolute;
+  top: 34px; left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, 76vw);
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+.hud-boss[data-alive='true'] { display: flex; }
+.hud-boss-name {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #e0b34a;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+}
+.hud-boss-bar {
+  width: 100%;
+  height: 7px;
+  background: rgba(20, 16, 12, 0.75);
+  border: 1px solid rgba(224, 179, 74, 0.45);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.hud-boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #8a1f18, #d9452f);
+  transition: width 140ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud-boss-fill { transition: none; }
+}
 /* A phone has no Escape key. Without this there is no way to stop, change a setting
    or leave a run on the platform where the run is hardest to leave. */
 .hud-pause {
@@ -218,6 +260,10 @@ export function createHud(
     <div class="hud-xp"><div class="hud-xp-fill"></div></div>
     <div class="hud-top"><span class="hud-level"></span><span class="hud-time"></span></div>
     <div class="hud-build"></div>
+    <div class="hud-boss" data-alive="false">
+      <span class="hud-boss-name"></span>
+      <div class="hud-boss-bar"><div class="hud-boss-fill"></div></div>
+    </div>
     <button type="button" class="hud-pause" aria-label="${t('help.pause')}"><span></span></button>
     <div class="hud-health">
       <div class="hud-health-bar"><div class="hud-health-fill"></div></div>
@@ -239,6 +285,9 @@ export function createHud(
   const healthFill = query('.hud-health-fill');
   const healthText = query('.hud-health-text');
   const build = query('.hud-build');
+  const boss = query('.hud-boss');
+  const bossFill = query('.hud-boss-fill');
+  query('.hud-boss-name').textContent = enemyType('gulyabaniAgasi').name;
 
   const pause = query<HTMLButtonElement>('.hud-pause');
   if (onPause === null) pause.remove();
@@ -249,6 +298,8 @@ export function createHud(
   let lastLevel = -1;
   let lastSecond = -1;
   let lastHealth = -1;
+  let lastBossAlive = false;
+  let lastBossPercent = -1;
 
   return {
     update(state): void {
@@ -274,6 +325,19 @@ export function createHud(
       }
 
       hurt.style.opacity = String(state.hurt);
+
+      const alive = state.bossHealth >= 0;
+      if (alive !== lastBossAlive) {
+        lastBossAlive = alive;
+        boss.dataset.alive = String(alive);
+      }
+      if (alive) {
+        const percent = Math.round(state.bossHealth * 1000) / 10;
+        if (percent !== lastBossPercent) {
+          lastBossPercent = percent;
+          bossFill.style.width = `${String(percent)}%`;
+        }
+      }
     },
 
     setLoadout(items): void {

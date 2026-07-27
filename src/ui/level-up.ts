@@ -1,4 +1,5 @@
 import { t } from '../core/strings';
+import type { ItemIconId } from '../render/voxel/icons';
 
 import type { Card } from '../sim/loadout';
 
@@ -83,11 +84,35 @@ const STYLE = `
   letter-spacing: 0.18em;
   color: #8d8175;
 }
+.ju-art {
+  width: 62px;
+  height: 62px;
+  margin: 2px auto 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: rgba(12, 10, 8, 0.55);
+}
+.ju-art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* The icons are rendered at 96px from blocky models; smoothing them would sand off
+     exactly the voxel edges that make them recognisable. */
+  image-rendering: pixelated;
+}
+/* The heal card has no item behind it, so it gets a mark rather than a blank tile. */
+.ju-art[data-placeholder]::after {
+  content: '\\2740';
+  font-size: 26px;
+  color: #d94a6a;
+}
 .ju-name { font-size: 15px; font-weight: 600; }
 .ju-desc { font-size: 12px; line-height: 1.5; color: #b9ad9c; }
 .ju-kind { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8d8175; }
 @media (max-width: 700px) {
   .ju-card { width: min(85vw, 260px); padding: 12px; }
+  .ju-art { width: 46px; height: 46px; }
   .ju-cards { gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -96,7 +121,10 @@ const STYLE = `
 }
 `;
 
-export function createLevelUpScreen(parent: HTMLElement = document.body): LevelUpScreen {
+export function createLevelUpScreen(
+  parent: HTMLElement = document.body,
+  icons: ReadonlyMap<ItemIconId, string> = new Map(),
+): LevelUpScreen {
   const style = document.createElement('style');
   style.textContent = STYLE;
   parent.appendChild(style);
@@ -163,6 +191,21 @@ export function createLevelUpScreen(parent: HTMLElement = document.body): LevelU
               ? t('card.item')
               : t('card.treat');
 
+        // The icons already exist — they are rendered once at startup for the HUD —
+        // and a card that names an upgrade without showing it makes the player read
+        // three lines of text under time pressure they do not have.
+        const icon = card.kind === 'heal' ? undefined : icons.get(card.id);
+        const art = document.createElement('div');
+        art.className = 'ju-art';
+        if (icon === undefined) {
+          art.dataset.placeholder = card.kind;
+        } else {
+          const image = document.createElement('img');
+          image.src = icon;
+          image.alt = '';
+          art.appendChild(image);
+        }
+
         const name = document.createElement('span');
         name.className = 'ju-name';
         name.textContent = card.name;
@@ -171,7 +214,7 @@ export function createLevelUpScreen(parent: HTMLElement = document.body): LevelU
         describe.className = 'ju-desc';
         describe.textContent = card.describe;
 
-        button.append(key, kind, name, describe);
+        button.append(key, art, kind, name, describe);
         button.addEventListener('click', () => {
           resolve(index);
         });
