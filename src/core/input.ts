@@ -56,6 +56,9 @@ const TOUCH_DEADZONE_PX = 7;
  */
 const PAUSE_BUTTONS = [9, 1];
 
+/** Shared empty result, so refusing the gamepad costs no allocation per frame. */
+const EMPTY_PADS: readonly (Gamepad | null)[] = [];
+
 /** Keys whose default action would otherwise scroll the page under the game. */
 const SWALLOWED = new Set([
   'ArrowLeft',
@@ -179,7 +182,15 @@ export function createInput(
     stickThumbX = event.clientX;
     stickThumbY = event.clientY;
     usingGamepad = false;
-    touchSurface?.setPointerCapture(event.pointerId);
+    try {
+      // Throws `NotFoundError` when the pointer has already been released, which can
+      // happen between the event firing and this line on a busy frame. Capture is an
+      // improvement — it keeps the drag alive past the canvas edge — not a
+      // requirement, so losing it must not cost the whole steer.
+      touchSurface?.setPointerCapture(event.pointerId);
+    } catch {
+      /* Steering still works; the drag just ends if the finger leaves the canvas. */
+    }
     event.preventDefault();
   };
 
@@ -205,7 +216,31 @@ export function createInput(
     touchSurface.addEventListener('lostpointercapture', endStick);
   }
 
-  const connectedPads = (): (Gamepad | null)[] => target.navigator.getGamepads?.() ?? [];
+  /**
+   * The connected pads, or nothing when the browser will not say.
+   *
+   * `getGamepads` does not return null when it is unavailable — it *throws*. Inside a
+   * cross-origin iframe whose permissions policy omits `gamepad`, which is how the
+   * game is embedded in more than one place, every call raises a `SecurityError`. This
+   * is polled every frame, so an unguarded call kills the render loop on the first
+   * frame and the player gets a grey screen with nothing on it.
+   *
+   * The same reasoning as `localStorage`: a browser API that can throw on access has
+   * to be treated as untrusted, not merely as possibly-absent. Once it has refused,
+   * it is not asked again — the answer will not change within a page load, and
+   * throwing sixty times a second is expensive on its own.
+   */
+  let padsRefused = false;
+
+  const connectedPads = (): readonly (Gamepad | null)[] => {
+    if (padsRefused) return EMPTY_PADS;
+    try {
+      return target.navigator.getGamepads?.() ?? EMPTY_PADS;
+    } catch {
+      padsRefused = true;
+      return EMPTY_PADS;
+    }
+  };
 
   const readGamepad = (): InputSnapshot | null => {
     for (const pad of connectedPads()) {

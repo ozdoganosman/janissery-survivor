@@ -28,6 +28,9 @@ const bootMessage = document.querySelector<HTMLElement>('#boot');
 /** True once a frame has actually been drawn. Until then, any failure is fatal. */
 let bootCleared = false;
 
+/** True once something has been reported, so a per-frame throw reports once. */
+let reported = false;
+
 /**
  * Replaces the loading text with an explanation.
  *
@@ -35,7 +38,11 @@ let bootCleared = false;
  * driver refuses WebGL has no way to tell a broken game from a slow one.
  */
 function reportFatal(message: string, detail = ''): void {
-  if (bootMessage === null) return;
+  if (bootMessage === null || reported) return;
+  // Once only. The render loop schedules its next frame before running callbacks, so
+  // a callback that throws keeps throwing sixty times a second — rewriting this panel
+  // at that rate would bury the first and truest message under identical copies.
+  reported = true;
   bootMessage.replaceChildren();
   bootMessage.style.zIndex = '400';
   bootMessage.style.background = '#12100c';

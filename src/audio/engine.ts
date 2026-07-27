@@ -108,12 +108,12 @@ export function createAudioEngine(target: Window = window): AudioEngine {
     sfxGain.connect(masterGain);
 
     buses = { context, master: masterGain, music: musicGain, sfx: sfxGain };
-    void context.resume();
+    ignore(context.resume());
   };
 
   const onGesture = (): void => {
     start();
-    if (buses !== null) void buses.context.resume();
+    if (buses !== null) ignore(buses.context.resume());
   };
 
   // `pointerdown` rather than `click`, so the very first tap that starts a run also
@@ -171,7 +171,7 @@ export function createAudioEngine(target: Window = window): AudioEngine {
       if (buses === null) return;
       silentFor += seconds;
       if (silentFor > IDLE_SUSPEND_SECONDS && buses.context.state === 'running') {
-        void buses.context.suspend();
+        ignore(buses.context.suspend());
       }
     },
 
@@ -181,11 +181,24 @@ export function createAudioEngine(target: Window = window): AudioEngine {
       target.removeEventListener('keydown', onGesture);
       target.removeEventListener('touchstart', onGesture);
       if (buses !== null) {
-        void buses.context.close();
+        ignore(buses.context.close());
         buses = null;
       }
     },
   };
+}
+
+/**
+ * Swallows a rejection from an audio-context method.
+ *
+ * `resume`, `suspend` and `close` all return promises that reject when the browser
+ * declines — an autoplay policy, a context already closed, a page being torn down.
+ * None of those is a problem worth telling anyone about: the game plays silently. But
+ * an unhandled rejection is caught by the page's global handler, which exists to
+ * report a game that failed to start, and it would report a working one.
+ */
+function ignore(promise: Promise<unknown>): void {
+  promise.catch(() => undefined);
 }
 
 export function clamp01(value: number): number {

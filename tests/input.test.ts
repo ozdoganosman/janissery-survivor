@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { applyDeadzone, clampIntent, stickIntent, TOUCH_STICK_RADIUS } from '../src/core/input';
+import {
+  applyDeadzone,
+  clampIntent,
+  createInput,
+  stickIntent,
+  TOUCH_STICK_RADIUS,
+} from '../src/core/input';
 
 describe('clampIntent', () => {
   it('leaves a short vector alone', () => {
@@ -136,5 +142,136 @@ describe('stickIntent', () => {
   it('survives nonsense coordinates', () => {
     expect(stickIntent(0, 0, Number.NaN, 0)).toEqual({ moveX: 0, moveZ: 0 });
     expect(stickIntent(0, 0, Number.POSITIVE_INFINITY, 0)).toEqual({ moveX: 0, moveZ: 0 });
+  });
+});
+
+/**
+ * A window stand-in whose gamepad API misbehaves in a specific way.
+ *
+ * This exists because of a real failure: inside a cross-origin iframe whose
+ * permissions policy omits `gamepad`, `navigator.getGamepads()` raises a
+ * `SecurityError` rather than returning nothing. It is polled every frame, so the
+ * unguarded call threw before the first frame was ever drawn and the game showed a
+ * grey screen with no error anywhere a player could see it.
+ */
+function windowWith(getGamepads: (() => (Gamepad | null)[]) | undefined): {
+  target: Window;
+  calls: () => number;
+} {
+  let calls = 0;
+  const wrapped =
+    getGamepads === undefined
+      ? undefined
+      : () => {
+          calls++;
+          return getGamepads();
+        };
+  const target = {
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    navigator: { getGamepads: wrapped },
+  } as unknown as Window;
+  return { target, calls: () => calls };
+}
+
+function throwingWindow(error: () => never): ReturnType<typeof windowWith> {
+  return windowWith(error);
+}
+
+describe('createInput and a hostile gamepad API', () => {
+  it('does not throw when getGamepads is forbidden', () => {
+    const { target } = throwingWindow(() => {
+      throw new DOMException('disallowed by permissions policy', 'SecurityError');
+    });
+    const input = createInput(target);
+    expect(() => input.sample()).not.toThrow();
+    expect(() => {
+      input.pollPause();
+    }).not.toThrow();
+    input.dispose();
+  });
+
+  it('still reports a usable intent when the pad is forbidden', () => {
+    // The failure mode that mattered was not the exception itself but everything
+    // downstream of it: on a phone the only controls are touch and this call sits in
+    // front of them.
+    const { target } = throwingWindow(() => {
+      throw new DOMException('nope', 'SecurityError');
+    });
+    const input = createInput(target);
+    expect(input.sample()).toEqual({ moveX: 0, moveZ: 0 });
+    input.dispose();
+  });
+
+  it('stops asking once it has been refused', () => {
+    // Polled every frame; throwing sixty times a second is expensive on its own, and
+    // the answer cannot change within a page load.
+    const { target, calls } = throwingWindow(() => {
+      throw new DOMException('nope', 'SecurityError');
+    });
+    const input = createInput(target);
+    for (let i = 0; i < 50; i++) {
+      input.pollPause();
+      input.sample();
+    }
+    expect(calls()).toBe(1);
+    input.dispose();
+  });
+
+  it('copes with the method being absent altogether', () => {
+    const { target } = windowWith(undefined);
+    const input = createInput(target);
+    expect(() => input.sample()).not.toThrow();
+    expect(() => {
+      input.pollPause();
+    }).not.toThrow();
+    input.dispose();
+  });
+
+  it('copes with a pad list full of holes', () => {
+    // Browsers pad the list with nulls for disconnected slots.
+    const { target } = windowWith(() => [null, null, null, null]);
+    const input = createInput(target);
+    expect(input.sample()).toEqual({ moveX: 0, moveZ: 0 });
+    input.dispose();
+  });
+
+  it('reads a pad that is actually there', () => {
+    const pad = {
+      connected: true,
+      axes: [1, 0],
+      buttons: [] as { pressed: boolean }[],
+    } as unknown as Gamepad;
+    const { target } = windowWith(() => [pad]);
+    const input = createInput(target);
+    const intent = input.sample();
+    expect(intent.moveX).toBeGreaterThan(0.5);
+    input.dispose();
+  });
+
+  it('fires pause once for a held pad button', () => {
+    let pauses = 0;
+    const button = { pressed: true };
+    const pad = {
+      connected: true,
+      axes: [0, 0],
+      buttons: Array.from({ length: 10 }, (_, i) => (i === 9 ? button : { pressed: false })),
+    } as unknown as Gamepad;
+    const { target } = windowWith(() => [pad]);
+    const input = createInput(target, null, {
+      onPause: () => {
+        pauses++;
+      },
+    });
+
+    for (let i = 0; i < 10; i++) input.pollPause();
+    expect(pauses).toBe(1);
+
+    button.pressed = false;
+    input.pollPause();
+    button.pressed = true;
+    input.pollPause();
+    expect(pauses).toBe(2);
+    input.dispose();
   });
 });

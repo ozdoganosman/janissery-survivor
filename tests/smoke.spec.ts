@@ -138,3 +138,43 @@ test('the run can be played with a finger', async ({ browser }) => {
 
   await context.close();
 });
+
+test('a browser that forbids the gamepad still plays', async ({ browser }) => {
+  // The failure this pins actually shipped. Embedded in a cross-origin iframe whose
+  // permissions policy omits `gamepad`, `navigator.getGamepads()` raises a
+  // SecurityError instead of returning nothing. It is polled every frame, so the
+  // unguarded call threw before the first frame was ever drawn: the player got a grey
+  // screen, and because nothing in the game caught it, nothing said why.
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'getGamepads', {
+      configurable: true,
+      value: () => {
+        throw new DOMException('disallowed by permissions policy', 'SecurityError');
+      },
+    });
+  });
+
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+
+  await page.goto('/?debug=1&seed=pad&go=1');
+  await page.waitForTimeout(2500);
+
+  // The boot panel is gone, which only happens once a frame has been drawn.
+  expect(await page.locator('#boot').count()).toBe(0);
+
+  const clock = async (): Promise<string> => (await page.locator('.hud-time').textContent()) ?? '';
+  const before = await clock();
+  await page.touchscreen.tap(200, 700);
+  await page.waitForTimeout(3000);
+  expect(await clock()).not.toBe(before);
+
+  expect(errors).toEqual([]);
+  await context.close();
+});
