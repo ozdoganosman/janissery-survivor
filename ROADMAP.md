@@ -483,11 +483,11 @@ bir run tamamlayıp tamamlayamayacağı hâlâ senin doğrulaman gereken kısım
 - [x] Kayıt: `localStorage` ile ayarlar (Faz 7) + en iyi süre
 - [x] Playwright smoke testi: build'i aç, oyna, hata yokluğunu doğrula
 - [x] README: ekran görüntüleri, oynanış, bilinen sınırlar
-- [ ] itch.io yayını / GitHub Pages canlı demo — **sende bekliyor**
+- [x] GitHub Pages canlı demo — https://ozdoganosman.github.io/janissery-survivor/
+- [ ] itch.io yayını — atlandı, gerekçe aşağıda
 
-**Çıkış kriteri durumu:** Paylaşılabilir bir build var ve tek dosyaya
-paketlenip doğrulandı. Canlı link, Pages'in tek seferlik el işi yapılana kadar
-eksik — `GITHUB_TOKEN` bir Pages sitesi oluşturamıyor.
+**Çıkış kriteri durumu:** Paylaşılabilir link var ve çalışıyor. Pages'in tek
+seferlik el işi yapıldıktan sonra deploy ilk denemede yeşile döndü.
 
 **Sesin nasıl kurulduğu:** Her ses oscillator ve filtreden üretiliyor,
 modellerle aynı gerekçeyle: indirilecek binary yok. Asıl zor kısım sentez
@@ -616,20 +616,49 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 
 ## 8. Sıradaki Adım
 
-**MVP tamam.** Faz 0'dan 8'e kadar hepsi bitti; her fazın sapmaları kendi
-bölümünde gerekçesiyle kayıtlı. 495 birim testi ve 4 uçtan uca smoke testi
-yeşil.
+**MVP tamam ve yayında.** Faz 0'dan 8'e kadar hepsi bitti; her fazın sapmaları
+kendi bölümünde gerekçesiyle kayıtlı. 502 birim testi ve 5 uçtan uca smoke
+testi yeşil.
 
-**Sende bekleyenler:**
+### Yayın sonrası bulunan hata
 
-- **GitHub Pages'i aç** (Settings → Pages → Source: GitHub Actions).
-  `GITHUB_TOKEN` bir Pages sitesi _oluşturamıyor_, sadece var olana deploy
-  edebiliyor. Bu yapılana kadar canlı link yok.
+**Kısıtlı bir iframe'de gamepad sorgusu oyunu öldürüyordu.**
+`navigator.getGamepads()` kullanılamadığında null dönmüyor — _fırlatıyor_. İzin
+politikasında `gamepad` olmayan çapraz kaynaklı bir iframe'de her çağrı
+SecurityError veriyor, ve bu çağrı render'ın ilk satırındaydı: ilk kare hiç
+çizilmiyordu. Oyuncu boş gri bir ekran görüyordu, konsolda görebileceği bir şey
+yoktu.
+
+`localStorage` için tam bu muhakemeyi yapıp yazmıştım — erişmenin kendisi hata
+verebilen bir API yok sayılabilir değil, güvenilmez sayılmalı. Gamepad'e
+uygulamayı atlamışım. Aynı desende üç şey daha kapandı: `AudioContext`
+promise'leri, `setPointerCapture`, ve saniyede altmış kez yeniden yazılan hata
+paneli.
+
+**Asıl ders teşhiste.** Sorunu bir tur boyunca yanlış tahmin ettim (ikinci bir
+WebGL bağlamı sandım) çünkü elimde belirti dışında hiçbir şey yoktu. Telefonda
+konsol yok; ekranda hata gösteren bir panel eklendikten sonra sebep ilk
+denemede çıktı. Bunun baştan olması gerekirdi — tarayıcıya çıkan her oyunun
+ihtiyacı olan şey.
+
+### Sende bekleyenler
+
 - **Gerçek donanımda FPS.** Bu repoda hiç ölçülmedi ve ölçülemez: ortamda GPU
-  yok, headless Chromium SwiftShader ile yazılımdan çiziyor. `?enemies=800`
+  yok, headless Chromium SwiftShader ile yazılımdan çiziyor. `?enemies=800&debug=1`
   ile açıp overlay'deki "worst" değerine bakman gereken tek şey bu.
-- **Öznel geri bildirim:** hareket hissi, build çeşitliliği, zorluk eğrisi ve
-  sesin ses seviyesi. Metrikler bunların hiçbirini ölçmez.
+- **Öznel geri bildirim:** hareket hissi, build çeşitliliği, zorluk eğrisi,
+  müziğin ses seviyesi. Metrikler bunların hiçbirini ölçmez ve bir sonraki
+  denge turu buna dayanacak.
 
-**MVP sonrasına devreden kalem yok** — Faz 6'da açtığım okunabilirlik kalemi
-Faz 8'de kapandı. Yeni fikirler § 4'e yazılır.
+### Sonraki tur seçenekleri
+
+Hiçbiri MVP'nin parçası değil; § 4'teki listeden hangisinin önce geleceği
+oynandıktan sonra belli olur. Kabaca maliyet sırasıyla:
+
+| İş                  | Neden                                                     |
+| ------------------- | --------------------------------------------------------- |
+| Denge turu          | En ucuzu ve muhtemelen en değerlisi — tablolar zaten veri |
+| Silah evolüsyonları | Build çeşitliliğine en çok ekleyen tek mekanik            |
+| 2. karakter         | Farklı başlangıç silahı; iskelet hazır, harita değişmiyor |
+| Meta-progression    | Run'lar arası bağ; kapsamı en hızlı büyüyen               |
+| 2. harita           | Yeni zemin, düşman havuzu, çevre tehlikesi — en pahalısı  |

@@ -9,18 +9,11 @@ kazanırsın.
 
 ![Yüzlerce düşmandan oluşan sürü, oyuncunun üzerine akıyor](docs/media/horde.png)
 
-> Durum: **MVP tamam** — Faz 0'dan 8'e kadar hepsi bitti.
+### ▶ [Oyna](https://ozdoganosman.github.io/janissery-survivor/)
+
+> Durum: **MVP tamam** — Faz 0'dan 8'e kadar hepsi bitti, canlı yayında.
 > Ayrıntılı plan, her fazın sapmaları ve gerekçeleri için
 > [ROADMAP.md](ROADMAP.md).
-
-> [!IMPORTANT]
-> **Canlı demo henüz yayında değil.** Pages deploy workflow'u hazır ama tek
-> seferlik bir el işi bekliyor: **Settings → Pages → Source: "GitHub Actions"**.
-> Bu adım otomatikleştirilemiyor; Pages sitesi oluşturmak repo admin yetkisi
-> istiyor, workflow'un `GITHUB_TOKEN`'ı ise `permissions: pages: write`
-> verilse bile buna sahip değil. Anahtar çevrilene kadar deploy workflow'u her
-> push'ta bu adımda kırmızı kalır — bu kasıtlı, kurulumun eksik olduğunu
-> gösteren sinyal. Çevrildikten sonra push'lar otomatik yayına gider.
 
 ## Öne çıkanlar
 
@@ -155,6 +148,9 @@ tests/     *.test.ts → Vitest (tarayıcısız), *.spec.ts → Playwright
   halkası çalışıyor.
 - **Meta-progression yok.** Kapsam dışı. `localStorage`'da sadece ayarlar ve en
   iyi süre tutulur; en iyi süre hiçbir şeyin kilidini açmaz.
+- **Kol çubuğu bazı gömülü sayfalarda çalışmaz.** İzin politikasında `gamepad`
+  olmayan bir iframe'de tarayıcı erişimi reddediyor; oyun bunu bir kez görüp
+  bir daha sormuyor ve klavye/dokunmatikle devam ediyor.
 
 ## Lisans
 
