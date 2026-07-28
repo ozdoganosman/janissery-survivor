@@ -617,10 +617,32 @@ değişikliği gerektirmeden tablo düzenlemek, oyunu oynanabilir hale getiren
 ## 8. Sıradaki Adım
 
 **MVP tamam ve yayında.** Faz 0'dan 8'e kadar hepsi bitti; her fazın sapmaları
-kendi bölümünde gerekçesiyle kayıtlı. 502 birim testi ve 5 uçtan uca smoke
+kendi bölümünde gerekçesiyle kayıtlı. 530 birim testi ve 6 uçtan uca smoke
 testi yeşil.
 
-### Yayın sonrası bulunan hata
+Yayından sonra bir cila turu yapıldı (roadmap'te yoktu, oynayan kişinin
+geri bildirimiyle geldi): kahramanın saldırı ve hasar animasyonları, ölüm
+çöküşü, gölgeler, düşman vuruş tepkisi, seviye kartlarında eşya resimleri,
+boss can çubuğu.
+
+### Yayın sonrası bulunan hatalar
+
+Üçü de aynı şekle sahip — **bağlandı ama uçtan uca hiç doğrulanmadı** — ve
+üçünü de ben değil, oynayan kişi buldu.
+
+**Kahraman hiç saldırmıyordu.** Tetik `fired > 0 && hero.finished` diye
+yazılmıştı; `finished` yalnızca tek-atımlık animasyonlar için anlamlı, yürüyen
+bir kahraman döngü oynatıyor, yani koşul asla sağlanamıyordu. Rig'in savurma
+pozu Faz 1'den beri doğru çalışıyordu ve sekiz faz boyunca hiç oynatılmadı.
+Rig'i doğrulayan birim testleri bunu yakalayamazdı: kusur rig'de değil kabloda.
+Artık hata ayıklama overlay'i kahramanın pozunu yazıyor ve smoke testi hiçbir
+tuşa basmadan `+attack` görmeyi bekliyor.
+
+**Seviye kartı katmanı sürekli açık kalıyordu** (Faz 5). Yazar `display`
+bildirimi `hidden` niteliğinin tarayıcı kuralını yeniyordu; panel yazıyı
+göstermeyi bırakıyor ama neredeyse opak bir perde boyamaya devam ediyordu.
+
+**Kısıtlı iframe'de gamepad sorgusu oyunu öldürüyordu.**
 
 **Kısıtlı bir iframe'de gamepad sorgusu oyunu öldürüyordu.**
 `navigator.getGamepads()` kullanılamadığında null dönmüyor — _fırlatıyor_. İzin
