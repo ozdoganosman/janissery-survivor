@@ -22,7 +22,9 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
   ],
   webServer: {
-    command: 'npm run build && npm run preview -- --port 4173 --strictPort',
+    // Bind to the exact address probed below. Plain `localhost` can resolve to ::1 first
+    // (as on GitHub's runners), leaving an IPv6-only server that 127.0.0.1 never reaches.
+    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
