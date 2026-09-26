@@ -140,9 +140,9 @@ export class Game {
     });
     const orders = new OrdersPanel(this.hud.ui, {
       onCommand: (cmd) => this.commander.command(cmd),
-      onPick: (id, add) => {
+      onPick: (key, add) => {
         if (this.tool !== 'ordu') this.setTool('ordu');
-        this.commander.pick(id, add);
+        this.commander.pickFlag(key, add);
       },
     });
     this.commander = new Commander(
@@ -833,6 +833,9 @@ export class Game {
         break;
       case 'k':
         if (this.tool === 'ordu') this.commander.home();
+        break;
+      case 'u':
+        if (this.tool === 'ordu') this.commander.climb();
         break;
       case 'a':
         if (this.tool === 'ordu' && (e.ctrlKey || e.metaKey)) {

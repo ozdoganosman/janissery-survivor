@@ -1519,6 +1519,116 @@ body {
   height: 16px;
 }
 
+/* The chain of command: ordus, their kolordus, tugays and taburs. */
+.orders .sub {
+  margin-top: 2px;
+  font-weight: 600;
+  border-top: 1px solid var(--gold-dark);
+  padding-top: 4px;
+}
+
+.orders .tree {
+  display: grid;
+  gap: 1px;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+.orders .row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.orders .row .fold {
+  flex: 0 0 18px;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.orders .row .fold:disabled {
+  cursor: default;
+}
+
+.orders .row .pick {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 6px;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.orders .row .pick:hover {
+  border-color: var(--gold-dark);
+}
+
+.orders .row .pick small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.orders .row.ordu .pick b {
+  font-size: 13.5px;
+}
+
+.orders .row.tabur .pick b {
+  font-weight: 500;
+}
+
+.orders .row.on .pick {
+  background: rgba(242, 193, 78, 0.35);
+  border-color: var(--gold);
+}
+
+.orders .row.some .pick {
+  border: 1px dashed var(--gold);
+}
+
+.orders .row .swatch {
+  flex: 0 0 8px;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px 4px 4px 1px;
+  background: #8c2a1c;
+}
+
+.orders .row.okcu .swatch {
+  background: #3f7a4a;
+}
+
+.orders .row.atli_okcu .swatch {
+  background: #a8702e;
+}
+
+.orders .row.gulam .swatch {
+  background: #2f4f9a;
+}
+
+.orders .row.karma .swatch {
+  background: #4a3524;
+}
+
+.orders .buttons.form {
+  align-items: center;
+}
+
+.orders .buttons.form .dim {
+  font-size: 11.5px;
+}
+
 /* The box dragged over the map to choose companies. */
 .selbox {
   position: fixed;
@@ -1577,8 +1687,36 @@ body {
   background: #2f4f9a;
 }
 
+.company.karma {
+  background: #4a3524;
+}
+
+/* An echelon's flag: larger, and the higher the echelon, the larger. */
+.company.tugay,
+.company.kolordu,
+.company.ordu {
+  padding: 1px 7px 2px;
+  font-size: 12px;
+  border-width: 1.5px;
+  border-color: var(--gold);
+}
+
+.company.kolordu {
+  font-size: 13px;
+}
+
+.company.ordu {
+  font-size: 14px;
+  border-width: 2px;
+}
+
 .company.on {
   outline: 2px solid #f2c14e;
+  outline-offset: 1px;
+}
+
+.company.some {
+  outline: 2px dashed #f2c14e;
   outline-offset: 1px;
 }
 

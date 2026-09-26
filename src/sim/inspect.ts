@@ -1,4 +1,4 @@
-import { UNIT_KINDS, type LevelDef, type UnitKind } from './balance';
+import { ECHELON_LEVELS, UNIT_KINDS, type LevelDef, type UnitKind } from './balance';
 import { armyByKind, armyCapacity, armyMen, armyPay, levyLimit, recruitOffer, recruitRoom } from './army';
 import { demolishRefund, kindName, upgradeOffer, type Building, type UpgradeOffer } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
@@ -23,6 +23,8 @@ export interface ArmyPanel {
   room: number;
   levy: number;
   pay: number;
+  /** The chain of command, in words: "2 ordu · 3 kolordu · 6 tugay". */
+  echelons: string;
   /** The companies quartered, a row for each kind there are any of. */
   kinds: Array<{
     kind: UnitKind;
@@ -59,6 +61,14 @@ export function armyPanel(city: CityState): ArmyPanel {
     room: armyCapacity(city),
     levy: levyLimit(city),
     pay: armyPay(city),
+    echelons: ECHELON_LEVELS.slice()
+      .reverse()
+      .map((level) => {
+        const n = city.army.echelons.filter((e) => e.level === level).length;
+        return n > 0 ? `${n} ${city.balance.army.echelons[level].name.toLocaleLowerCase('tr-TR')}` : '';
+      })
+      .filter((t) => t !== '')
+      .join(' · '),
     kinds: UNIT_KINDS.filter((kind) => tally[kind].units > 0).map((kind) => {
       const t = tally[kind];
       return {

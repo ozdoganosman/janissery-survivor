@@ -211,7 +211,7 @@ function desert(city: CityState): void {
     disband(
       city,
       u.id,
-      `${units[u.kind].name} bölüğü ulufesini alamadı ve dağıldı; ${u.men} kişi evine döndü.`,
+      `${units[u.kind].name} taburu ulufesini alamadı ve dağıldı; ${u.men} kişi evine döndü.`,
     );
     deficit -= worst.pay;
   } while (deficit > 0);

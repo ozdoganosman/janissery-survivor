@@ -25,8 +25,9 @@ const LINE_WIDTH = 24;
 /** The widest front a player may draw, and the most room left between companies in it. */
 const MAX_FRONT = 60;
 const MAX_SPREAD = 3;
-/** Room between companies side by side, and between lines. */
+/** Room between companies side by side, and between lines; more between echelons. */
 const GAP = 0.5;
+const GROUP_GAP = 1.5;
 
 /** Forward and to-the-right unit vectors for a heading. */
 export function axes(heading: number): { fx: number; fz: number; rx: number; rz: number } {
@@ -131,6 +132,11 @@ export interface MarchOptions {
    * twice as wide as deep.
    */
   width?: number;
+  /**
+   * The echelon (tugay) of each company, by id: companies of one stand together, with more
+   * room between echelons, and a line is rather ended between two echelons than inside one.
+   */
+  groups?: ReadonlyMap<number, number>;
 }
 
 /** Where one company of an order would stand, and the ground it would cover. */
@@ -162,7 +168,7 @@ export function planMarch(
   if (origin === null) return { plan, drilling, problem: 'Oraya yürünmez' };
   if (ready.length === 0) {
     return drilling > 0
-      ? { plan, drilling, problem: 'Talimdeki bölük kışladan çıkamaz' }
+      ? { plan, drilling, problem: 'Talimdeki tabur kışladan çıkamaz' }
       : { plan, drilling };
   }
   const defs = city.balance.army.units;
@@ -178,18 +184,33 @@ export function planMarch(
     opts.width === undefined
       ? Math.min(placed.length, Math.ceil(Math.sqrt(placed.length * 2)))
       : placed.length;
+  const group = (p: (typeof placed)[number]): number | undefined => opts.groups?.get(p.u.id);
+  /** Whether a company begins another echelon than the one before it in the order. */
+  const opens = placed.map((p, k) => k > 0 && group(p) !== group(placed[k - 1]));
+  /** Companies from each one to the end of its echelon. */
+  const rest = placed.map(() => 1);
+  for (let k = placed.length - 2; k >= 0; k--) if (!opens[k + 1]) rest[k] = rest[k + 1] + 1;
   const lines: Array<typeof placed> = [[]];
+  const breaks: boolean[][] = [[]];
   let width = 0;
-  for (const p of placed) {
+  placed.forEach((p, k) => {
     const line = lines[lines.length - 1];
-    if (line.length > 0 && (line.length >= perLine || width + GAP + p.w > front)) {
+    const gap = opens[k] ? GROUP_GAP : GAP;
+    const full = line.length >= perLine || width + gap + p.w > front;
+    // In a block, an echelon that would not fit in what is left of a half-full line
+    // starts the next one.
+    const early =
+      opts.width === undefined && opens[k] && line.length + rest[k] > perLine && line.length * 2 >= perLine;
+    if (line.length > 0 && (full || early)) {
       lines.push([p]);
+      breaks.push([false]);
       width = p.w;
     } else {
-      width += (line.length > 0 ? GAP : 0) + p.w;
+      width += (line.length > 0 ? gap : 0) + p.w;
       line.push(p);
+      breaks[breaks.length - 1].push(line.length > 1 && opens[k]);
     }
-  }
+  });
   const a = axes(heading);
   const { grid } = city;
   const reach = reachFrom(city, origin.x, origin.z, SEARCH);
@@ -222,17 +243,19 @@ export function planMarch(
       (t) => Math.abs(t.r - r) >= (t.w + w) / 2 + GAP / 2 || Math.abs(t.f - f) >= (t.d + d) / 2 + GAP / 2,
     );
   let back = 0;
-  for (const line of lines) {
+  lines.forEach((line, l) => {
     const sum = line.reduce((n, p) => n + p.w, 0);
+    const extra = breaks[l].filter(Boolean).length * (GROUP_GAP - GAP);
     // A front drawn wider than the line needs: the companies spread out along it.
     const gap =
       opts.width !== undefined && line.length > 1
-        ? Math.min(MAX_SPREAD, Math.max(GAP, (front - sum) / (line.length - 1)))
+        ? Math.min(MAX_SPREAD, Math.max(GAP, (front - sum - extra) / (line.length - 1)))
         : GAP;
-    const total = sum + gap * (line.length - 1);
+    const total = sum + extra + gap * (line.length - 1);
     const depth = Math.max(...line.map((p) => p.d));
     let across = -total / 2;
-    for (const p of line) {
+    line.forEach((p, k) => {
+      if (breaks[l][k]) across += GROUP_GAP - GAP;
       // Its place in the lines; each line's front rank is level.
       const r0 = across + p.w / 2;
       const f0 = -back - p.d / 2;
@@ -250,9 +273,9 @@ export function planMarch(
       taken.push({ r, f, w: p.w, d: p.d });
       const [px, pz] = world(r, f);
       plan.push({ id: p.u.id, x: px, z: pz, heading, formation: p.f, w: p.w, d: p.d });
-    }
+    });
     back += depth + GAP;
-  }
+  });
   return { plan, drilling };
 }
 
@@ -341,7 +364,7 @@ export function formationOrder(city: CityState, ids: readonly number[], formatio
     fx,
     fz,
     centre.heading,
-    { formation },
+    { formation, groups: new Map(units.map((u) => [u.id, u.tugay ?? -1])) },
   ).moved;
 }
 

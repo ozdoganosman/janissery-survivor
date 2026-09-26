@@ -658,20 +658,21 @@ export class Hud {
       ),
     );
     box.appendChild(el('span', 'progress', `<i style="width:${share}%"></i>`));
-    if (a.kinds.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan bölük topla.'));
+    if (a.echelons !== '') box.appendChild(el('small', 'dim', `Birlikler: ${a.echelons}`));
+    if (a.kinds.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan tabur topla.'));
     for (const k of a.kinds) {
       const row = el('div', 'unit');
-      row.appendChild(el('span', 'name', `<b>${k.name}</b> · ${fmt(k.units)} bölük · ${fmt(k.men)} er`));
+      row.appendChild(el('span', 'name', `<b>${k.name}</b> · ${fmt(k.units)} tabur · ${fmt(k.men)} er`));
       const state =
         k.drilling === 0
           ? 'hazır'
           : k.drilling === k.units
             ? `talimde · ${k.monthsLeft} ay`
-            : `${fmt(k.ready)} hazır · ${k.drilling} bölük talimde`;
+            : `${fmt(k.ready)} hazır · ${k.drilling} tabur talimde`;
       row.appendChild(el('small', k.drilling === 0 ? 'ok' : '', state));
       if (pinned) {
         const home = el('button', 'btn disband', '− Terhis');
-        home.title = 'Bir bölüğü dağıt (en son toplananı): askerler evlerine döner';
+        home.title = 'Bir taburu dağıt (en son toplananı): askerler evlerine döner';
         home.addEventListener('click', () => this.cb.onDisband(k.kind));
         row.appendChild(home);
       }
@@ -680,7 +681,7 @@ export class Hud {
     if (!pinned) return box;
     if (a.kinds.length > 0) {
       const command = el('button', 'btn command', `${svg(ICONS.ordu)}<span>Orduyu seç ve komuta et</span>`);
-      command.title = 'Bütün bölükleri seç; sağ tıkla haritada yürüt (O)';
+      command.title = 'Bütün taburları seç; sağ tıkla haritada yürüt (O)';
       command.addEventListener('click', () => this.cb.onArmy({ kind: 'selectAll' }));
       box.appendChild(command);
     }
@@ -693,16 +694,16 @@ export class Hud {
         `<b>${o.name}</b><small>${fmt(o.men)} er · ${fmt(o.cost)} akçe · ${o.months} ay talim · ulufe ${fmt(o.pay)}/ay</small>` +
           (o.problem !== undefined
             ? `<small class="${o.locked ? 'need' : 'bad'}">${o.locked ? '🔒 ' : ''}${o.problem}</small>`
-            : `<small class="dim">şimdi en çok ${fmt(o.most)} bölük</small>`),
+            : `<small class="dim">şimdi en çok ${fmt(o.most)} tabur</small>`),
       );
-      go.title = `${o.hint} · bir bölük topla`;
+      go.title = `${o.hint} · bir tabur topla`;
       go.disabled = o.problem !== undefined;
       go.addEventListener('click', () => this.cb.onRecruit(o.kind, 1));
       line.appendChild(go);
       if (!o.locked) {
         for (const n of [5, 10]) {
           const many = el('button', 'btn many', `+${n}`);
-          many.title = `${n} bölük birden topla (${fmt(n * o.men)} er, ${fmt(n * o.cost)} akçe)`;
+          many.title = `${n} tabur birden topla (${fmt(n * o.men)} er, ${fmt(n * o.cost)} akçe)`;
           many.disabled = o.most < n;
           many.addEventListener('click', () => this.cb.onRecruit(o.kind, n));
           line.appendChild(many);

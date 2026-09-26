@@ -25,7 +25,7 @@ export type UnitKind = 'mizrakci' | 'okcu' | 'atli_okcu' | 'gulam';
 export const UNIT_KINDS: readonly UnitKind[] = ['mizrakci', 'okcu', 'atli_okcu', 'gulam'];
 
 /**
- * One company (bölük) of soldiers as the barracks raises it. The fighting figures are kept
+ * One company (a tabur) of soldiers as the barracks raises it. The fighting figures are kept
  * for the battles to come; the city only pays, feeds and quarters the men.
  */
 export interface UnitDef {
@@ -57,6 +57,19 @@ export interface UnitDef {
 
 export type FormationKind = 'saf' | 'kare' | 'kol';
 export const FORMATION_KINDS: readonly FormationKind[] = ['saf', 'kare', 'kol'];
+
+/** The echelons taburs are gathered into, lowest first: a tugay, a kolordu, an ordu. */
+export type EchelonLevel = 'tugay' | 'kolordu' | 'ordu';
+export const ECHELON_LEVELS: readonly EchelonLevel[] = ['tugay', 'kolordu', 'ordu'];
+
+export interface EchelonDef {
+  name: string;
+  /** Its name on its flag. */
+  short: string;
+  /** Most it holds of the level below: taburs for a tugay, tugays for a kolordu, and so on. */
+  holds: number;
+  hint: string;
+}
 
 /** How a company stands in the field: how many men abreast. */
 export interface FormationDef {
@@ -163,6 +176,7 @@ export interface Balance {
   army: {
     /** Share of the townspeople that may be under arms at once. */
     levy: number;
+    echelons: Record<EchelonLevel, EchelonDef>;
     formations: Record<FormationKind, FormationDef>;
     units: Record<UnitKind, UnitDef>;
   };

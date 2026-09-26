@@ -1,34 +1,77 @@
 import * as THREE from 'three';
-import { FORMATION_KINDS, UNIT_KINDS, type FormationKind, type UnitKind } from './sim/balance';
+import {
+  ECHELON_LEVELS,
+  FORMATION_KINDS,
+  UNIT_KINDS,
+  type EchelonLevel,
+  type FormationKind,
+  type UnitKind,
+} from './sim/balance';
+import type { Unit } from './sim/army';
 import type { CityState, Notice } from './sim/city';
+import {
+  echelonKind,
+  echelonName,
+  echelonOf,
+  exactEchelon,
+  formEchelon,
+  formProblem,
+  orderByEchelon,
+  taburs,
+  widen,
+  type Echelon,
+} from './sim/echelons';
 import { axes, faceOrder, formationOrder, haltOrder, marchOrder, planMarch, returnOrder } from './sim/field';
 import { sampleHeight } from './sim/terrain';
 import type { Cue } from './audio/sound';
 import type { Footprint } from './render/army-view';
+import type { Lead } from './render/selection-view';
 import type { World } from './render/world';
-import type { ArmyCommand, CompanyPlace, OrdersPanel, OrdersView } from './ui/orders-panel';
+import type {
+  ArmyCommand,
+  CompanyPlace,
+  EchelonRow,
+  FlagKey,
+  OrdersPanel,
+  OrdersView,
+} from './ui/orders-panel';
 
 /** A right drag shorter than this (tiles) is a click; the front is redrawn this often (ms). */
 const MIN_FRONT = 0.8;
 const FRONT_EVERY = 60;
 
-/** Two clicks on a company this close together (ms) choose every company of its kind. */
+/** Two clicks on a company this close together (ms) choose its whole tugay. */
 const DOUBLE_CLICK = 350;
-/** Flags over the companies in the field show this close in, and this high over them. */
-const FLAG_ZOOM = 70;
+/** Flags stand this high over the companies in the field. */
 const FLAG_HEIGHT = 1.1;
+/**
+ * Flags cover about this much of the screen (px). When too many of them would overlap, the
+ * flags of the taburs give way to those of their tugays, and those to their kolordus' and
+ * ordus'; they part again when the camera comes closer. The level is looked at this often.
+ */
+const FLAG_W = 52;
+const ECHELON_FLAG_W = 104;
+const FLAG_H = 18;
+const FLAG_EVERY = 200;
+/** Flags, from the finest: the taburs', then each echelon's. */
+type FlagLevel = 'tabur' | EchelonLevel;
+const FLAG_LEVELS: readonly FlagLevel[] = ['tabur', ...ECHELON_LEVELS];
 
 /**
- * The commander: which companies are chosen, and the orders given to them. Choosing is
- * done on the map (a click on a man picks his company, a box picks all inside it) or from
- * the panel; orders go to the rules in `sim/field`, and the army view marches the men.
+ * The commander: which taburs are chosen, and the orders given to them. Choosing is done
+ * on the map (a click on a man picks his tabur, a second click his tugay, a box picks all
+ * inside it, a flag picks its tabur or echelon) or from the panel; orders go to the rules
+ * in `sim/field`, and the army view marches the men.
  */
 export class Commander {
   readonly selection = new Set<number>();
   private lastClick = { id: -1, time: 0 };
   /** The front being drawn with a right drag, as the companies would stand on it. */
   private preview: Footprint[] = [];
+  private lead: Lead | null = null;
   private previewAt = { time: 0, x: NaN, z: NaN };
+  private flagLevel = 0;
+  private flagAt = 0;
   private readonly v = new THREE.Vector3();
 
   constructor(
@@ -64,6 +107,51 @@ export class Commander {
     for (const u of this.city.army.units) if (u.kind === kind) this.selection.add(u.id);
   }
 
+  /** Chooses every tabur of an echelon, or adds them (or takes them away, if all were chosen). */
+  selectEchelon(id: number, add: boolean): void {
+    const under = taburs(this.city, id).map((u) => u.id);
+    if (under.length === 0) return;
+    if (add && under.every((t) => this.selection.has(t))) {
+      for (const t of under) this.selection.delete(t);
+    } else {
+      if (!add) this.selection.clear();
+      for (const t of under) this.selection.add(t);
+    }
+    this.play('click');
+  }
+
+  /** A flag on the map was clicked: its tabur, or its echelon. */
+  pickFlag(key: FlagKey, add: boolean): void {
+    if (key.echelon) this.selectEchelon(key.id, add);
+    else this.pick(key.id, add);
+  }
+
+  /** Widens the choice to the echelon one up: a tabur to its tugay, a tugay to its kolordu. */
+  climb(): boolean {
+    const now = this.chosen();
+    if (now.length === 0) {
+      this.say('Önce tabur seç.', 'info');
+      return false;
+    }
+    const wider = widen(this.city, now);
+    if (wider.length === now.length) return false;
+    for (const id of wider) this.selection.add(id);
+    this.play('click');
+    return true;
+  }
+
+  /** Gathers the chosen taburs into a new echelon of `level`. */
+  form(level: EchelonLevel): boolean {
+    const r = formEchelon(this.city, level, this.chosen());
+    if (r.problem !== undefined || r.echelon === undefined) {
+      this.say(r.problem ?? 'Olmadı.', 'info');
+      return false;
+    }
+    this.say(`${echelonName(this.city, r.echelon)} kuruldu.`, 'good');
+    this.play('click');
+    return true;
+  }
+
   clear(): void {
     this.selection.clear();
   }
@@ -81,8 +169,10 @@ export class Commander {
     }
     const now = performance.now();
     if (this.lastClick.id === id && now - this.lastClick.time < DOUBLE_CLICK) {
-      const kind = this.city.army.units.find((u) => u.id === id)?.kind;
-      if (kind !== undefined) this.selectKind(kind);
+      // The second click: the tabur's whole tugay.
+      if (!add) this.selection.clear();
+      this.selection.add(id);
+      for (const t of widen(this.city, [id])) this.selection.add(t);
       this.lastClick = { id: -1, time: 0 };
       return true;
     }
@@ -118,12 +208,13 @@ export class Commander {
 
   /**
    * Sends the chosen companies to a point, drawn up side by side facing the way they came:
-   * left to right as they stand now, so their paths do not cross.
+   * left to right as they stand now, so their paths do not cross, and each echelon's
+   * taburs together.
    */
   marchTo(x: number, z: number): boolean {
     const ids = this.chosen();
     if (ids.length === 0) {
-      this.say('Önce bölük seç.', 'info');
+      this.say('Önce tabur seç.', 'info');
       return false;
     }
     const at = ids.map((id) => ({ id, p: this.world.army.anchor(id) }));
@@ -141,23 +232,16 @@ export class Commander {
     const far = Math.hypot(x - cx, z - cz) > 1;
     const heading = far ? Math.atan2(x - cx, z - cz) : (at[0].p?.heading ?? 0);
     const a = axes(heading);
-    at.sort((p, q) => {
-      const pr = p.p === null ? 0 : (p.p.x - cx) * a.rx + (p.p.z - cz) * a.rz;
-      const qr = q.p === null ? 0 : (q.p.x - cx) * a.rx + (q.p.z - cz) * a.rz;
-      return pr - qr;
-    });
-    const r = marchOrder(
-      this.city,
-      at.map((e) => e.id),
-      x,
-      z,
-      heading,
+    const across = new Map(
+      at.map((e) => [e.id, e.p === null ? 0 : (e.p.x - cx) * a.rx + (e.p.z - cz) * a.rz]),
     );
+    const order = orderByEchelon(this.city, ids, (id) => across.get(id) ?? 0);
+    const r = marchOrder(this.city, order, x, z, heading, { groups: this.groups(order) });
     if (r.problem !== undefined) {
       this.say(r.problem, 'bad');
       return false;
     }
-    if (r.drilling > 0) this.say(`${r.drilling} bölük talimde, kışlada kaldı.`, 'info');
+    if (r.drilling > 0) this.say(`${r.drilling} tabur talimde, kışlada kaldı.`, 'info');
     this.play('click');
     return r.moved > 0;
   }
@@ -176,15 +260,21 @@ export class Commander {
     const f = this.frontOf(a, b);
     if (f === null) {
       this.preview = [];
+      this.lead = null;
       return;
     }
-    const r = planMarch(this.city, f.ids, f.x, f.z, f.heading, { width: f.width });
+    this.lead = { x: f.x, z: f.z, heading: f.heading, width: f.width };
+    const r = planMarch(this.city, f.ids, f.x, f.z, f.heading, {
+      width: f.width,
+      groups: this.groups(f.ids),
+    });
     this.preview = r.plan.map((p) => ({ x: p.x, z: p.z, heading: p.heading, w: p.w, d: p.d }));
   }
 
   /** Stops showing the front being drawn. */
   dropFront(): void {
     this.preview = [];
+    this.lead = null;
     this.previewAt = { time: 0, x: NaN, z: NaN };
   }
 
@@ -193,12 +283,15 @@ export class Commander {
     this.dropFront();
     const f = this.frontOf(a, b);
     if (f === null) return this.marchTo(a.x, a.z);
-    const r = marchOrder(this.city, f.ids, f.x, f.z, f.heading, { width: f.width });
+    const r = marchOrder(this.city, f.ids, f.x, f.z, f.heading, {
+      width: f.width,
+      groups: this.groups(f.ids),
+    });
     if (r.problem !== undefined) {
       this.say(r.problem, 'bad');
       return false;
     }
-    if (r.drilling > 0) this.say(`${r.drilling} bölük talimde, kışlada kaldı.`, 'info');
+    if (r.drilling > 0) this.say(`${r.drilling} tabur talimde, kışlada kaldı.`, 'info');
     this.play('click');
     return r.moved > 0;
   }
@@ -215,13 +308,18 @@ export class Commander {
     const rx = (b.x - a.x) / len;
     const rz = (b.z - a.z) / len;
     const heading = Math.atan2(rz, -rx);
-    const at = ids.map((id) => ({ id, p: this.world.army.anchor(id) }));
-    at.sort((p, q) => {
-      const pr = p.p === null ? 0 : p.p.x * rx + p.p.z * rz;
-      const qr = q.p === null ? 0 : q.p.x * rx + q.p.z * rz;
-      return pr - qr;
-    });
-    return { ids: at.map((e) => e.id), x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, heading, width: len };
+    const along = (id: number): number => {
+      const p = this.world.army.anchor(id);
+      return p === null ? 0 : p.x * rx + p.z * rz;
+    };
+    const order = orderByEchelon(this.city, ids, along);
+    return { ids: order, x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, heading, width: len };
+  }
+
+  /** The tugay of each tabur, so a march keeps each tugay's taburs together. */
+  private groups(ids: readonly number[]): Map<number, number> {
+    const set = new Set(ids);
+    return new Map(this.city.army.units.filter((u) => set.has(u.id)).map((u) => [u.id, u.tugay ?? -u.id]));
   }
 
   home(): number {
@@ -251,7 +349,7 @@ export class Commander {
 
   formation(f: FormationKind): number {
     const n = formationOrder(this.city, this.chosen(), f);
-    if (n === 0) this.say('Önce bölükleri sahaya çıkar.', 'info');
+    if (n === 0) this.say('Önce taburları sahaya çıkar.', 'info');
     else this.play('click');
     return n;
   }
@@ -276,6 +374,18 @@ export class Commander {
       case 'selectKind':
         this.selectKind(cmd.unit);
         break;
+      case 'selectEchelon':
+        this.selectEchelon(cmd.id, cmd.add);
+        break;
+      case 'selectTabur':
+        this.pick(cmd.id, cmd.add);
+        break;
+      case 'climb':
+        this.climb();
+        break;
+      case 'form':
+        this.form(cmd.level);
+        break;
       case 'clear':
         this.clear();
         break;
@@ -298,33 +408,113 @@ export class Commander {
       const d = army.destination(id);
       if (d !== null) to.push(d);
     }
-    this.world.selection.set(now, this.preview.length > 0 ? this.preview : to, this.world.rig.zoom);
+    const drawing = this.preview.length > 0;
+    this.world.selection.set(
+      now,
+      drawing ? this.preview : to,
+      this.world.rig.zoom,
+      drawing ? this.lead : null,
+    );
 
-    // Flags over every company out of the barracks, or on its way.
-    const rig = this.world.rig;
+    // Flags over the taburs out of the barracks, or on their way, or over their echelons.
+    this.panel.placeCompanies(this.flags(units), true);
+    this.panel.show(commanding ? this.view(touch) : null);
+  }
+
+  /**
+   * The flags for this frame: one over each tabur in the field, or, where those would
+   * crowd one another, one over each tugay, kolordu or ordu with taburs in the field.
+   */
+  private flags(units: Unit[]): CompanyPlace[] {
+    const army = this.world.army;
+    const out: Array<{ u: Unit; x: number; z: number; moving: boolean }> = [];
+    for (const u of units) {
+      const moving = army.destination(u.id) !== null;
+      if (u.field === null && !moving) continue;
+      const p = army.anchor(u.id);
+      if (p !== null) out.push({ u, x: p.x, z: p.z, moving });
+    }
+    if (out.length === 0) return [];
+    const at = (level: number): CompanyPlace[] => this.flagsAt(FLAG_LEVELS[level], out);
+    const now = performance.now();
+    if (now - this.flagAt > FLAG_EVERY) {
+      this.flagAt = now;
+      // Up while the flags would crowd; down while the finer ones would stand clear.
+      let level = this.flagLevel;
+      while (level < FLAG_LEVELS.length - 1 && crowded(at(level), 1)) level++;
+      while (level > 0 && !crowded(at(level - 1), 1.3)) level--;
+      this.flagLevel = level;
+    }
+    return unstack(at(this.flagLevel));
+  }
+
+  private flagsAt(
+    level: FlagLevel,
+    out: Array<{ u: Unit; x: number; z: number; moving: boolean }>,
+  ): CompanyPlace[] {
+    const defs = this.city.balance.army.units;
     const places: CompanyPlace[] = [];
-    const show = rig.zoom < FLAG_ZOOM;
-    if (show) {
-      for (const u of units) {
-        const moving = army.destination(u.id) !== null;
-        if (u.field === null && !moving) continue;
-        const p = this.screenOf(u.id, FLAG_HEIGHT);
+    if (level === 'tabur') {
+      for (const { u, x, z, moving } of out) {
+        const p = this.screenAt(x, z, FLAG_HEIGHT);
         if (p === null) continue;
-        const def = this.city.balance.army.units[u.kind];
         places.push({
-          id: u.id,
+          key: { echelon: false, id: u.id },
           x: p.x,
           y: p.y,
           kind: u.kind,
+          level: 'tabur',
+          short: '',
           label: `${u.men}`,
-          title: `${def.name} · ${u.men} er${moving ? ' · yürüyüşte' : ''}`,
-          selected: this.selection.has(u.id),
+          title: `${defs[u.kind].name} taburu · ${u.men} er${moving ? ' · yürüyüşte' : ''}`,
+          selected: this.selection.has(u.id) ? 'all' : 'none',
           moving,
         });
       }
+      return places;
     }
-    this.panel.placeCompanies(places, show);
-    this.panel.show(commanding ? this.view(touch) : null);
+    // Each echelon's flag stands over the middle of its taburs in the field.
+    const groups = new Map<
+      number,
+      { e: Echelon; x: number; z: number; n: number; men: number; moving: number }
+    >();
+    for (const { u, x, z, moving } of out) {
+      const e = echelonOf(this.city, u, level);
+      if (e === undefined) continue;
+      const g = groups.get(e.id) ?? { e, x: 0, z: 0, n: 0, men: 0, moving: 0 };
+      g.x += x;
+      g.z += z;
+      g.n++;
+      g.men += u.men;
+      if (moving) g.moving++;
+      groups.set(e.id, g);
+    }
+    const def = this.city.balance.army.echelons[level];
+    for (const g of groups.values()) {
+      const p = this.screenAt(g.x / g.n, g.z / g.n, FLAG_HEIGHT * 1.6);
+      if (p === null) continue;
+      const under = taburs(this.city, g.e.id);
+      const chosen = under.filter((u) => this.selection.has(u.id)).length;
+      const kind = echelonKind(this.city, g.e.id);
+      const home = under.length - g.n;
+      places.push({
+        key: { echelon: true, id: g.e.id },
+        x: p.x,
+        y: p.y,
+        kind: kind ?? 'karma',
+        level,
+        short: `${g.e.no}. ${def.short}`,
+        label: fmt(g.men),
+        title:
+          `${echelonName(this.city, g.e)}${kind !== null ? ` (${defs[kind].name})` : ''} · ` +
+          `${g.n} tabur sahada · ${fmt(g.men)} er` +
+          (home > 0 ? ` · ${home} tabur kışlada` : '') +
+          (g.moving > 0 ? ' · yürüyüşte' : ''),
+        selected: chosen === 0 ? 'none' : chosen === under.length ? 'all' : 'some',
+        moving: g.moving > 0,
+      });
+    }
+    return places;
   }
 
   private view(touch: boolean): OrdersView {
@@ -336,6 +526,8 @@ export class Commander {
     }).filter((k) => k.units > 0);
     const out = units.filter((u) => u.field !== null);
     const forms = new Set(out.map((u) => u.field!.formation));
+    const ids = units.map((u) => u.id);
+    const whole = exactEchelon(this.city, ids);
     return {
       companies: units.length,
       men: units.reduce((n, u) => n + u.men, 0),
@@ -350,8 +542,59 @@ export class Commander {
         name: this.city.balance.army.formations[f].name,
         hint: this.city.balance.army.formations[f].hint,
       })),
+      echelon: whole === null ? null : echelonName(this.city, whole),
+      canClimb: units.length > 0 && widen(this.city, ids).length > units.length,
+      forms: ECHELON_LEVELS.map((level) => {
+        const d = this.city.balance.army.echelons[level];
+        return { level, name: d.name, hint: d.hint, problem: formProblem(this.city, level, ids) };
+      }),
+      tree: this.tree(),
       touch,
     };
+  }
+
+  /** The chain of command, ordus first, with how many of each echelon's taburs are chosen. */
+  private tree(): EchelonRow[] {
+    const city = this.city;
+    const defs = city.balance.army.units;
+    const all = city.army.echelons;
+    const rowOf = (e: Echelon): EchelonRow => {
+      const under = taburs(city, e.id);
+      const kind = echelonKind(city, e.id);
+      const children: EchelonRow[] =
+        e.level === 'tugay'
+          ? under.map((u) => ({
+              id: u.id,
+              level: 'tabur',
+              name: defs[u.kind].name,
+              kind: u.kind,
+              taburs: 1,
+              men: u.men,
+              chosen: this.selection.has(u.id) ? 1 : 0,
+              state: u.drill !== null ? 'talimde' : u.field !== null ? 'sahada' : 'kışlada',
+              children: [],
+            }))
+          : all
+              .filter((c) => c.parent === e.id)
+              .sort((p, q) => p.no - q.no)
+              .map(rowOf);
+      const out = under.filter((u) => u.field !== null).length;
+      return {
+        id: e.id,
+        level: e.level,
+        name: echelonName(city, e),
+        kind: kind ?? 'karma',
+        taburs: under.length,
+        men: under.reduce((n, u) => n + u.men, 0),
+        chosen: under.filter((u) => this.selection.has(u.id)).length,
+        state: out === 0 ? '' : out === under.length ? 'sahada' : `${out} sahada`,
+        children,
+      };
+    };
+    return all
+      .filter((e) => e.level === 'ordu')
+      .sort((p, q) => p.no - q.no)
+      .map(rowOf);
   }
 
   /** The chosen companies that still exist. */
@@ -362,9 +605,13 @@ export class Commander {
   /** Where a company's middle is on the screen, in client pixels, or null off screen. */
   private screenOf(id: number, lift: number): { x: number; y: number } | null {
     const p = this.world.army.anchor(id);
-    if (p === null) return null;
+    return p === null ? null : this.screenAt(p.x, p.z, lift);
+  }
+
+  /** Where a point `lift` over the ground is on the screen, in client pixels, or null. */
+  private screenAt(x: number, z: number, lift: number): { x: number; y: number } | null {
     const rig = this.world.rig;
-    this.v.set(p.x, sampleHeight(this.city.terrain, p.x, p.z) + lift, p.z).project(rig.camera);
+    this.v.set(x, sampleHeight(this.city.terrain, x, z) + lift, z).project(rig.camera);
     if (Math.abs(this.v.x) > 1.05 || Math.abs(this.v.y) > 1.05) return null;
     const rect = this.canvas.getBoundingClientRect();
     return {
@@ -372,4 +619,41 @@ export class Commander {
       y: rect.top + ((1 - this.v.y) / 2) * rect.height,
     };
   }
+}
+
+const fmt = (n: number): string => Math.round(n).toLocaleString('tr-TR');
+
+/** Roughly how wide a flag is on the screen (px). */
+const flagWidth = (p: CompanyPlace): number => (p.level === 'tabur' ? FLAG_W : ECHELON_FLAG_W);
+
+/** Whether flags would overlap too much: more than a few pairs, their boxes grown by `grow`. */
+function crowded(places: CompanyPlace[], grow: number): boolean {
+  const h = FLAG_H * grow;
+  let pairs = 0;
+  const allowed = Math.floor(places.length * 0.1);
+  for (let i = 0; i < places.length; i++) {
+    for (let j = i + 1; j < places.length; j++) {
+      const w = ((flagWidth(places[i]) + flagWidth(places[j])) / 2) * grow;
+      if (Math.abs(places[i].x - places[j].x) < w && Math.abs(places[i].y - places[j].y) < h) {
+        if (++pairs > allowed) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Lifts flags that would cover others, the lower ones staying put, so each can be read. */
+function unstack(places: CompanyPlace[]): CompanyPlace[] {
+  const done: CompanyPlace[] = [];
+  for (const p of [...places].sort((a, b) => b.y - a.y)) {
+    for (let tries = 0; tries < 12; tries++) {
+      const over = done.find(
+        (q) => Math.abs(q.x - p.x) < (flagWidth(p) + flagWidth(q)) / 2 && Math.abs(q.y - p.y) < FLAG_H + 2,
+      );
+      if (over === undefined) break;
+      p.y = over.y - FLAG_H - 3;
+    }
+    done.push(p);
+  }
+  return places;
 }

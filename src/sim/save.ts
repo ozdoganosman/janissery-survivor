@@ -1,10 +1,11 @@
 import type { Balance, BuildingKind, TaxRate, UnitKind } from './balance';
-import { FORMATION_KINDS, TAX_RATES, UNIT_KINDS } from './balance';
+import { ECHELON_LEVELS, FORMATION_KINDS, TAX_RATES, UNIT_KINDS } from './balance';
 import { refitBuilding, type Building, type Work } from './buildings';
 import type { Speed } from './calendar';
 import { createCity, type CityState } from './city';
 import type { CityDef } from './city-def';
 import { removeField } from './countryside';
+import { organize, type Echelon } from './echelons';
 import { updateStats, type OrderState } from './economy';
 import type { FieldPost } from './field';
 import { replayGrowth } from './growth';
@@ -79,7 +80,7 @@ export interface SaveGame {
   expansion: { built: number; work: { days: number; daysLeft: number } | null };
   streetsLaid: number;
   /** The companies under arms. Older saves have none. */
-  army?: { units: SavedUnit[]; nextId: number };
+  army?: { units: SavedUnit[]; nextId: number; echelons?: Echelon[]; nextEchelon?: number };
 }
 
 export interface SavedUnit {
@@ -89,6 +90,8 @@ export interface SavedUnit {
   drill: { days: number; daysLeft: number } | null;
   /** Where it stands out of the barracks. Older saves have none. */
   field?: FieldPost | null;
+  /** The tugay it serves in. Older saves have none; the army is organized on loading. */
+  tugay?: number | null;
 }
 
 export function saveGame(city: CityState): SaveGame {
@@ -132,6 +135,8 @@ export function saveGame(city: CityState): SaveGame {
         field: u.field === null ? null : { ...u.field },
       })),
       nextId: city.army.nextId,
+      echelons: city.army.echelons.map((e) => ({ ...e })),
+      nextEchelon: city.army.nextEchelon,
     },
   };
 }
@@ -200,8 +205,24 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
       men: u.men,
       drill: u.drill === null ? null : { ...u.drill },
       field: f !== null && fieldOk ? { ...f } : null,
+      tugay: finite(u.tugay) ? u.tugay : null,
     });
   }
+  for (const e of s.army?.echelons ?? []) {
+    if (!finite(e.id) || !finite(e.no) || !ECHELON_LEVELS.includes(e.level)) continue;
+    city.army.echelons.push({
+      id: e.id,
+      level: e.level,
+      no: e.no,
+      parent: finite(e.parent) ? e.parent : null,
+    });
+  }
+  city.army.nextEchelon = city.army.echelons.reduce(
+    (n, e) => Math.max(n, e.id + 1),
+    finite(s.army?.nextEchelon) ? s.army.nextEchelon : 1,
+  );
+  // Links to echelons that are not there are dropped, and taburs without one find one.
+  organize(city);
   city.army.nextId = s.army?.nextId ?? city.army.units.reduce((n, u) => Math.max(n, u.id + 1), 1);
   const keep = new Set(s.fields);
   for (const id of [...city.fields.keys()]) if (!keep.has(id)) removeField(city, id);

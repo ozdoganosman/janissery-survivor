@@ -2,11 +2,12 @@ import { UNIT_KINDS, type UnitDef, type UnitKind } from './balance';
 import type { Building } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
+import { organize, type Echelon } from './echelons';
 import type { FieldPost } from './field';
 import { notify } from './notices';
 
 /**
- * The city's soldiers. The barracks raises them a company (bölük) at a time from the
+ * The city's soldiers. The barracks raises them a company (a tabur) at a time from the
  * townspeople: each company costs akçe to arm, drills for some months, and is paid every
  * month after. The men live in the barracks, so the barracks' size bounds the army, and
  * the town can spare only so many of its people. Soldiers still eat from the city's bread.
@@ -20,17 +21,22 @@ export interface Unit {
   drill: { days: number; daysLeft: number } | null;
   /** Where it stands out in the field; null while it is in the barracks. */
   field: FieldPost | null;
+  /** The tugay it serves in (see `echelons`). */
+  tugay: number | null;
 }
 
 export interface Army {
   units: Unit[];
   nextId: number;
+  /** Tugays, kolordus and ordus. */
+  echelons: Echelon[];
+  nextEchelon: number;
 }
 
 const fmt = (n: number): string => Math.round(n).toLocaleString('tr-TR');
 
 export function createArmy(): Army {
-  return { units: [], nextId: 1 };
+  return { units: [], nextId: 1, echelons: [], nextEchelon: 1 };
 }
 
 /** The city's barracks, if it has one. */
@@ -105,9 +111,11 @@ export function recruit(city: CityState, kind: UnitKind): Unit | null {
     men: def.men,
     drill: { days, daysLeft: days },
     field: null,
+    tugay: null,
   };
   city.army.units.push(unit);
   city.revision.army++;
+  organize(city);
   return unit;
 }
 
@@ -140,9 +148,10 @@ export function disband(city: CityState, id: number, why?: string): boolean {
   const [u] = city.army.units.splice(k, 1);
   city.population += u.men;
   city.revision.army++;
+  organize(city);
   if (why !== undefined) notify(city, why, 'bad');
   else
-    notify(city, `${city.balance.army.units[u.kind].name} bölüğü terhis edildi; ${u.men} kişi evine döndü.`);
+    notify(city, `${city.balance.army.units[u.kind].name} taburu terhis edildi; ${u.men} kişi evine döndü.`);
   return true;
 }
 
@@ -161,6 +170,7 @@ export function disbandAll(city: CityState): void {
   const men = armyMen(city);
   city.population += men;
   city.army.units = [];
+  city.army.echelons = [];
   city.revision.army++;
   notify(city, `Kışla yıkıldı; ${fmt(men)} asker evine döndü.`, 'bad');
 }
@@ -186,7 +196,7 @@ export function armyDay(city: CityState): void {
   city.revision.army++;
   for (const [kind, { units, men }] of done) {
     const name = city.balance.army.units[kind].name;
-    const who = units === 1 ? `${name} bölüğü` : `${units} ${name} bölüğü`;
+    const who = units === 1 ? `${name} taburu` : `${units} ${name} taburu`;
     notify(city, `${who} talimini bitirdi (${fmt(men)} er).`, 'good', 'works');
   }
 }

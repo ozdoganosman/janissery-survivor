@@ -45,8 +45,8 @@ yapıları şehrin **istediği yerine** koyar. Yol, imar, tarla ve mal zinciri y
   yükseltmek ya da yıkıp yerine başkasını kurmaktır.
 - **Her yapının aylık bakımı vardır** ve seviyeyle artar. Akçe eksiye düşerse borç
   huzuru bozar; yapılar kapanmaz, ama ulufesi ödenmeyen ordu dağılır: hazine ay sonunda
-  eksideyse en pahalı bölük, ay açık veriyorsa açık kapanana dek en pahalıdan başlayarak
-  bölükler evine döner. Emir borcu kapatmanın yolunu bulmalıdır.
+  eksideyse en pahalı tabur, ay açık veriyorsa açık kapanana dek en pahalıdan başlayarak
+  taburlar evine döner. Emir borcu kapatmanın yolunu bulmalıdır.
 - **Gelecek surların hattı boş tutulur.** Henüz örülmemiş sur halkalarının geçeceği
   şeride yapı kurulamaz (önizleme "Sur hattı" der); böylece yeni sur ne bir yapıyı yutar
   ne de onun için boşluk bırakır. Sur dışına kurulan yapılar (kervansaray, kışla) bütün
@@ -174,7 +174,7 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   - **III, ribat (10.000 asker):** yüksek sur ve sık kuleler, iki yuvarlak kuleli taç
     kapı, dört kurşun kubbeli koğuş, üç ahır, iki kubbeli cebehane, minareli mescit,
     yedi hedef. Yerleşke eğimli arazide toprağı izler.
-- **Birlikler bölük bölük toplanır.** Bölük büyüklükleri dönemin gerçeğine yakındır:
+- **Birlikler tabur tabur toplanır.** Tabur büyüklükleri dönemin gerçeğine yakındır:
 
   | Birlik              | Er  | Bedel | Talim | Ulufe/ay | Kışla | Yakın / Savunma / Ok / Hız / Moral |
   | ------------------- | --- | ----- | ----- | -------- | ----- | ---------------------------------- |
@@ -183,26 +183,26 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   | Türkmen atlı okçusu | 100 | 2.500 | 3 ay  | 90       | II    | 4 / 4 / 7 / 9 / 6                  |
   | Gulam süvarisi      | 50  | 3.000 | 4 ay  | 110      | III   | 9 / 9 / 0 / 7 / 9                  |
 
-  Selçuklu ordusunda asker 50'lik ve 100'lük (hayl) birlikler hâlinde sayılırdı; bölükler
+  Selçuklu ordusunda asker 50'lik ve 100'lük (hayl) birlikler hâlinde sayılırdı; taburlar
   bu yüzden 100 er, sultanın zırhlı gulamları 50'şer. Kışlanın panelinden bir türden bir,
-  beş ya da on bölük birden toplanır; panel bölükleri türe göre sayar (kaç bölük, kaç er,
-  kaçı talimde) ve **Terhis** o türün en son toplanan bölüğünü evine gönderir.
+  beş ya da on tabur birden toplanır; panel taburları türe göre sayar (kaç tabur, kaç er,
+  kaçı talimde) ve **Terhis** o türün en son toplanan taburunu evine gönderir.
 
   Savaş değerleri şimdilik yalnız veridedir; savaş katmanı onları kullanacak.
 
-- **Askerler halktan gelir.** Bölük toplanınca o kadar kişi nüfustan çıkar ve kışlaya
-  girer; terhis edilince evine döner. Kışla yıkılırsa bütün bölükler terhis olur.
+- **Askerler halktan gelir.** Tabur toplanınca o kadar kişi nüfustan çıkar ve kışlaya
+  girer; terhis edilince evine döner. Kışla yıkılırsa bütün taburlar terhis olur.
 - **Sınırlar:** ordu kışlanın yerini (2.000 / 5.000 / 10.000) ve halkın verebileceğini
   (herkesin, askerler dahil, %15'i) aşamaz.
-- **Ordu şehre yüktür:** her bölük her ay ulufe alır (Hesap'ta ayrı satır), askerler
+- **Ordu şehre yüktür:** her tabur her ay ulufe alır (Hesap'ta ayrı satır), askerler
   şehrin erzağından yer, vergi vermez. Şehir düzeyi hesaplanırken garnizon şehrin
   nüfusuna sayılır.
 - **Askerler kışlada tek tek görünür.** Her er bir figürdür: on bin kişilik ordu on bin
-  figür. Bölükler meydanda türe göre bir arada, sık düzende (yayada adam başına ≈1,25 m,
+  figür. Taburlar meydanda türe göre bir arada, sık düzende (yayada adam başına ≈1,25 m,
   atlıda ≈1,6 m) saf saf durur; meydana sığmazlarsa saflar sıklaşır; talimdeki mızrakçılar sıra sıra hamle yapar,
   okçular hedeflere ok atar ve oklar havada uçar, atlılar meydanın çevresinde tur atar
   (Türkmenler atın üstünden yana ok atar, gulamlar kargıyı indirip hücum eder). Hazır
-  bölükler saflarında bekler.
+  taburlar saflarında bekler.
 - **Savaşa hazır figürler:** her asker gövde, baş, miğfer ya da börk, iki kol, iki
   bacak, silah (mızrak, kılıç, yay, flamalı kargı), kalkan ve sadaktan oluşan eklemli
   bir düzenektir; at da gövde, boyun, dört bacak ve kuyruktan. Hareketler: bekleme,
@@ -212,40 +212,69 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
 - **On bin figür akıcı kalsın diye:** aynı anda aynı harekette olan askerler duruşu
   paylaşır (bir duruş bir kez hesaplanır, her asker yalnız döndürülüp yerine konur);
   talimdekiler saniyede otuz kez, hazır bekleyenler dilim dilim birkaç kez güncellenir ve
-  ekran kartına yalnız değişen kısım gider. Aynı anda en çok üç atlı bölüğü tur atar,
+  ekran kartına yalnız değişen kısım gider. Aynı anda en çok üç atlı taburu tur atar,
   gerisi sırasını bekler. Kamera uzaklaşınca ok, sadak, flama ve kuyruk çizilmez.
 - Kamera askerleri seçebilmek için eskisinden daha yakına iner.
-- **Ordu komutası (Ordu aracı, O):** bölükler tek tek ya da topluca seçilip yürütülür.
-  - **Seçmek:** bir askere tıklamak bölüğünü seçer; Shift ile eklenir ya da çıkarılır; aynı
-    bölüğe çift tık o türün bütün bölüklerini seçer; haritada sürüklenen kutu içindeki
-    bütün bölükleri seçer. Panelde "Hepsini seç", türe göre seçim ve "Seçimi bırak"
-    vardır; kışlanın panelindeki "Orduyu seç ve komuta et" bütün orduyu seçer.
-  - **Yürümek:** sağ tık (telefonda boş yere dokunmak) seçili bölükleri oraya gönderir.
-    Bölükler şimdiki sıralarını bozmadan soldan sağa yan yana, geldikleri yöne bakarak
+- **Ordu komutası (Ordu aracı, O):** taburlar tek tek ya da topluca seçilip yürütülür.
+  - **Kademeler (tabur → tugay → kolordu → ordu):** ordu büyüdükçe yüzlerce taburu tek tek
+    yönetmek zorlaşır; bu yüzden taburlar kademelere bölünür. **Dört tabur bir tugay, iki
+    tugay (8 tabur) bir kolordu, iki kolordu (16 tabur) bir ordu** eder (sayılar
+    `balance.json`'da). Yeni toplanan tabur kendi türünden, yeri olan bir tugaya girer; yoksa
+    yeni bir tugay kurulur ve o da yeri olan bir kolorduya (önce kendi türünden olanına),
+    kolordu da bir orduya katılır. Boşalan kademe (terhis, dağılma) kaldırılır; her kademe
+    numarasıyla anılır (3. Tugay, 2. Kolordu, 1. Ordu). Oyuncu seçili taburlardan kendi
+    kademesini kurabilir: **Tugay kur** seçili taburları (en çok 4) yeni bir tugaya
+    toplar; **Kolordu kur** seçili taburların tugaylarını (en çok 2), **Ordu kur**
+    kolordularını (en çok 2) yeni bir kademede birleştirir. Yeni kademe, parçalarının çoğunun
+    geldiği üst kademede yer varsa orada kalır. Kademeler kayda girer; eski kayıtlar
+    yüklenirken ordu kendiliğinden düzenlenir.
+  - **Seçmek:** bir askere tıklamak taburunu seçer; Shift ile eklenir ya da çıkarılır; aynı
+    tabura çift tık taburun bütün tugayını seçer; **U** (ya da paneldeki "▲ Üst birlik")
+    seçimi bir üst kademeye genişletir: tabur → tugay → kolordu → ordu. Haritada sürüklenen
+    kutu içindeki bütün taburları seçer. Panelde "Hepsini seç", türe göre seçim ve "Seçimi
+    bırak" vardır; kışlanın panelindeki "Orduyu seç ve komuta et" bütün orduyu seçer.
+  - **Birlikler ağacı:** panelde ordular, altlarında kolordular, tugaylar ve taburlar bir
+    ağaç olarak durur (▸ ile açılır). Bir satıra tıklamak o kademenin bütün taburlarını
+    seçer (Shift ile eklenir ya da çıkarılır); tamamı seçili kademe yaldızlı, bir kısmı
+    seçili kademe kesik çizgiyle görünür ve kendiliğinden açılır. Seçim tam bir kademeyse
+    başlık onun adını yazar ("2. Kolordu · 8 tabur").
+  - **Yürümek:** sağ tık (telefonda boş yere dokunmak) seçili taburları oraya gönderir.
+    Taburlar şimdiki sıralarını bozmadan soldan sağa yan yana, geldikleri yöne bakarak
     dizilir; ordu kabaca eninin yarısı derinlikte bir gövde kurar (en çok 24 karo geniş,
-    arta kalan bölükler arkada yeni saflar). Her bölüğün yeri açık mı diye bakılır: surun,
+    arta kalan taburlar arkada yeni saflar). Her taburun yeri açık mı diye bakılır: surun,
     suyun, evlerin ve yapıların üstüne düşen, ya da gidilen noktadan ancak uzun bir
-    dolambaçla (sur ötesi gibi) varılan yer kullanılmaz; bölük en yakın açık yeri alır.
+    dolambaçla (sur ötesi gibi) varılan yer kullanılmaz; tabur en yakın açık yeri alır.
   - **Cephe çizmek (Total War gibi):** seçiliyken sağ tuşa basılı tutup sürüklemek ordunun
-    ön safını çizer: bölükler çizginin boyunca soldan sağa dizilir, çizgiye dik ve onu
+    ön safını çizer: taburlar çizginin boyunca soldan sağa dizilir, çizgiye dik ve onu
     soldan sağa çizene göre ileri bakar. Çizginin boyu cephenin genişliğidir: sığan kadar
-    bölük ön safta durur, kalanlar arkada yeni saflar kurar; çizgi ordudan genişse bölükler
+    tabur ön safta durur, kalanlar arkada yeni saflar kurar; çizgi ordudan genişse taburlar
     aralarını açarak ona yayılır (en çok 3 karo ara, en çok 60 karo cephe). Sürüklerken
-    bölüklerin duracağı yerler soluk çerçevelerle görünür; tuş bırakılınca emir verilir.
-  - **Yürüyüş:** bölük düzenini bozmadan yürür: önce yola döner (bu sırada yeni düzeninin
+    taburların duracağı yerler mavi çerçevelerle görünür; her çerçevenin önünde kalın bir
+    cephe çizgisi ve bir ok taburun bakacağı yönü, cephenin ortasındaki büyük ok da bütün
+    ordunun bakacağı yönü gösterir; tuş bırakılınca emir verilir.
+  - **Yürüyüş:** tabur düzenini bozmadan yürür: önce yola döner (bu sırada yeni düzeninin
     biçimini alır), sonra saflarıyla yolu izler, yol döndükçe yavaşça döner, varınca
     emredilen yöne döner. Yol sokaklardan ve açık araziden geçer: evlerin, yapıların ve
     anıtların içinden geçmez, surdan yalnız kapıdan, çaydan yalnız köprüden geçer; dar
-    yerlerden kaçınıp açık araziyi yeğler. Birlikte gönderilen bölükler en yavaşlarının
+    yerlerden kaçınıp açık araziyi yeğler. Birlikte gönderilen taburlar en yavaşlarının
     adımıyla yürür, birbirinden kopmaz. Kışlanın kapısından birer birer, kapıya en yakın
-    olan önce çıkar. Suya yürüme emri verilemez; talimdeki bölük kışladan çıkamaz.
-  - **Emirler:** Dur (H), Kışlaya dön (K), sola ve sağa 45° dönüş (bölükler ortalarının
+    olan önce çıkar. Suya yürüme emri verilemez; talimdeki tabur kışladan çıkamaz.
+  - **Emirler:** Dur (H), Kışlaya dön (K), sola ve sağa 45° dönüş (taburlar ortalarının
     çevresinde döner), düzen: **Saf** (20 yan yana, geniş cephe), **Kare** (10×10), **Kol**
-    (4 yan yana, yürüyüş düzeni). Sahadaki her bölüğün üstünde türünü ve er sayısını
-    gösteren bir sancak durur; sancağa tıklamak bölüğü seçer.
-  - Seçili bölüklerin çevresinde yaldızlı bir çerçeve, yürüyenlerin varacağı yerde soluk
-    bir çerçeve görünür. Bölüğün nerede durduğu kayda girer; yürüyüş yalnız görüntüdür.
-- **Kışla dolup taşmaz:** bölükler önce talim meydanına, sonra ok menzili ve ağılın açık
+    (4 yan yana, yürüyüş düzeni).
+  - **Kademe düzeni:** birlikte yürüyen taburlar kademe kademe sıralanır: aynı tugayın
+    taburları yan yana durur, tugaylar arasında daha geniş bir ara kalır ve bir saf
+    tugayın ortasında bölünmektense tugaylar arasında biter.
+  - **Sancaklar:** sahadaki her taburun üstünde türünü ve er sayısını gösteren bir sancak
+    durur. Sancaklar birbirinin üstüne binecek kadar sıklaşınca (kamera uzaklaşınca ya da
+    ordu kalabalıklaşınca) tabur sancakları yerini tugay sancaklarına, onlar da kolordu ve
+    ordu sancaklarına bırakır; yaklaşınca yeniden açılırlar. Kademe sancağı taburlarının
+    ortasında durur, adını ve er sayısını yazar, üst kademeninki daha büyüktür; sancağa
+    tıklamak taburu ya da kademenin bütün taburlarını seçer.
+  - Seçili taburların çevresinde yaldızlı bir çerçeve, yürüyenlerin varacağı yerde soluk
+    bir çerçeve görünür; her çerçevenin önündeki ok (seçilide yaldızlı, varılacak yerde
+    kırmızı) taburun baktığı ya da bakacağı yönü gösterir. Taburun nerede durduğu kayda girer; yürüyüş yalnız görüntüdür.
+- **Kışla dolup taşmaz:** taburlar önce talim meydanına, sonra ok menzili ve ağılın açık
   yerine dizilir; sığmazlarsa saflar sıklaşır, yine de sığmazsa meydanın içinde
   kalabalıklaşırlar, kapıdan dışarı taşmazlar. Eski (14×10 kışlalı) kayıtlar yüklenirken
   kışla, yeri elveriyorsa yeni boyuna (26×22) genişletilir.
@@ -401,19 +430,20 @@ Numaralar oyunun baştan beri süren sırasıdır. 1–5 arası ayrıntılı bir
 sonra daha sade bir çekirdeğe çevrildi, görüntü, şehir ve halk o yoldan kaldı. O yolun
 kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 
-| #   | Aşama                                                                                                                                                                               | Durum |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                                                                    | ✅    |
-| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                                                                             | ↺     |
-| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                                                                               | ↺     |
-| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                                                                        | ↺     |
-| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                                                                      | ↺     |
-| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                                                                  | ✅    |
-| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                                                                  | ✅    |
-| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi                                                 | ✅    |
-| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                                                                             |       |
-| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama                                                 | ✅    |
-| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi                                                 | ✅    |
-| 8c  | **Ordu komutası:** bölükleri tek tek ya da kutuyla seçme, sağ tıkla yürütme (düzen bozmadan, sokaklardan, kapıdan; sura ve evlere taşmadan dizilme), dur, dön, düzen, kışlaya dönüş | ✅    |
-| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                                                               |       |
-| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                                                    |       |
+| #   | Aşama                                                                                                                                                                                                                                   | Durum |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                                                                                                                        | ✅    |
+| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                                                                                                                                 | ↺     |
+| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                                                                                                                                   | ↺     |
+| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                                                                                                                            | ↺     |
+| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                                                                                                                          | ↺     |
+| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                                                                                                                      | ✅    |
+| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                                                                                                                      | ✅    |
+| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi                                                                                                     | ✅    |
+| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                                                                                                                                 |       |
+| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi taburlar, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama                                                                                                     | ✅    |
+| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi                                                                                                     | ✅    |
+| 8c  | **Ordu komutası:** taburları tek tek ya da kutuyla seçme, sağ tıkla yürütme (düzen bozmadan, sokaklardan, kapıdan; sura ve evlere taşmadan dizilme), dur, dön, düzen, kışlaya dönüş                                                     | ✅    |
+| 8d  | **Kademeler:** taburlar dörderli tugaylara, tugaylar kolordulara, kolordular ordulara kendiliğinden toplanır; ağaçtan ve U ile kademe seçme, seçiliden kademe kurma, iç içe geçen sancaklar, kademe kademe dizilme, dizerken yön okları | ✅    |
+| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                                                                                                                   |       |
+| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                                                                                                        |       |

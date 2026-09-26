@@ -373,6 +373,26 @@
   },
   "army": {
     "levy": 0.15,
+    "echelons": {
+      "tugay": {
+        "name": "Tugay",
+        "short": "Tugay",
+        "holds": 4,
+        "hint": "Dört tabur: aynı türden taburlar bir sancak altında"
+      },
+      "kolordu": {
+        "name": "Kolordu",
+        "short": "Kolordu",
+        "holds": 2,
+        "hint": "İki tugay, sekiz tabur"
+      },
+      "ordu": {
+        "name": "Ordu",
+        "short": "Ordu",
+        "holds": 2,
+        "hint": "İki kolordu, on altı tabur"
+      }
+    },
     "formations": {
       "saf": {
         "name": "Saf",

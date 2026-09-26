@@ -209,6 +209,14 @@ test('the city draws and grows; buildings go up where they are put, rise a level
       page.evaluate((h) => Math.abs(window.__game!.city.army.units[0].field!.heading - h) > 0.2, sent),
     )
     .toBe(true);
+  // The tabur serves in a tugay, a kolordu and an ordu: choosing the ordu in the panel's
+  // chain of command chooses its taburs.
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(0);
+  await expect(page.locator('.orders .tree .row.ordu')).toHaveCount(1);
+  await page.locator('.orders .tree .row.ordu .pick').click();
+  expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(1);
+  await expect(page.locator('.companies .company').first()).toBeVisible();
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
