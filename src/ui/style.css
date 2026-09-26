@@ -765,8 +765,24 @@ body {
   }
 }
 
-.buildbar .items .btn.poor {
-  opacity: 0.55;
+/* A card that cannot be begun now fades, all but the line saying what stops it. */
+.buildbar .items .btn.poor > b,
+.buildbar .items .btn.poor > small:not(.why) {
+  opacity: 0.5;
+}
+
+.buildbar .btn small.why {
+  color: var(--red);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.buildbar .btn.on small.why {
+  color: #ffc2ae;
+}
+
+.buildbar .btn small.why:empty {
+  display: none;
 }
 
 /* Badges over the buildings: the level, and a gold arrow when it can be raised now. */

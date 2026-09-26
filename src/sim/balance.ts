@@ -105,6 +105,11 @@ export interface Balance {
   debt: { order: number };
   product: { base: number; price: number; sellLot: number };
   levels: CityLevelDef[];
+  /**
+   * A rank once reached is kept until the people fall this share below its threshold, so
+   * a city hovering at the line does not gain and lose it month after month.
+   */
+  rankSlack: number;
   demolishRefund: number;
   maxSlope: number;
   buildings: Record<BuildingKind, BuildingDef>;

@@ -221,25 +221,35 @@ export function proposeBuilding(
     problem = `${kindName(city, kind)} yalnız ocak yerine kurulur`;
   }
   if (problem === undefined && def.outside === true && inside > 0) problem = 'Sur dışına kurulur';
-  if (problem === undefined && !free) {
-    const k = kindCount(city, kind);
-    const s = slots(city);
-    if (k.count >= k.max) problem = `En çok ${k.max} ${kindName(city, kind)} kurulabilir`;
-    else if (s.used >= s.max) problem = `Yapı hakkı dolu (${s.used}/${s.max}); şehir büyüyünce artar`;
-  }
-  if (problem === undefined && !free) problem = fundsProblem(city, first.cost, first.material);
-  if (problem === undefined && !free) {
-    const b = builders(city);
-    if (b.busy >= b.max) problem = `Bütün ustalar işte (${b.busy}/${b.max})`;
-  }
+  if (problem === undefined && !free) problem = startBlock(city, kind)?.text;
   if (problem !== undefined) p.problem = problem;
   return p;
 }
 
-function fundsProblem(city: CityState, cost: number, material: number): string | undefined {
-  if (city.treasury < cost) return 'Akçe yetmiyor';
-  if (city.product < material) return `${city.def.resource.good} yetmiyor`;
-  return undefined;
+/** Why a new building of a kind cannot be begun anywhere just now. */
+export interface StartBlock {
+  by: 'kind' | 'slots' | 'akce' | 'urun' | 'builders';
+  text: string;
+}
+
+/**
+ * What stops a new building of `kind` being begun, wherever it would stand: the most of its
+ * kind, the city's room for buildings, the akçe and the product, and free builders. Null
+ * when only the spot is left to choose.
+ */
+export function startBlock(city: CityState, kind: BuildingKind): StartBlock | null {
+  const first = city.balance.buildings[kind].levels[0];
+  const k = kindCount(city, kind);
+  if (k.count >= k.max) return { by: 'kind', text: `En çok ${k.max} ${kindName(city, kind)} kurulabilir` };
+  const s = slots(city);
+  if (s.used >= s.max) {
+    return { by: 'slots', text: `Yapı hakkı dolu (${s.used}/${s.max}); şehir büyüyünce artar` };
+  }
+  if (city.treasury < first.cost) return { by: 'akce', text: 'Akçe yetmiyor' };
+  if (city.product < first.material) return { by: 'urun', text: `${city.def.resource.good} yetmiyor` };
+  const b = builders(city);
+  if (b.busy >= b.max) return { by: 'builders', text: `Bütün ustalar işte (${b.busy}/${b.max})` };
+  return null;
 }
 
 /** Pays for the building and sets the work going. Null when the proposal has a problem. */

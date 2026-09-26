@@ -154,6 +154,8 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
   city.population = s.population!;
   city.policy.tax = s.tax;
   city.nextBuildingId = s.nextBuildingId!;
+  // The rank the city held carries over, so it is not lost to a thin month on loading.
+  city.stats.level = Math.max(0, Math.min(balance.levels.length - 1, s.announced?.level ?? 0));
   updateStats(city);
   if (s.last !== undefined) city.stats.last = { ...s.last };
   city.announced = s.announced !== undefined ? { ...s.announced } : city.announced;

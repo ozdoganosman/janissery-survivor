@@ -1,10 +1,10 @@
 import type { Balance, BuildingKind, TaxRate } from '../sim/balance';
 import { BUILDING_KINDS, TAX_RATES } from '../sim/balance';
-import { kindName, slots } from '../sim/buildings';
+import { builders, kindCount, kindName, slots, startBlock } from '../sim/buildings';
 import type { ExpansionOffer } from '../sim/growth';
 import type { Speed } from '../sim/calendar';
 import type { CityState, Notice } from '../sim/city';
-import { ORDER_NAMES, orderState } from '../sim/economy';
+import { ORDER_NAMES, orderState, rankFloor } from '../sim/economy';
 import { effectText, priceText, type BuildingSummary, type Readiness, type TileInfo } from '../sim/inspect';
 
 export type Tool = 'incele' | 'insa' | 'yik';
@@ -108,6 +108,8 @@ export class Hud {
   private readonly orderName: HTMLElement;
   private readonly rank: HTMLElement;
   private readonly works: HTMLElement;
+  private readonly crews: HTMLElement;
+  private readonly crewsNote: HTMLElement;
   private readonly food: HTMLElement;
   private readonly foodShare: HTMLElement;
   private readonly accounts: HTMLElement;
@@ -194,7 +196,14 @@ export class Hud {
     ledger.appendChild(order);
     [this.food, this.foodShare] = row('Erzak');
     this.food.title = 'Tarlaların ve ambarların doyurabileceği nüfus';
-    [this.rank, this.works] = row('Şehir');
+    const [rank, works, rankRow] = row('Şehir');
+    this.rank = rank;
+    this.works = works;
+    rankRow.title = 'Yapı hakkı: şehirde en çok kaç yapı olabileceği (kurulan ve süren)';
+    const [crews, crewsNote, crewsRow] = row('İnşaat');
+    this.crews = crews;
+    this.crewsNote = crewsNote;
+    crewsRow.title = 'Ustalar: aynı anda kaç inşaat ya da yükseltme yürüyebileceği';
 
     const tax = el('div', 'policy', '<span class="label">Vergi</span>');
     for (const rate of TAX_RATES) {
@@ -313,7 +322,7 @@ export class Hud {
         'button',
         'btn',
         `<b>${kindName(city, kind)}</b><small>${priceText(city, first.cost, first.material)} · ${first.months} ay</small>` +
-          `<small>${effectText(city, first)}</small>`,
+          `<small>${effectText(city, first)}</small><small class="why"></small>`,
       );
       b.title = def.hint;
       b.dataset.kind = kind;
@@ -426,6 +435,11 @@ export class Hud {
     const room = slots(city);
     this.works.textContent = `yapı ${room.used}/${room.max}`;
     this.works.classList.toggle('bad', room.used >= room.max);
+    const crew = builders(city);
+    this.crews.textContent = `${crew.busy}/${crew.max}`;
+    this.crewsNote.textContent =
+      crew.busy >= crew.max ? 'ustalar dolu' : `${crew.max - crew.busy} usta boşta`;
+    this.crewsNote.classList.toggle('bad', crew.busy >= crew.max);
     this.food.textContent = `${fmt(s.food)} kişi`;
     const full = city.population / Math.max(1, s.food);
     this.foodShare.textContent = full > 1 ? 'kıtlık' : `%${Math.round(full * 100)} dolu`;
@@ -464,19 +478,50 @@ export class Hud {
       (next !== undefined
         ? `<span class="wide dim">${next.name}: ${fmt(next.population)} nüfusta</span>`
         : '') +
+      (s.level > 0
+        ? `<span class="wide dim">${city.balance.levels[s.level].name} düzeyi nüfus ${fmt(rankFloor(city))} altına inerse gider</span>`
+        : '') +
       '</div>';
   }
 
-  /** Greys the build cards the treasury or the store cannot pay for. */
+  /**
+   * Greys the build cards that cannot be begun just now and says on each what stops it:
+   * the akçe or the product short (with how much is in hand), no builder free, no room.
+   */
   private refreshAffordable(): void {
     if (this.buildBar.hidden) return;
     const city = this.city;
-    const key = `${Math.round(city.treasury)}|${Math.round(city.product)}`;
+    const crew = builders(city);
+    const room = slots(city);
+    const key = [
+      Math.round(city.treasury),
+      Math.round(city.product),
+      crew.busy,
+      crew.max,
+      room.used,
+      room.max,
+    ].join('|');
     if (key === this.affordKey) return;
     this.affordKey = key;
+    const good = city.def.resource.good.toLocaleLowerCase('tr-TR');
     for (const [kind, b] of this.buildButtons) {
       const first = city.balance.buildings[kind].levels[0];
-      b.classList.toggle('poor', city.treasury < first.cost || city.product < first.material);
+      const block = startBlock(city, kind);
+      b.classList.toggle('poor', block !== null);
+      const why = b.querySelector('.why') as HTMLElement;
+      why.textContent =
+        block === null
+          ? ''
+          : block.by === 'akce'
+            ? `akçe ${fmt(city.treasury)}/${fmt(first.cost)}`
+            : block.by === 'urun'
+              ? `${good} ${fmt(city.product)}/${fmt(first.material)}`
+              : block.by === 'builders'
+                ? `ustalar işte ${crew.busy}/${crew.max}`
+                : block.by === 'slots'
+                  ? `yapı hakkı dolu ${room.used}/${room.max}`
+                  : `en çok ${kindCount(city, kind).max}`;
+      b.title = block === null ? city.balance.buildings[kind].hint : block.text;
     }
   }
 

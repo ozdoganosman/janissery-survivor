@@ -100,6 +100,10 @@ Defterdeki **Hesap** bu kalemlerin her birini ayrı gösterir.
 | Büyük Şehir | 6.000+  | 3                       | 3                | 8          | 9           |
 | Payitaht    | 10.000+ | 3                       | 4                | 12         | 11          |
 
+Bir düzeye varan şehir onu, nüfusu eşiğin %10 altına inene dek korur (Büyük Şehir 5.400,
+Payitaht 9.000). Kıtlıkta birkaç aile eksilen şehir her ay düzey kazanıp kaybetmez;
+ustaları, yapı hakkı ve yapı seviyeleri birden daralmaz. Hesap dökümü sınırı yazar.
+
 ### Yapılar
 
 Değerler sırasıyla 1., 2. ve 3. seviye içindir; bedeller akçe + ürün, bakım aylık akçe.
@@ -155,6 +159,12 @@ Oyuncu hangi yapının ne beklediğini haritada ve tek bir listede görür.
   bir rozet durur. Yükseltilebilir yapınınki lacivert zeminde altın ▲ ile nabız atar;
   akçe ya da taş bekleyeninki soluk ▲ taşır; inşaattakinde ilerleme çubuğu vardır.
   Rozete tıklamak kamerayı yapıya götürür ve panelini açar.
+- **İnşa kartları:** şu an başlanamayan yapının kartı soluklaşır ve neyin eksik olduğunu
+  kırmızıyla yazar: `taş 30/50`, `akçe 700/900`, `ustalar işte 2/2`, `yapı hakkı dolu 5/5`,
+  `en çok 2`. Yer seçmeden önce görülür.
+- **Defter:** Şehir satırında yapı hakkı (`yapı 3/5`), İnşaat satırında aynı anda yürüyen
+  inşaat ve yükseltmeler (`1/2 · 1 usta boşta`). İkisi ayrı sınırdır: yapı hakkı şehirde
+  kaç yapı olabileceğini, ustalar kaçının aynı anda yapılabileceğini söyler.
 - **Yapılar listesi** (araç çubuğu ya da **L**): bütün yapılar, yükseltilebilir olanlar
   önde; her satırda seviye, etki, sonraki basamağın bedeli ya da neyi beklediği. En üstte
   sıradaki sur halkasının kartı durur. Düğmedeki sayı, şu an başlatılabilecek iş

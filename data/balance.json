@@ -69,6 +69,7 @@
       "slots": 12
     }
   ],
+  "rankSlack": 0.1,
   "demolishRefund": 0.25,
   "maxSlope": 0.45,
   "buildings": {

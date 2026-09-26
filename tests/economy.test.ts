@@ -4,6 +4,7 @@ import {
   buildBuilding,
   demolishBuilding,
   proposeBuilding,
+  startBlock,
   upgradeBuilding,
   upgradeOffer,
   type Building,
@@ -13,7 +14,8 @@ import { DAYS_PER_MONTH } from '../src/sim/calendar';
 import type { CityState } from '../src/sim/city';
 import { orderState, sellProduct, simulateDays, updateStats } from '../src/sim/economy';
 import { housesWanted } from '../src/sim/housing';
-import { balance, newCity, siteFor } from './helpers';
+import { restoreGame, saveGame } from '../src/sim/save';
+import { balance, def, newCity, siteFor } from './helpers';
 
 const houses = (c: CityState): number => c.house.reduce((n, h) => n + (h > 0 ? 1 : 0), 0);
 
@@ -311,6 +313,48 @@ describe('the month', () => {
     nextMonth(c);
     expect(c.stats.level).toBe(1);
     expect(c.notices.some((n) => n.text.includes(balance.levels[1].name))).toBe(true);
+  });
+
+  it('keeps a rank it reached until the people fall well below it', () => {
+    const c = newCity();
+    const great = balance.levels[1].population;
+    c.population = great + 100;
+    updateStats(c);
+    expect(c.stats.level).toBe(1);
+    // A thin month just under the line does not cost the rank, nor does loading the game.
+    c.population = great * (1 - balance.rankSlack / 2);
+    updateStats(c);
+    expect(c.stats.level).toBe(1);
+    nextMonth(c);
+    const back = restoreGame(def, balance, JSON.parse(JSON.stringify(saveGame(c))));
+    expect(back.stats.level).toBe(1);
+    // Falling well below it does.
+    c.population = great * (1 - balance.rankSlack) - 50;
+    updateStats(c);
+    expect(c.stats.level).toBe(0);
+    // A city that never reached the rank does not get it for being near it.
+    const d = newCity();
+    d.population = great - 100;
+    updateStats(d);
+    expect(d.stats.level).toBe(0);
+  });
+
+  it('says what stops a new building before a spot is chosen', () => {
+    const c = newCity();
+    expect(startBlock(c, 'hamam')).toBeNull();
+    c.product = 0;
+    expect(startBlock(c, 'hamam')?.by).toBe('urun');
+    c.product = 1e4;
+    c.treasury = 0;
+    expect(startBlock(c, 'hamam')?.by).toBe('akce');
+    c.treasury = 1e5;
+    buildBuilding(c, siteFor(c, 'hamam', [6, 12]));
+    buildBuilding(c, siteFor(c, 'cami', [-8, -10]));
+    expect(startBlock(c, 'kisla')?.by).toBe('builders');
+    // The spot's own problems come first, then the same reason.
+    expect(proposeBuilding(c, 'kisla', c.grid.tileOf(40), c.grid.tileOf(-40)).problem).toBe(
+      startBlock(c, 'kisla')?.text,
+    );
   });
 
   it('lives the same history given the same choices', () => {

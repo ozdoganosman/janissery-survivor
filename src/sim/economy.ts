@@ -143,11 +143,29 @@ export function updateStats(city: CityState): void {
       city.population * growthRate * (state === 'huzurlu' ? b.order.calmGrowth : 1) * Math.min(1, room * 4);
   }
   s.works = builders(city).busy;
+  s.level = cityRank(city, s.level);
+}
+
+/**
+ * The city's rank: the highest its people reach. A rank it `held` is kept until the people
+ * fall well below it, so a famine that trims the city by a few families does not cost it.
+ */
+export function cityRank(city: CityState, held: number): number {
+  const { levels, rankSlack } = city.balance;
   let level = 0;
-  b.levels.forEach((l, k) => {
+  levels.forEach((l, k) => {
     if (city.population >= l.population) level = k;
   });
-  s.level = level;
+  for (let k = Math.min(held, levels.length - 1); k > level; k--) {
+    if (city.population >= levels[k].population * (1 - rankSlack)) return k;
+  }
+  return level;
+}
+
+/** Population below which the city loses the rank it holds; 0 for the lowest rank. */
+export function rankFloor(city: CityState): number {
+  const level = city.stats.level;
+  return level === 0 ? 0 : Math.ceil(city.balance.levels[level].population * (1 - city.balance.rankSlack));
 }
 
 /** The first day of a month: the month that ended pays, and the people come or go. */
