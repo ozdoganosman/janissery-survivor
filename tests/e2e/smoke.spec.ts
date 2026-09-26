@@ -66,6 +66,8 @@ test('the city draws, grows on zoned land, takes fields, a bazaar, layers and a 
   await expect(page.locator('.treasury .amount')).toHaveText('20.000');
   await expect(page.locator('#boot')).toBeHidden();
   expect(await page.evaluate(() => window.__game!.city.stats.population)).toBeGreaterThan(1000);
+  // The townspeople are out in the streets.
+  expect(await page.evaluate(() => window.__game!.world.people.count)).toBeGreaterThan(200);
 
   // Time moves at normal speed and stops when paused.
   const firstDate = await page.locator('.cartouche .date').textContent();

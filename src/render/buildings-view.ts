@@ -146,7 +146,7 @@ function archShapeOf(w: number, h: number): THREE.Shape {
 // ------------------------------------------------------------------ landmarks
 
 /** Angle that turns a landmark's front (+z) towards the nearest road tile. */
-function faceNearestRoad(city: CityState, l: Landmark): number {
+export function faceNearestRoad(city: CityState, l: Landmark): number {
   const { grid } = city;
   let best = Infinity;
   let angle = l.rot;

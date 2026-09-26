@@ -234,6 +234,13 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
   Yakınlaştıkça doğrudan ışık payı ve gölgeler yumuşakça gelir.
 - **Desenli dolgu:** zeminde ot öbekleri ve çiçekler, suda dalga çizgileri, tarlalarda
   mevsime göre filiz, başak, anız ve saban izi.
+- **Halk:** sokaklar kalabalıktır. Figürler minyatürdeki gibi gerçekten biraz iridir;
+  kaftanları renk renk, başlarında sarık, börk ya da örtü vardır. Sayıları nüfusla artar,
+  en çok evlerin, çarşının ve caminin çevresinde dolaşırlar; evlerine girip çıkarlar.
+  Çarşıda dükkân önünde müşteriler, çeşme başında testili kadınlar, cami kapısında
+  cemaat, kapılarda yolcular, yük eşekleriyle kervancılar görünür. Tarlada ekimden
+  hasada çiftçiler çapalar, merada çoban sürüsünün başındadır. Figürler yalnızca
+  görüntüdür, simülasyonu etkilemez; oyun durunca onlar da durur.
 - **Parşömen:** kâğıt lifi dokusu ve kenarlara doğru eskimiş ton; ekranın çevresinde
   tezhip çerçeve (altın hat, noktalı lacivert bant, kırmızı iç hat).
 - **Palet:** kerpiç okrası, tuğla kırmızısı, Selçuklu firuzesi, kobalt, kurşun mavisi,

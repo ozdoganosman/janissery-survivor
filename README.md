@@ -32,7 +32,9 @@ Tasarım, kurallar, sanat yönü ve yol haritası: [docs/TASARIM.md](docs/TASARI
 | Verimlilik | **F**; verimlilik katmanını açar ya da kapar                                    |
 | Zaman      | Boşluk: duraklat · 1 / 2 / 3: hız                                               |
 
-Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir.
+Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir. Sokaklarda
+halk dolaşır: çarşıda alışveriş eden, çeşmeden su taşıyan, cami önünde toplanan,
+tarlada çalışan insanlar; nüfus arttıkça kalabalık da artar.
 
 ## Geliştirme
 
