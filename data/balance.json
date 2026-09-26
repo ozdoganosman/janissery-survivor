@@ -1,0 +1,472 @@
+{
+  "start": {
+    "treasury": 30000,
+    "product": 600
+  },
+  "tax": {
+    "start": "orta",
+    "rates": {
+      "hafif": {
+        "name": "Hafif",
+        "perHead": 0.06,
+        "order": 10
+      },
+      "orta": {
+        "name": "Orta",
+        "perHead": 0.09,
+        "order": 0
+      },
+      "agir": {
+        "name": "Ağır",
+        "perHead": 0.13,
+        "order": -15
+      }
+    }
+  },
+  "order": {
+    "base": 50,
+    "crowdingFrom": 30000,
+    "crowdingPer1000": 0.4,
+    "calm": 65,
+    "unrest": 40,
+    "revolt": 25,
+    "calmGrowth": 1.25,
+    "unrestIncome": 0.7,
+    "revoltIncome": 0.6,
+    "revoltLoss": 0.005
+  },
+  "growth": {
+    "base": 0.003
+  },
+  "product": {
+    "base": 40,
+    "price": 3,
+    "sellLot": 500
+  },
+  "levels": [
+    {
+      "name": "Şehir",
+      "population": 0,
+      "maxBuildingLevel": 2,
+      "builders": 2,
+      "peoplePerHouse": 70,
+      "slots": 7
+    },
+    {
+      "name": "Büyük Şehir",
+      "population": 60000,
+      "maxBuildingLevel": 3,
+      "builders": 3,
+      "peoplePerHouse": 90,
+      "slots": 8
+    },
+    {
+      "name": "Payitaht",
+      "population": 100000,
+      "maxBuildingLevel": 3,
+      "builders": 4,
+      "peoplePerHouse": 110,
+      "slots": 9
+    }
+  ],
+  "rankSlack": 0.1,
+  "demolishRefund": 0.25,
+  "maxSlope": 0.45,
+  "buildings": {
+    "carsi": {
+      "name": "Çarşı",
+      "hint": "Dükkânlar; akçe getirir",
+      "w": 3,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 6000,
+          "material": 0,
+          "months": 2,
+          "upkeep": 50,
+          "income": 500
+        },
+        {
+          "cost": 12000,
+          "material": 400,
+          "months": 3,
+          "upkeep": 100,
+          "income": 1100
+        },
+        {
+          "cost": 33000,
+          "material": 1500,
+          "months": 4,
+          "upkeep": 240,
+          "income": 1800
+        }
+      ],
+      "max": 2
+    },
+    "ocak": {
+      "name": "Ocak",
+      "hint": "Şehrin ürününü çıkarır; kaynağın başına kurulur",
+      "w": 2,
+      "d": 2,
+      "site": true,
+      "levels": [
+        {
+          "cost": 5000,
+          "material": 0,
+          "months": 2,
+          "upkeep": 80,
+          "product": 200
+        },
+        {
+          "cost": 10000,
+          "material": 300,
+          "months": 3,
+          "upkeep": 140,
+          "product": 400
+        },
+        {
+          "cost": 27000,
+          "material": 1200,
+          "months": 4,
+          "upkeep": 330,
+          "product": 700
+        }
+      ],
+      "max": 2
+    },
+    "cami": {
+      "name": "Cami",
+      "hint": "Huzur",
+      "w": 3,
+      "d": 3,
+      "levels": [
+        {
+          "cost": 9000,
+          "material": 500,
+          "months": 4,
+          "upkeep": 150,
+          "order": 6
+        },
+        {
+          "cost": 16000,
+          "material": 1000,
+          "months": 5,
+          "upkeep": 250,
+          "order": 10
+        },
+        {
+          "cost": 39000,
+          "material": 2700,
+          "months": 6,
+          "upkeep": 600,
+          "order": 15
+        }
+      ],
+      "max": 2
+    },
+    "hamam": {
+      "name": "Hamam",
+      "hint": "Huzur ve büyüme",
+      "w": 2,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 7000,
+          "material": 300,
+          "months": 3,
+          "upkeep": 100,
+          "order": 3,
+          "growth": 0.0005
+        },
+        {
+          "cost": 13000,
+          "material": 600,
+          "months": 4,
+          "upkeep": 180,
+          "order": 5,
+          "growth": 0.001
+        },
+        {
+          "cost": 31500,
+          "material": 1800,
+          "months": 5,
+          "upkeep": 420,
+          "order": 8,
+          "growth": 0.0015
+        }
+      ],
+      "max": 2
+    },
+    "kervansaray": {
+      "name": "Kervansaray",
+      "hint": "Kervan ticareti; sur dışına kurulur",
+      "w": 3,
+      "d": 3,
+      "outside": true,
+      "levels": [
+        {
+          "cost": 10000,
+          "material": 600,
+          "months": 4,
+          "upkeep": 100,
+          "income": 800
+        },
+        {
+          "cost": 18000,
+          "material": 1000,
+          "months": 5,
+          "upkeep": 180,
+          "income": 1600
+        },
+        {
+          "cost": 45000,
+          "material": 2700,
+          "months": 6,
+          "upkeep": 450,
+          "income": 2600
+        }
+      ],
+      "max": 1
+    },
+    "ambar": {
+      "name": "Ambar",
+      "hint": "Zahire deposu: erzak sınırı artar, nüfus daha hızlı büyür",
+      "w": 2,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 5000,
+          "material": 0,
+          "months": 2,
+          "upkeep": 80,
+          "food": 15000,
+          "growth": 0.0015
+        },
+        {
+          "cost": 9000,
+          "material": 300,
+          "months": 3,
+          "upkeep": 140,
+          "food": 30000,
+          "growth": 0.0025
+        },
+        {
+          "cost": 22500,
+          "material": 1050,
+          "months": 4,
+          "upkeep": 330,
+          "food": 50000,
+          "growth": 0.004
+        }
+      ],
+      "max": 2
+    },
+    "kisla": {
+      "name": "Kışla",
+      "hint": "Ordugâh: asker toplar, talim ettirir ve konaklatır; sur dışına kurulur",
+      "w": 26,
+      "d": 22,
+      "outside": true,
+      "levels": [
+        {
+          "cost": 12000,
+          "material": 600,
+          "months": 4,
+          "upkeep": 200,
+          "order": 3,
+          "capacity": 2000
+        },
+        {
+          "cost": 24000,
+          "material": 1600,
+          "months": 6,
+          "upkeep": 350,
+          "order": 6,
+          "capacity": 5000
+        },
+        {
+          "cost": 63000,
+          "material": 4800,
+          "months": 8,
+          "upkeep": 820,
+          "order": 10,
+          "capacity": 10000
+        }
+      ],
+      "max": 1
+    },
+    "medrese": {
+      "name": "Medrese",
+      "hint": "Kâtip ve kadılar; vergi daha iyi toplanır",
+      "w": 3,
+      "d": 3,
+      "levels": [
+        {
+          "cost": 11000,
+          "material": 600,
+          "months": 4,
+          "upkeep": 180,
+          "incomePct": 0.08,
+          "order": 1
+        },
+        {
+          "cost": 19000,
+          "material": 1200,
+          "months": 5,
+          "upkeep": 300,
+          "incomePct": 0.15,
+          "order": 2
+        },
+        {
+          "cost": 45000,
+          "material": 3000,
+          "months": 6,
+          "upkeep": 680,
+          "incomePct": 0.22,
+          "order": 3
+        }
+      ],
+      "max": 1
+    },
+    "darussifa": {
+      "name": "Darüşşifa",
+      "hint": "Hastane; büyüme ve huzur",
+      "w": 3,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 10000,
+          "material": 500,
+          "months": 4,
+          "upkeep": 150,
+          "growth": 0.001,
+          "order": 2
+        },
+        {
+          "cost": 14000,
+          "material": 1000,
+          "months": 5,
+          "upkeep": 250,
+          "growth": 0.002,
+          "order": 4
+        },
+        {
+          "cost": 42000,
+          "material": 2700,
+          "months": 6,
+          "upkeep": 600,
+          "growth": 0.003,
+          "order": 5
+        }
+      ],
+      "max": 1
+    }
+  },
+  "food": {
+    "base": 25000,
+    "perFieldTile": 30,
+    "starve": 0.4,
+    "orderPer10Pct": -6
+  },
+  "debt": {
+    "order": -25
+  },
+  "army": {
+    "levy": 0.15,
+    "formations": {
+      "saf": {
+        "name": "Saf",
+        "hint": "Geniş cephe, beş sıra derin",
+        "cols": 20
+      },
+      "kare": {
+        "name": "Kare",
+        "hint": "On sıra, on dizi: sık ve derin",
+        "cols": 10
+      },
+      "kol": {
+        "name": "Kol",
+        "hint": "Yürüyüş düzeni: dört yan yana, uzun",
+        "cols": 4
+      }
+    },
+    "units": {
+      "mizrakci": {
+        "name": "Mızraklı yaya",
+        "hint": "Kalkanlı, mızraklı piyade; safın belkemiği",
+        "men": 100,
+        "cost": 1000,
+        "months": 2,
+        "pay": 40,
+        "barracks": 1,
+        "horse": false,
+        "weapon": "spear",
+        "melee": 6,
+        "defense": 8,
+        "missile": 0,
+        "speed": 3,
+        "morale": 6,
+        "file": 0.125,
+        "rank": 0.14,
+        "march": 1.0
+      },
+      "okcu": {
+        "name": "Yaya okçu",
+        "hint": "Yaylı okçular; düşmanı yaklaşmadan yıpratır",
+        "men": 100,
+        "cost": 1200,
+        "months": 2,
+        "pay": 45,
+        "barracks": 1,
+        "horse": false,
+        "weapon": "bow",
+        "melee": 3,
+        "defense": 3,
+        "missile": 8,
+        "speed": 3,
+        "morale": 5,
+        "file": 0.125,
+        "rank": 0.15,
+        "march": 1.0
+      },
+      "atli_okcu": {
+        "name": "Türkmen atlı okçusu",
+        "hint": "Hafif atlı okçular; vur-kaç, kuşatma, takip",
+        "men": 100,
+        "cost": 2500,
+        "months": 3,
+        "pay": 90,
+        "barracks": 2,
+        "horse": true,
+        "weapon": "bow",
+        "melee": 4,
+        "defense": 4,
+        "missile": 7,
+        "speed": 9,
+        "morale": 6,
+        "file": 0.16,
+        "rank": 0.33,
+        "march": 1.8
+      },
+      "gulam": {
+        "name": "Gulam süvarisi",
+        "hint": "Sultanın zırhlı hassa atlıları; mızrakla hücum",
+        "men": 50,
+        "cost": 3000,
+        "months": 4,
+        "pay": 110,
+        "barracks": 3,
+        "horse": true,
+        "weapon": "lance",
+        "melee": 9,
+        "defense": 9,
+        "missile": 0,
+        "speed": 7,
+        "morale": 9,
+        "file": 0.17,
+        "rank": 0.34,
+        "march": 1.6
+      }
+    }
+  }
+}

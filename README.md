@@ -1,157 +1,76 @@
-# Janissary Survivor
+# Dârülmülk
 
-Yeniçeri konseptli, fantastik/mitolojik Osmanlı temalı, **Vampire Survivors**
-mekaniklerine dayanan 3D tarayıcı oyunu.
+Konya'da, 13. yüzyılda geçen, **minyatür görünümlü** bir şehir yönetim oyunu. Şehir
+Alaeddin Tepesi, surları, mahalleleri ve Meram Çayı ile hazır gelir; oyuncu sultanın
+atadığı emir olarak onu büyütür.
 
-Silahların kendiliğinden ateşlenir. Senin işin nereye durmayacağına karar
-vermek, ve her seviyede üç karttan birini seçmek. On beş dakika dayanırsan
-kazanırsın.
+Tasarım, kurallar, sanat yönü ve yol haritası: [docs/TASARIM.md](docs/TASARIM.md).
 
-![Yüzlerce düşmandan oluşan sürü, oyuncunun üzerine akıyor](docs/media/horde.png)
-
-### ▶ [Oyna](https://ozdoganosman.github.io/janissery-survivor/)
-
-> Durum: **MVP tamam** — Faz 0'dan 8'e kadar hepsi bitti, canlı yayında.
-> Ayrıntılı plan, her fazın sapmaları ve gerekçeleri için
-> [ROADMAP.md](ROADMAP.md).
-
-## Öne çıkanlar
-
-- **Hiç binary asset yok.** Modeller `data/models/*.json` içinde veri olarak
-  yaşar ve kodla geometriye çevrilir; sesler oscillator ve filtrelerden
-  sentezlenir. İndirilecek `.glb` ya da `.wav` yok, git-diff'i okunabilir bir
-  repo var.
-- **Yüzlerce düşman, 60'ın altında draw call.** Sürü `class` örnekleri değil
-  paralel `Float32Array`'ler; her düşman modeli tek bir `InstancedMesh`, yürüme
-  animasyonu GPU'da.
-- **Simülasyon renderer'dan bağımsız.** `src/sim/` içinde `three` import
-  edilmez — ESLint kuralıyla zorunlu tutulur. Oyun mantığının tamamı tarayıcı
-  olmadan test edilir.
-- **Denge tamamen veri.** Silahlar, düşmanlar, pasifler ve dalga tablosu
-  `data/balance/*.json` içinde. Zorluk eğrisini değiştirmek bir kod
-  değişikliği değil, bir tablo düzenlemesi.
+> Durum: **8. aşama — ordu, tarihî ölçekte.** Konya 1230'da 42.000 kişiyle başlar; şehir
+> 60.000'e (13. yüzyılın zirvesi) ve ötesine büyür. Sur dışındaki kocaman kışla
+> seviyesiyle ordugâhtan kaleye büyür ve 2.000, 5.000, sonra 10.000 asker barındırır.
+> Bölükler (100'er mızraklı yaya, yaya okçu, Türkmen atlı okçusu; 50'şer gulam süvarisi)
+> birer birer ya da beşer, onar toplanır. Her er kışlada tek tek görünür; talimde
+> mızrakçılar hamle yapar, okçular hedefe ok atar, atlılar meydanın çevresinde dörtnala
+> döner. Askerler eklemli, savaşa hazır figürlerdir. Şehir her ay vergiden **akçe**, Sille
+> ocaklarından **taş** üretir; yapıları istediğin yere koyar, üç seviyeye kadar
+> büyütürsün. **Yapı hakkı**, **bakım**, **erzak**, **ulufe** ve borç büyümeyi sınırlar.
+> Şehir büyüdükçe **yeni sur halkaları** ve varoş sokakları açılır. Yıl sahnede döner;
+> şehrin sesi ve Hicaz makamında bir ney eşlik eder. Oyun her ay kendini kaydeder.
+> Telefonda da oynanır.
 
 ## Oynanış
 
-| Ne            | Nasıl                                                    |
-| ------------- | -------------------------------------------------------- |
-| Hareket       | WASD / ok tuşları, kol çubuğu (sol analog + d-pad)       |
-| Mobil         | Ekranda parmağını sürükle — sanal çubuk parmağın altında |
-| Duraklat      | Esc / P, kolda Start, mobilde sağ üstteki düğme          |
-| Saldırı       | Otomatik                                                 |
-| Seviye atlama | Mücevher topla, üç karttan birini seç                    |
+| Ne        | Nasıl                                                                                                                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                                                                                                                                                 |
+| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                                                                                                                                             |
+| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                                                                                                                                                   |
+| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık                                                                                                                        |
+| Rozetler  | Yapının üstünde seviyesi; nabız atan rozet yükseltilebilir demek. Tıkla, yapıya gider                                                                                                                    |
+| Yapılar   | **L** ya da araç çubuğu: bütün yapılar, sıradaki basamak, eksikler, yapı hakkı                                                                                                                           |
+| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla. Kart eksiği yazar                                                                                                                  |
+| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur                                                                                                                         |
+| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                                                                                                                                                |
+| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür                                                                                                                                |
+| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                                                                                                                                                |
+| Hesap     | Defterde **Hesap**: gelir ve bakım, taş, erzak, huzurun kalem kalem dökümü                                                                                                                               |
+| Sur       | Yapılar listesinin başında: Büyük Şehir olunca Dış Sur, Payitaht olunca Varoş Suru                                                                                                                       |
+| Ordu      | Kışlayı sur dışına kur; panelinden bir, beş ya da on bölük topla, türe göre terhis et                                                                                                                    |
+| Komuta    | **O**: Ordu aracı. Askere tıkla ya da kutu sürükle: seç (Shift ekler). Sağ tık: oraya yürü; sağ tuşla sürükle: cepheyi çiz (hiza ve genişlik). H: dur, K: kışlaya dön; panelde dönüş ve Saf / Kare / Kol |
+| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir                                                                                                                            |
+| Ses       | Saatin yanındaki hoparlör: sesi açar ya da kapar. İlk tıkta başlar                                                                                                                                       |
+| Menü      | ☰: kaydet, yükle, otomatik kayıt, dosyaya indir / dosyadan yükle, müzik, yeni oyun                                                                                                                      |
+| Telefon   | İlk dokunuş yapının yerini ve fiyatını gösterir, ikinci dokunuş kurar ya da yıkar                                                                                                                        |
 
-Altı silah, sekiz pasif eşya, beş düşman tipi ve bir boss. Onuncu ve on
-dördüncü dakikada **Gulyabani Ağası** gelir; slam'ini yerdeki halkadan
-görürsün, halka gerçek menzilini gösterir ve içindeki disk sana ne kadar
-kaldığını söyler.
-
-<table>
-  <tr>
-    <td width="50%"><img alt="Ana menü" src="docs/media/menu.png"></td>
-    <td width="50%"><img alt="Oyun içi görünüm" src="docs/media/play.png"></td>
-  </tr>
-  <tr>
-    <td><img alt="Gulyabani Ağası ve slam halkası" src="docs/media/boss.png"></td>
-    <td><img alt="Seviye atlama kartları" src="docs/media/cards.png"></td>
-  </tr>
-</table>
-
-## Özet
-
-- **Platform:** Web (tarayıcı), masaüstü öncelikli, mobil çalışır
-- **Teknoloji:** Three.js + TypeScript + Vite
-- **Görsel stil:** Prosedürel voxel (Minecraft benzeri)
-- **Kamera:** Top-down, hafif eğimli ortografik (~55°)
-- **Ses:** WebAudio ile sentezlenmiş; mehter esinli, Hicaz makamında
-  zamanlanmış döngü
-- **MVP:** Tek harita, 15 dakikalık run, meta-progression yok
+Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir. Sokaklarda
+halk dolaşır: çarşıda alışveriş eden, cami önünde toplanan, ocakta taş taşıyan, iskelede
+çalışan, tarlada mevsiminde ekip biçen insanlar; nüfus arttıkça kalabalık da artar.
 
 ## Geliştirme
 
-Node 22 gerekir (bkz. `.nvmrc`).
-
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev        # geliştirme sunucusu
+npm run check      # tip denetimi, lint, biçim, birim testleri
+npm run build      # dist/
+npm run test:e2e   # derlenmiş oyunu tarayıcıda açıp oynayan duman testi
 ```
 
-| Komut              | Ne yapar                                        |
-| ------------------ | ----------------------------------------------- |
-| `npm run dev`      | Vite geliştirme sunucusu, HMR açık              |
-| `npm run build`    | Tip kontrolü + üretim build'i (`dist/`)         |
-| `npm run preview`  | Build edilmiş çıktıyı yerelde sunar             |
-| `npm test`         | Vitest birim testleri                           |
-| `npm run test:e2e` | Playwright smoke testi (build eder ve oynar)    |
-| `npm run check`    | Tip + lint + format + test — CI'ın çalıştırdığı |
+Önceden kurulu bir Chromium kullanmak için: `CHROMIUM_PATH=/yol/chrome npm run test:e2e`.
 
-`npm run check` push öncesi çalıştırılması beklenen komuttur. `test:e2e` ondan
-ayrı tutuldu, çünkü `check` her kaydetmede çalışacak kadar hızlı olmalı;
-smoke testi ise oyunu build edip bir dakika boyunca gerçekten oynar. CI ikisini
-de çalıştırır.
-
-Ortamda hazır bir Chromium varsa smoke testi onu kullanabilir:
-
-```bash
-CHROMIUM_PATH=/yol/chrome npm run test:e2e
-```
-
-### URL parametreleri
-
-| Parametre       | Etki                                                             |
-| --------------- | ---------------------------------------------------------------- |
-| `?debug=1`      | Frame süresi ve sahne sayaçları overlay'i (dev'de zaten açık)    |
-| `?seed=x`       | Manzarayı, spawn'ları ve kart tekliflerini sabitler              |
-| `?go=1`         | Başlık ekranını atlar, doğrudan run'a girer                      |
-| `?start=SANIYE` | Saati ileriden başlatır — geç roster'ı ya da bossu görmek için   |
-| `?enemies=N`    | Kalabalığı tabloyu ezerek sabitler — kare bütçesi ölçümü için    |
-| `?scene=models` | Model vitrini: animasyon seçici, geometri ve draw call sayaçları |
-
-## Mimari
-
-Ayrıntılar [ROADMAP.md](ROADMAP.md) § 2'de. Günlük çalışmayı etkileyen tek
-kural:
-
-> **`src/sim/` içinde `three` import edilmez.**
-
-Simülasyon renderer'dan bağımsız kalır ki oyun mantığı tarayıcı olmadan test
-edilebilsin. Bu kural ESLint tarafından zorunlu tutulur
-(`no-restricted-imports`), yani ihlal CI'da hata verir. Aynı gerekçeyle `src/`
-içinde `process` kullanılamaz: tarayıcıda yoktur, ama Node tipleri yüklü
-olduğu için tip kontrolünden geçer ve ancak oyuncunun önünde patlardı.
+## Yapı
 
 ```
-src/
-  core/    saat, girdi, RNG, ayarlar, string tablosu — renderer'dan bağımsız
-  sim/     oyun mantığı; three import ETMEZ, tamamen test edilebilir
-  render/  three.js: kamera, voxel builder, sürü, efektler
-  audio/   WebAudio: bağlam, sentezlenmiş efektler, mehter döngüsü
-  ui/      DOM overlay: HUD, kabuk, kartlar, özet
-  scenes/  sahneler ve yönlendirme
-  dev/     geliştirici araçları (perf overlay)
-data/
-  models/  voxel model tanımları (JSON)
-  balance/ silah / düşman / pasif / dalga tabloları (JSON)
-tests/     *.test.ts → Vitest (tarayıcısız), *.spec.ts → Playwright
+data/konya.json      şehrin tanımı: tepe, surlar, kapılar, çay, anıtlar, ürünü, ocak yerleri,
+                     sonraki sur halkaları ve varoş sokakları
+data/balance.json    denge sayıları: vergi, huzur, erzak, borç, şehir düzeyleri, yapılar,
+                     seviyeleri, bakımları ve sınırları
+src/core/            rastgelelik, gürültü, geometri
+src/sim/             oyun mantığı — three.js'ten bağımsız, Node'da test edilir
+src/render/          minyatür çizim hattı, kamera, sahne görünümleri
+src/ui/              tezhip çerçeve, HUD, araç çubuğu, menü
+src/audio/           WebAudio ile üretilen sesler ve ney
+src/game.ts          mantık, görüntü ve girdiyi birbirine bağlar
+tests/               birim testleri ve tarayıcı duman testi
 ```
-
-## Bilinen sınırlar
-
-- **FPS bu repoda doğrulanmadı.** CI ve geliştirme ortamında GPU yok; headless
-  Chromium SwiftShader ile yazılımdan çiziyor. Ölçülen kare süreleri
-  SwiftShader hakkında bir şey söyler, oyuncunun makinesi hakkında hiçbir şey.
-  Bu yüzden smoke testi kasıtlı olarak FPS hakkında hiçbir iddiada bulunmaz.
-- **Bloom yok.** Vinyet bir DOM katmanı olarak çizilir (bedava); gerçek bir
-  bloom zinciri kare başına birkaç ek geçiş demek, ve bu ortamda ölçemeyeceğim
-  bir maliyeti, tamamen kare bütçesi üzerine kurulmuş bir projeye eklemek
-  yanlış olurdu. Parlama yerine zaten additive çizilen mermi, aura ve boss
-  halkası çalışıyor.
-- **Meta-progression yok.** Kapsam dışı. `localStorage`'da sadece ayarlar ve en
-  iyi süre tutulur; en iyi süre hiçbir şeyin kilidini açmaz.
-- **Kol çubuğu bazı gömülü sayfalarda çalışmaz.** İzin politikasında `gamepad`
-  olmayan bir iframe'de tarayıcı erişimi reddediyor; oyun bunu bir kez görüp
-  bir daha sormuyor ve klavye/dokunmatikle devam ediyor.
-
-## Lisans
-
-Henüz belirlenmedi.

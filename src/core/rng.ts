@@ -1,79 +1,59 @@
 /**
- * Seedable pseudo-random number generation.
+ * Seedable random numbers.
  *
- * `Math.random()` cannot be seeded, which makes a bad run impossible to reproduce.
- * Every random decision in the simulation — spawn positions, level-up card offers,
- * critical hits, loot rolls — draws from a seeded generator instead, so a run can
- * be replayed exactly from its seed while investigating a balance or crash report.
+ * Every random choice in the city (street layout, which lots are built, house variations)
+ * comes from a seeded stream, so the same seed always produces the same Konya. That makes
+ * bugs reproducible and lets tests assert on concrete layouts.
  *
- * The algorithm is mulberry32: 32-bit state, a handful of integer ops, no
- * allocation per call. Statistical quality is far beyond what a game needs, and it
- * is fast enough to call thousands of times per simulation step.
+ * mulberry32: 32 bits of state, a few integer operations per draw.
  */
-
 export interface Rng {
-  /** Uniform float in [0, 1). */
+  /** Uniform in [0, 1). */
   next(): number;
-  /** Uniform integer in [0, maxExclusive). Returns 0 when the range is empty. */
-  int(maxExclusive: number): number;
-  /** Uniform float in [min, max). */
+  /** Uniform in [min, max). */
   range(min: number, max: number): number;
-  /** Uniform element from a non-empty array. */
-  pick<T>(items: readonly T[]): T;
-  /** True with the given probability in [0, 1]. */
+  /** Uniform integer in [0, maxExclusive). */
+  int(maxExclusive: number): number;
   chance(probability: number): boolean;
-  /**
-   * A new generator seeded from this one's next draw.
-   *
-   * Use this to give each system its own stream. If spawning and loot share one
-   * generator, adding a single spawn roll shifts every later loot roll and makes
-   * replays diverge; independent streams keep each subsystem reproducible on its own.
-   */
-  fork(): Rng;
-}
-
-export function createRng(seed: number): Rng {
-  // Force the seed into an unsigned 32-bit integer; a float or negative seed would
-  // otherwise silently produce a different stream than the same value round-tripped
-  // through a URL parameter.
-  let state = seed >>> 0;
-
-  const next = (): number => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    // >>> 0 keeps the xor result unsigned before scaling into [0, 1).
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-
-  const rng: Rng = {
-    next,
-    int: (maxExclusive) => (maxExclusive <= 0 ? 0 : Math.floor(next() * maxExclusive)),
-    range: (min, max) => min + next() * (max - min),
-    pick: (items) => {
-      if (items.length === 0) {
-        throw new RangeError('Rng.pick requires a non-empty array');
-      }
-      return items[Math.floor(next() * items.length)];
-    },
-    chance: (probability) => next() < probability,
-    fork: () => createRng(Math.floor(next() * 4294967296)),
-  };
-
-  return rng;
+  pick<T>(items: readonly T[]): T;
 }
 
 /**
- * Turns a human-typable seed (`"mehter"`) into a numeric seed, so shared runs can be
- * described by a word instead of a ten-digit number. FNV-1a: order-sensitive and
- * well distributed for short strings.
+ * One draw from a generator whose state lives in plain data (a saved city, for example)
+ * rather than in a closure. Advances `holder.rngState`.
  */
-export function seedFromString(text: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
+export function nextRandom(holder: { rngState: number }): number {
+  holder.rngState = (holder.rngState + 0x6d2b79f5) >>> 0;
+  let t = holder.rngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+export function createRng(seed: number): Rng {
+  const holder = { rngState: seed >>> 0 };
+  const next = (): number => nextRandom(holder);
+  return {
+    next,
+    range: (min, max) => min + (max - min) * next(),
+    int: (maxExclusive) => (maxExclusive <= 0 ? 0 : Math.floor(next() * maxExclusive)),
+    chance: (probability) => next() < probability,
+    pick: (items) => {
+      if (items.length === 0) throw new RangeError('pick() needs a non-empty array');
+      return items[Math.floor(next() * items.length)];
+    },
+  };
+}
+
+/**
+ * A stable pseudo-random value in [0, 1) for an integer pair, e.g. a tile coordinate.
+ *
+ * Used where a value must depend only on *where* something is rather than on how many
+ * random draws came before it: a house keeps its look when an unrelated road is built.
+ */
+export function hash2(x: number, z: number, salt = 0): number {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263) + Math.imul(salt | 0, 2246822519)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
 }

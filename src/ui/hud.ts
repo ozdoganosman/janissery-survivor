@@ -1,381 +1,939 @@
-import { t } from '../core/strings';
-import { enemyType } from '../sim/enemy-types';
-import type { ItemIconId } from '../render/voxel/icons';
+import type { Balance, BuildingKind, TaxRate, UnitKind } from '../sim/balance';
+import { BUILDING_KINDS, TAX_RATES } from '../sim/balance';
+import { builders, kindCount, kindName, slots, startBlock } from '../sim/buildings';
+import type { ExpansionOffer } from '../sim/growth';
+import type { Speed } from '../sim/calendar';
+import type { CityState, Notice } from '../sim/city';
+import { ORDER_NAMES, orderState, rankFloor } from '../sim/economy';
+import {
+  effectText,
+  priceText,
+  type ArmyPanel,
+  type BuildingSummary,
+  type Readiness,
+  type TileInfo,
+} from '../sim/inspect';
+import type { ArmyCommand } from './orders-panel';
 
-/**
- * Health, experience, the run clock and what the player is carrying.
- *
- * The bars are absolute rather than fractional. "Sixty of a hundred" tells the player
- * how many more contacts they can survive; a bar that is "60% full" does not.
- *
- * The loadout row exists because a build the player cannot see is a build they cannot
- * plan around: the card screen offers an upgrade to something they took four minutes
- * ago, and without the row the only way to know what that was is to remember.
- */
+export type Tool = 'incele' | 'insa' | 'yik' | 'ordu';
 
-/** One carried item, as the HUD needs it. */
-export interface HudItem {
-  readonly id: ItemIconId;
-  readonly name: string;
-  readonly level: number;
-  readonly weapon: boolean;
-}
-
-export interface Hud {
-  update(state: {
-    health: number;
-    maxHealth: number;
-    level: number;
-    experienceFraction: number;
-    secondsElapsed: number;
-    /** 0 when unhurt, rising to 1 at the moment of a hit. */
-    hurt: number;
-    /** Boss health as a fraction of its own maximum, or -1 when no boss is alive. */
-    bossHealth: number;
-  }): void;
-  /** Redraws the carried items. Called on a build change, not per frame. */
-  setLoadout(items: readonly HudItem[]): void;
-  dispose(): void;
+export interface HudCallbacks {
+  onTool(tool: Tool): void;
+  onSpeed(speed: Speed): void;
+  onBuildKind(kind: BuildingKind): void;
+  onTax(rate: TaxRate): void;
+  onSell(): void;
+  onUpgrade(buildingId: number): void;
+  onDemolish(buildingId: number): void;
+  /** Raise `count` companies of a kind at once. */
+  onRecruit(kind: UnitKind, count: number): void;
+  /** Send home the last company of a kind raised. */
+  onDisband(kind: UnitKind): void;
+  onCloseInfo(): void;
+  onSave(): void;
+  onLoad(slot: SaveSlot): void;
+  onNewGame(): void;
+  onExport(): void;
+  onImport(file: File): void;
+  onSound(on: boolean): void;
+  onMusic(on: boolean): void;
+  /** Points the view at a building and opens its panel. */
+  onFocus(buildingId: number): void;
+  /** Begins the next ring of walls. */
+  onExpand(): void;
+  /** An order for the army, or a choice of companies, from a panel. */
+  onArmy(cmd: ArmyCommand): void;
 }
 
-const STYLE = `
-.hud-root {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 90;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: #efe7d6;
+/** The next ring of walls as the roster shows it. */
+export interface ExpansionView {
+  offer: ExpansionOffer;
+  /** Share of the work done, while the walls are going up. */
+  progress: number | null;
+  monthsLeft: number;
 }
-.hud-xp {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 5px;
-  background: rgba(20, 16, 12, 0.6);
-}
-.hud-xp-fill {
-  height: 100%;
-  width: 0%;
-  background: #6ad6f0;
-  transition: width 90ms linear;
-}
-.hud-top {
-  position: absolute;
-  top: 11px; left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-  font-variant-numeric: tabular-nums;
-}
-.hud-level { color: #6ad6f0; }
-.hud-health {
-  position: absolute;
-  left: 50%; bottom: 66px;
-  transform: translateX(-50%);
-  width: min(240px, 60vw);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: center;
-}
-.hud-health-bar {
-  width: 100%;
-  height: 9px;
-  background: rgba(20, 16, 12, 0.7);
-  border: 1px solid rgba(239, 231, 214, 0.2);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.hud-health-fill {
-  height: 100%;
-  width: 100%;
-  background: #b8392c;
-  transition: width 120ms ease-out;
-}
-.hud-health-text {
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-  font-variant-numeric: tabular-nums;
-}
-/* Vignette.
-   A DOM layer rather than a post-processing pass, and that is the whole decision: a
-   real bloom-and-vignette chain costs three extra render targets and several passes
-   per frame, on a project whose entire premise is a frame budget I cannot measure in
-   this environment. A radial gradient over the canvas costs nothing, does the same job
-   for the vignette half, and leaves the glow to the additive materials that already
-   draw the projectiles, the aura and the boss ring. */
-.hud-vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 74% 74% at center,
-    rgba(0, 0, 0, 0) 42%,
-    rgba(6, 4, 3, 0.28) 78%,
-    rgba(6, 4, 3, 0.55) 100%
-  );
-}
-/* A red wash on damage: at a glance, from anywhere on the screen, without having to
-   be watching the bar. */
-.hud-hurt {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, rgba(184,57,44,0) 45%, rgba(184,57,44,0.55) 100%);
-  opacity: 0;
-}
-/* The boss bar.
-   Across the top rather than over the boss: a Gulyabani Agasi has 2600 health and the
-   fight lasts a minute, and a bar floating on a creature that is often half off screen
-   is one the player cannot watch while also not standing in the ring. */
-.hud-boss {
-  position: absolute;
-  top: 34px; left: 50%;
-  transform: translateX(-50%);
-  width: min(420px, 76vw);
-  display: none;
-  flex-direction: column;
-  gap: 3px;
-  align-items: center;
-}
-.hud-boss[data-alive='true'] { display: flex; }
-.hud-boss-name {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: #e0b34a;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-}
-.hud-boss-bar {
-  width: 100%;
-  height: 7px;
-  background: rgba(20, 16, 12, 0.75);
-  border: 1px solid rgba(224, 179, 74, 0.45);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.hud-boss-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #8a1f18, #d9452f);
-  transition: width 140ms ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .hud-boss-fill { transition: none; }
-}
-/* A phone has no Escape key. Without this there is no way to stop, change a setting
-   or leave a run on the platform where the run is hardest to leave. */
-.hud-pause {
-  position: absolute;
-  top: 10px; right: 10px;
-  pointer-events: auto;
-  appearance: none;
-  width: 34px; height: 34px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  gap: 3px;
-  border-radius: 4px;
-  background: rgba(20, 16, 12, 0.66);
-  border: 1px solid rgba(239, 231, 214, 0.2);
-  cursor: pointer;
-}
-.hud-pause:hover { background: rgba(40, 32, 26, 0.9); }
-.hud-pause:focus-visible { outline: 2px solid #e0b34a; outline-offset: 2px; }
-.hud-pause span {
-  display: block;
-  width: 3px; height: 12px;
-  background: #efe7d6;
-  box-shadow: 6px 0 0 #efe7d6;
-  margin-right: 6px;
-}
-/* Top-left, clear of the health bar and the touch stick's usual landing zone. */
-.hud-build {
-  position: absolute;
-  top: 14px; left: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  max-width: 46vw;
-}
-.hud-slot {
-  position: relative;
-  width: 30px; height: 30px;
-  border-radius: 3px;
-  background: rgba(20, 16, 12, 0.66);
-  border: 1px solid rgba(239, 231, 214, 0.16);
-}
-.hud-slot[data-weapon='true'] { border-color: rgba(224, 179, 74, 0.5); }
-.hud-slot img {
-  width: 100%; height: 100%;
-  display: block;
-  image-rendering: pixelated;
-}
-/* The fallback when the icon renderer had no context to work with. */
-.hud-slot-text {
-  display: grid;
-  place-items: center;
-  width: 100%; height: 100%;
-  font-size: 11px;
-  color: #cfc4b2;
-}
-.hud-slot-level {
-  position: absolute;
-  right: -2px; bottom: -3px;
-  min-width: 12px;
-  padding: 0 2px;
-  border-radius: 2px;
-  background: rgba(12, 10, 8, 0.9);
-  font-size: 9px;
-  line-height: 13px;
-  text-align: center;
-  color: #e0b34a;
-  font-variant-numeric: tabular-nums;
-}
-@media (max-width: 520px) {
-  .hud-slot { width: 25px; height: 25px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hud-xp-fill, .hud-health-fill { transition: none; }
-}
-`;
 
-export function createHud(
-  parent: HTMLElement = document.body,
-  icons: ReadonlyMap<ItemIconId, string> = new Map(),
-  onPause: (() => void) | null = null,
-): Hud {
-  const style = document.createElement('style');
-  style.textContent = STYLE;
-  parent.appendChild(style);
+/** A building's badge on the map, where the camera sees it this frame. */
+export interface MarkerPlace {
+  summary: BuildingSummary;
+  x: number;
+  y: number;
+}
 
-  const root = document.createElement('div');
-  root.className = 'hud-root';
-  root.innerHTML = `
-    <div class="hud-vignette"></div>
-    <div class="hud-hurt"></div>
-    <div class="hud-xp"><div class="hud-xp-fill"></div></div>
-    <div class="hud-top"><span class="hud-level"></span><span class="hud-time"></span></div>
-    <div class="hud-build"></div>
-    <div class="hud-boss" data-alive="false">
-      <span class="hud-boss-name"></span>
-      <div class="hud-boss-bar"><div class="hud-boss-fill"></div></div>
-    </div>
-    <button type="button" class="hud-pause" aria-label="${t('help.pause')}"><span></span></button>
-    <div class="hud-health">
-      <div class="hud-health-bar"><div class="hud-health-fill"></div></div>
-      <span class="hud-health-text"></span>
-    </div>
-  `;
-  parent.appendChild(root);
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 
-  const query = <T extends HTMLElement>(selector: string): T => {
-    const element = root.querySelector<T>(selector);
-    if (element === null) throw new Error(`HUD is missing ${selector}`);
-    return element;
-  };
+/** What each state of a building says in the list. */
+const READINESS_NAMES: Record<Readiness, string> = {
+  ready: 'Yükseltilebilir',
+  waiting: 'Bekliyor',
+  locked: 'Kilitli',
+  building: 'İnşaatta',
+  top: 'En yüksek seviye',
+};
 
-  const hurt = query('.hud-hurt');
-  const xpFill = query('.hud-xp-fill');
-  const level = query('.hud-level');
-  const time = query('.hud-time');
-  const healthFill = query('.hud-health-fill');
-  const healthText = query('.hud-health-text');
-  const build = query('.hud-build');
-  const boss = query('.hud-boss');
-  const bossFill = query('.hud-boss-fill');
-  query('.hud-boss-name').textContent = enemyType('gulyabaniAgasi').name;
+/** The player's own save, and the one the game keeps each month. */
+export type SaveSlot = 'kayit' | 'oto';
 
-  const pause = query<HTMLButtonElement>('.hud-pause');
-  if (onPause === null) pause.remove();
-  else pause.addEventListener('click', onPause);
+/** What the menu says about each save slot: the game date it holds, or nothing. */
+export type SlotLabels = Record<SaveSlot, string | null>;
 
-  // Remembered so the DOM is only touched when something changed; writing the same
-  // string sixty times a second is layout work for nothing.
-  let lastLevel = -1;
-  let lastSecond = -1;
-  let lastHealth = -1;
-  let lastBossAlive = false;
-  let lastBossPercent = -1;
+const ICONS = {
+  incele: '<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/>',
+  insa: '<path d="M3 20h18M5 20v-8h14v8M9 20v-4h6v4"/><path d="M7 12a5 5 0 0 1 10 0"/><path d="M12 7V4"/>',
+  yik: '<path d="M4 20 14 10M9 5c3-2 7-2 10 1-3-1-5 0-7 2M14 10l-2-2"/>',
+  pause: '<rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/>',
+  play1: '<path d="M4 2l9 6-9 6z"/>',
+  play2: '<path d="M1 2l7 6-7 6zM8 2l7 6-7 6z"/>',
+  play3: '<path d="M0 2l5.5 6L0 14zM5 2l5.5 6L5 14zM10 2l5.5 6L10 14z"/>',
+  sound:
+    '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6 6 0 0 1 0 9"/>',
+  muted: '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="m11 6 4 4M15 6l-4 4"/>',
+  menu: '<path class="s" d="M2 4h12M2 8h12M2 12h12"/>',
+  yapilar: '<path d="M4 20V9l4-3 4 3v11M12 20v-7l4-3 4 3v7M3 20h18"/><path d="M8 3v3M16 7v3"/>',
+  ordu: '<path d="M6 21V3M6 4h12l-3 4 3 4H6"/><path d="M3 21h6"/>',
+} as const;
 
-  return {
-    update(state): void {
-      xpFill.style.width = `${String(Math.round(state.experienceFraction * 100))}%`;
+const svg = (body: string, viewBox = '0 0 24 24'): string =>
+  `<svg viewBox="${viewBox}" aria-hidden="true">${body}</svg>`;
 
-      if (state.level !== lastLevel) {
-        lastLevel = state.level;
-        level.textContent = `Sv ${String(state.level)}`;
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = ''): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  e.className = cls;
+  e.innerHTML = html;
+  return e;
+}
+
+const fmt = (n: number): string => Math.round(n).toLocaleString('tr-TR');
+const signed = (n: number): string => (Math.round(n) > 0 ? `+${fmt(n)}` : fmt(n));
+
+/** How long a notice stays on screen, in milliseconds. */
+const NOTICE_MS = 7000;
+
+/** The manuscript-style frame and every on-screen control. Plain DOM over the canvas. */
+export class Hud {
+  private readonly date: HTMLElement;
+  private readonly amount: HTMLElement;
+  private readonly income: HTMLElement;
+  private readonly product: HTMLElement;
+  private readonly productRate: HTMLElement;
+  private readonly sellButton: HTMLButtonElement;
+  private readonly population: HTMLElement;
+  private readonly growth: HTMLElement;
+  private readonly orderBar: HTMLElement;
+  private readonly orderName: HTMLElement;
+  private readonly rank: HTMLElement;
+  private readonly works: HTMLElement;
+  private readonly crews: HTMLElement;
+  private readonly crewsNote: HTMLElement;
+  private readonly troops: HTMLElement;
+  private readonly troopsNote: HTMLElement;
+  private readonly food: HTMLElement;
+  private readonly foodShare: HTMLElement;
+  private readonly accounts: HTMLElement;
+  private readonly accountsToggle: HTMLButtonElement;
+  private readonly taxButtons = new Map<TaxRate, HTMLButtonElement>();
+  private readonly buildBar: HTMLElement;
+  private readonly buildButtons = new Map<BuildingKind, HTMLButtonElement>();
+  private readonly info: HTMLElement;
+  private readonly tip: HTMLElement;
+  private readonly notices: HTMLElement;
+  private readonly toolButtons = new Map<Tool, HTMLButtonElement>();
+  private readonly speedButtons: HTMLButtonElement[] = [];
+  private readonly soundButton: HTMLButtonElement;
+  private readonly menu: HTMLElement;
+  private readonly menuButton: HTMLButtonElement;
+  private readonly slotButtons = new Map<SaveSlot, HTMLButtonElement>();
+  private readonly musicButton: HTMLButtonElement;
+  private newGameArmed = false;
+  private readonly roster: HTMLElement;
+  private readonly rosterList: HTMLElement;
+  private readonly rosterSummary: HTMLElement;
+  private readonly rosterButton: HTMLButtonElement;
+  private readonly rosterCount: HTMLElement;
+  private rosterKey = '';
+  private readonly markerLayer: HTMLElement;
+  private readonly markers = new Map<number, HTMLButtonElement>();
+  private statsKey = '';
+  private affordKey = '';
+
+  /** The layer every panel sits in. */
+  readonly ui: HTMLElement;
+
+  constructor(
+    root: HTMLElement,
+    private readonly city: CityState,
+    private readonly cb: HudCallbacks,
+  ) {
+    const balance: Balance = city.balance;
+    root.appendChild(el('div', 'frame'));
+    const ui = el('div', 'ui');
+    this.ui = ui;
+    root.appendChild(ui);
+    // Building badges ride on the map, under every panel.
+    this.markerLayer = el('div', 'markers');
+    ui.appendChild(this.markerLayer);
+
+    const cartouche = el('div', 'cartouche panel');
+    cartouche.appendChild(el('div', 'title', city.def.title));
+    this.date = el('div', 'date');
+    cartouche.appendChild(this.date);
+    ui.appendChild(cartouche);
+
+    this.notices = el('div', 'notices');
+    ui.appendChild(this.notices);
+
+    // The ledger, top right. `.treasury .amount` is what the smoke test reads.
+    const ledger = el('div', 'ledger treasury panel');
+    const row = (label: string): [HTMLElement, HTMLElement, HTMLElement] => {
+      const r = el('div', 'row');
+      r.appendChild(el('span', 'label', label));
+      const main = el('span', 'value');
+      const sub = el('span', 'sub');
+      r.append(main, sub);
+      ledger.appendChild(r);
+      return [main, sub, r];
+    };
+    [this.amount, this.income] = row('Akçe');
+    this.amount.classList.add('amount');
+    const [product, productRate, productRow] = row(city.def.resource.good);
+    this.product = product;
+    this.productRate = productRate;
+    this.product.classList.add('product');
+    const { sellLot, price } = balance.product;
+    this.sellButton = el('button', 'btn sell', 'Sat');
+    this.sellButton.title =
+      `${fmt(sellLot)} ${city.def.resource.unit} ${city.def.resource.good.toLocaleLowerCase('tr-TR')} ` +
+      `sat: +${fmt(sellLot * price)} akçe`;
+    this.sellButton.addEventListener('click', () => cb.onSell());
+    productRow.appendChild(this.sellButton);
+    [this.population, this.growth] = row('Nüfus');
+    const order = el('div', 'row order');
+    order.appendChild(el('span', 'label', 'Huzur'));
+    const track = el('span', 'track');
+    this.orderBar = el('i', '');
+    track.appendChild(this.orderBar);
+    this.orderName = el('span', 'sub');
+    order.append(track, this.orderName);
+    ledger.appendChild(order);
+    [this.food, this.foodShare] = row('Erzak');
+    this.food.title = 'Tarlaların ve ambarların doyurabileceği nüfus';
+    const [rank, works, rankRow] = row('Şehir');
+    this.rank = rank;
+    this.works = works;
+    rankRow.title = 'Yapı hakkı: şehirde en çok kaç yapı olabileceği (kurulan ve süren)';
+    const [crews, crewsNote, crewsRow] = row('İnşaat');
+    this.crews = crews;
+    this.crewsNote = crewsNote;
+    crewsRow.title = 'Ustalar: aynı anda kaç inşaat ya da yükseltme yürüyebileceği';
+    const [troops, troopsNote, troopsRow] = row('Ordu');
+    this.troops = troops;
+    this.troopsNote = troopsNote;
+    troopsRow.title = 'Kışlada konaklayan askerler; kışlanın panelinden asker toplanır';
+
+    const tax = el('div', 'policy', '<span class="label">Vergi</span>');
+    for (const rate of TAX_RATES) {
+      const def = balance.tax.rates[rate];
+      const b = el('button', 'btn', def.name);
+      b.title = `Kişi başı ${def.perHead.toLocaleString('tr-TR')} akçe · huzur ${signed(def.order)}`;
+      b.addEventListener('click', () => cb.onTax(rate));
+      this.taxButtons.set(rate, b);
+      tax.appendChild(b);
+    }
+    ledger.appendChild(tax);
+
+    this.accountsToggle = el('button', 'btn goods-toggle', 'Hesap ▾');
+    this.accountsToggle.title = 'Gelirin, ürünün ve huzurun dökümü';
+    this.accountsToggle.setAttribute('aria-expanded', 'false');
+    this.accounts = el('div', 'sheet accounts');
+    this.accounts.hidden = true;
+    this.accountsToggle.addEventListener('click', () => {
+      this.accounts.hidden = !this.accounts.hidden;
+      this.accountsToggle.textContent = `Hesap ${this.accounts.hidden ? '▾' : '▴'}`;
+      this.accountsToggle.setAttribute('aria-expanded', String(!this.accounts.hidden));
+      this.statsKey = '';
+    });
+    const toggles = el('div', 'toggles');
+    toggles.appendChild(this.accountsToggle);
+    ledger.append(toggles, this.accounts);
+    ui.appendChild(ledger);
+
+    const speed = el('div', 'speed panel');
+    const speedIcons = [ICONS.pause, ICONS.play1, ICONS.play2, ICONS.play3];
+    const speedNames = ['Duraklat', 'Normal hız', 'Hızlı', 'Çok hızlı'];
+    speedIcons.forEach((icon, s) => {
+      const b = el('button', 'btn', svg(icon, '0 0 16 16'));
+      b.title = `${speedNames[s]} (${s === 0 ? 'Boşluk' : s})`;
+      b.setAttribute('aria-label', speedNames[s]);
+      b.addEventListener('click', () => cb.onSpeed(s as Speed));
+      this.speedButtons.push(b);
+      speed.appendChild(b);
+    });
+    speed.appendChild(el('span', 'sep'));
+    this.soundButton = el('button', 'btn', svg(ICONS.sound, '0 0 16 16'));
+    this.soundButton.title = 'Ses';
+    this.soundButton.setAttribute('aria-label', 'Ses');
+    this.soundButton.addEventListener('click', () => cb.onSound(this.soundButton.dataset.on !== '1'));
+    const menuButton = el('button', 'btn', svg(ICONS.menu, '0 0 16 16'));
+    this.menuButton = menuButton;
+    menuButton.title = 'Menü: kayıt, yükleme, müzik';
+    menuButton.setAttribute('aria-label', 'Menü');
+    speed.append(this.soundButton, menuButton);
+    ui.appendChild(speed);
+
+    // The menu: saves, a new game, music.
+    this.menu = el('div', 'menu panel');
+    this.menu.hidden = true;
+    menuButton.addEventListener('click', () => {
+      this.menu.hidden = !this.menu.hidden;
+      menuButton.classList.toggle('on', !this.menu.hidden);
+      this.newGameArmed = false;
+      this.renderNewGame();
+    });
+    const save = el('button', 'btn', '<b>Kaydet</b>');
+    save.dataset.action = 'kaydet';
+    save.addEventListener('click', () => cb.onSave());
+    this.menu.appendChild(save);
+    for (const [slot, label] of [
+      ['kayit', 'Kaydı yükle'],
+      ['oto', 'Otomatik kaydı yükle'],
+    ] as const) {
+      const b = el('button', 'btn', `<b>${label}</b><small></small>`);
+      b.dataset.action = slot === 'kayit' ? 'yukle' : 'oto';
+      b.addEventListener('click', () => cb.onLoad(slot));
+      this.slotButtons.set(slot, b);
+      this.menu.appendChild(b);
+    }
+    const exportButton = el('button', 'btn', 'Dosyaya indir');
+    exportButton.addEventListener('click', () => cb.onExport());
+    const importInput = el('input', '');
+    importInput.type = 'file';
+    importInput.accept = 'application/json,.json';
+    importInput.hidden = true;
+    importInput.addEventListener('change', () => {
+      const file = importInput.files?.[0];
+      if (file !== undefined) cb.onImport(file);
+      importInput.value = '';
+    });
+    const importButton = el('button', 'btn', 'Dosyadan yükle');
+    importButton.addEventListener('click', () => importInput.click());
+    const files = el('div', 'pair');
+    files.append(exportButton, importButton, importInput);
+    this.menu.appendChild(files);
+    this.musicButton = el('button', 'btn', 'Müzik');
+    this.musicButton.addEventListener('click', () => cb.onMusic(this.musicButton.dataset.on !== '1'));
+    this.menu.appendChild(this.musicButton);
+    const newGame = el('button', 'btn new-game', 'Yeni oyun');
+    newGame.addEventListener('click', () => {
+      // A new game throws the city away, so it takes a second click to be sure.
+      if (this.newGameArmed) {
+        this.newGameArmed = false;
+        cb.onNewGame();
+      } else {
+        this.newGameArmed = true;
       }
+      this.renderNewGame();
+    });
+    this.menu.appendChild(newGame);
+    ui.appendChild(this.menu);
 
-      const seconds = Math.floor(state.secondsElapsed);
-      if (seconds !== lastSecond) {
-        lastSecond = seconds;
-        const minutes = Math.floor(seconds / 60);
-        time.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    // The build bar: one card per building, with its price, time and first-level gift.
+    this.buildBar = el('div', 'cropbar buildbar panel');
+    this.buildBar.hidden = true;
+    const items = el('div', 'items');
+    for (const kind of BUILDING_KINDS) {
+      const def = balance.buildings[kind];
+      const first = def.levels[0];
+      const b = el(
+        'button',
+        'btn',
+        `<b>${kindName(city, kind)}</b><small>${priceText(city, first.cost, first.material)} · ${first.months} ay</small>` +
+          `<small>${effectText(city, first)}</small><small class="why"></small>`,
+      );
+      b.title = def.hint;
+      b.dataset.kind = kind;
+      b.addEventListener('click', () => cb.onBuildKind(kind));
+      this.buildButtons.set(kind, b);
+      items.appendChild(b);
+    }
+    this.buildBar.appendChild(items);
+    ui.appendChild(this.buildBar);
+
+    const toolbar = el('div', 'toolbar panel');
+    const tools: Array<[Tool, string, string, string]> = [
+      ['incele', 'İncele', ICONS.incele, 'Esc'],
+      ['insa', 'İnşa', ICONS.insa, 'Y'],
+      ['yik', 'Yık', ICONS.yik, 'B'],
+      ['ordu', 'Ordu', ICONS.ordu, 'O'],
+    ];
+    for (const [tool, label, icon, key] of tools) {
+      const b = el('button', 'btn', `${svg(icon)}<span>${label}</span>`);
+      b.title = `${label} (${key})`;
+      b.dataset.tool = tool;
+      b.addEventListener('click', () => cb.onTool(tool));
+      this.toolButtons.set(tool, b);
+      toolbar.appendChild(b);
+    }
+    toolbar.appendChild(el('div', 'sep'));
+    this.rosterButton = el('button', 'btn roster-toggle', `${svg(ICONS.yapilar)}<span>Yapılar</span>`);
+    this.rosterButton.title = 'Yapılar ve yükseltmeler (L)';
+    this.rosterCount = el('i', 'count');
+    this.rosterCount.hidden = true;
+    this.rosterButton.appendChild(this.rosterCount);
+    this.rosterButton.addEventListener('click', () => this.toggleRoster());
+    toolbar.appendChild(this.rosterButton);
+    ui.appendChild(toolbar);
+
+    // The roster: every building, how far it has come and what its next level takes.
+    this.roster = el('div', 'roster panel');
+    this.roster.hidden = true;
+    const head = el('div', 'head');
+    head.appendChild(el('h3', '', 'Yapılar'));
+    const closeRoster = el('button', 'close btn', '×');
+    closeRoster.title = 'Kapat (L)';
+    closeRoster.addEventListener('click', () => this.toggleRoster(false));
+    head.appendChild(closeRoster);
+    this.rosterSummary = el('div', 'summary');
+    this.rosterList = el('div', 'list');
+    this.roster.append(head, this.rosterSummary, this.rosterList);
+    ui.appendChild(this.roster);
+
+    this.info = el('div', 'info panel');
+    this.info.hidden = true;
+    ui.appendChild(this.info);
+
+    ui.appendChild(
+      el(
+        'div',
+        'hint',
+        'Sürükle: kaydır · Sağ tık: döndür<br>Tekerlek: yakınlaş · Q/E, WASD<br>Tıkla: incele',
+      ),
+    );
+
+    this.tip = el('div', 'tip panel');
+    this.tip.hidden = true;
+    root.appendChild(this.tip);
+  }
+
+  setDate(text: string): void {
+    this.date.textContent = text;
+  }
+
+  /** The ledger, redrawn only when a figure it shows has changed. */
+  setStats(): void {
+    const city = this.city;
+    const s = city.stats;
+    const key = [
+      Math.round(city.treasury),
+      Math.round(city.product),
+      Math.round(city.population),
+      s.income.total,
+      s.product,
+      Math.round(s.growth),
+      Math.round(s.order),
+      s.level,
+      s.works,
+      s.food,
+      city.buildings.size,
+      city.expansion.built,
+      city.policy.tax,
+      this.accounts.hidden ? '' : `${s.last.income}|${s.last.product}`,
+    ].join('|');
+    this.refreshAffordable();
+    if (key === this.statsKey) return;
+    this.statsKey = key;
+    const unit = city.def.resource.unit;
+    this.amount.textContent = fmt(city.treasury);
+    this.amount.classList.toggle('bad', city.treasury < 0);
+    this.income.textContent = `${signed(s.income.total)}/ay`;
+    this.product.textContent = `${fmt(city.product)} ${unit}`;
+    this.productRate.textContent = `${signed(s.product)}/ay`;
+    this.sellButton.disabled = city.product < city.balance.product.sellLot;
+    this.population.textContent = fmt(city.population);
+    this.growth.textContent = `${signed(s.growth)}/ay`;
+    this.growth.classList.toggle('bad', s.growth < 0);
+    const state = orderState(city);
+    this.orderBar.style.width = `${Math.round(s.order)}%`;
+    this.orderBar.className = state;
+    this.orderName.textContent = `${ORDER_NAMES[state]} · ${Math.round(s.order)}`;
+    this.orderName.classList.toggle('bad', state === 'huzursuz' || state === 'isyan');
+    const levels = city.balance.levels;
+    this.rank.textContent = levels[s.level].name;
+    const room = slots(city);
+    this.works.textContent = `yapı ${room.used}/${room.max}`;
+    this.works.classList.toggle('bad', room.used >= room.max);
+    const crew = builders(city);
+    this.crews.textContent = `${crew.busy}/${crew.max}`;
+    this.crewsNote.textContent =
+      crew.busy >= crew.max ? 'ustalar dolu' : `${crew.max - crew.busy} usta boşta`;
+    this.crewsNote.classList.toggle('bad', crew.busy >= crew.max);
+    const army = s.army;
+    this.troops.textContent = army.room === 0 && army.men === 0 ? '—' : `${fmt(army.men)} er`;
+    this.troopsNote.textContent =
+      army.room === 0 && army.men === 0
+        ? 'kışla yok'
+        : army.men === army.ready
+          ? `yer ${fmt(army.room)}`
+          : `${fmt(army.men - army.ready)} talimde`;
+    this.food.textContent = `${fmt(s.food)} kişi`;
+    // Soldiers eat from the same stores as everyone else.
+    const full = (city.population + s.army.men) / Math.max(1, s.food);
+    this.foodShare.textContent = full > 1 ? 'kıtlık' : `%${Math.round(full * 100)} dolu`;
+    this.foodShare.classList.toggle('bad', full > 0.95);
+    for (const [rate, b] of this.taxButtons) b.classList.toggle('on', rate === city.policy.tax);
+    if (!this.accounts.hidden) this.renderAccounts();
+  }
+
+  /** Where the month's akçe, product and order come from. */
+  private renderAccounts(): void {
+    const city = this.city;
+    const s = city.stats;
+    const good = city.def.resource.good;
+    const line = (label: string, n: number, cls = ''): string =>
+      `<span class="${cls}">${label}</span><span class="n ${cls} ${n < 0 ? 'down' : n > 0 ? 'up' : ''}">${signed(n)}</span>`;
+    const next = city.balance.levels[s.level + 1];
+    this.accounts.innerHTML =
+      '<div class="lines">' +
+      '<span class="head">Bu ay</span><span class="head n">akçe</span>' +
+      line('Hane vergisi', s.income.tax) +
+      line('Yapılar', s.income.buildings) +
+      line('Bakım', -s.income.upkeep) +
+      (s.income.army !== 0 ? line('Ulufe', -s.income.army) : '') +
+      line('Toplam', s.income.total, 'total') +
+      `<span class="head">${good}</span><span class="head n">${city.def.resource.unit}</span>` +
+      line('Şehir ve ocaklar', s.product, 'total') +
+      '<span class="head">Huzur</span><span class="head n"></span>' +
+      line('Temel', s.orderParts.base) +
+      line('Vergi', s.orderParts.tax) +
+      line('Yapılar', s.orderParts.buildings) +
+      (s.orderParts.walls !== 0 ? line('Surlar', s.orderParts.walls) : '') +
+      line('Kalabalık', s.orderParts.crowding) +
+      (s.orderParts.food !== 0 ? line('Kıtlık', s.orderParts.food) : '') +
+      (s.orderParts.debt !== 0 ? line('Borç', s.orderParts.debt) : '') +
+      `<span class="wide dim">Geçen ay: ${signed(s.last.income)} akçe · ` +
+      `${signed(s.last.product)} ${good.toLocaleLowerCase('tr-TR')} · ${signed(s.last.growth)} kişi</span>` +
+      (next !== undefined
+        ? `<span class="wide dim">${next.name}: ${fmt(next.population)} nüfusta</span>`
+        : '') +
+      (s.level > 0
+        ? `<span class="wide dim">${city.balance.levels[s.level].name} düzeyi nüfus ${fmt(rankFloor(city))} altına inerse gider</span>`
+        : '') +
+      '</div>';
+  }
+
+  /**
+   * Greys the build cards that cannot be begun just now and says on each what stops it:
+   * the akçe or the product short (with how much is in hand), no builder free, no room.
+   */
+  private refreshAffordable(): void {
+    if (this.buildBar.hidden) return;
+    const city = this.city;
+    const crew = builders(city);
+    const room = slots(city);
+    const key = [
+      Math.round(city.treasury),
+      Math.round(city.product),
+      crew.busy,
+      crew.max,
+      room.used,
+      room.max,
+    ].join('|');
+    if (key === this.affordKey) return;
+    this.affordKey = key;
+    const good = city.def.resource.good.toLocaleLowerCase('tr-TR');
+    for (const [kind, b] of this.buildButtons) {
+      const first = city.balance.buildings[kind].levels[0];
+      const block = startBlock(city, kind);
+      b.classList.toggle('poor', block !== null);
+      const why = b.querySelector('.why') as HTMLElement;
+      why.textContent =
+        block === null
+          ? ''
+          : block.by === 'akce'
+            ? `akçe ${fmt(city.treasury)}/${fmt(first.cost)}`
+            : block.by === 'urun'
+              ? `${good} ${fmt(city.product)}/${fmt(first.material)}`
+              : block.by === 'builders'
+                ? `ustalar işte ${crew.busy}/${crew.max}`
+                : block.by === 'slots'
+                  ? `yapı hakkı dolu ${room.used}/${room.max}`
+                  : `en çok ${kindCount(city, kind).max}`;
+      b.title = block === null ? city.balance.buildings[kind].hint : block.text;
+    }
+  }
+
+  /** What each save slot holds, for the menu. */
+  setSlots(labels: SlotLabels): void {
+    for (const [slot, b] of this.slotButtons) {
+      const label = labels[slot];
+      b.disabled = label === null;
+      const small = b.querySelector('small');
+      if (small !== null) small.textContent = label ?? 'boş';
+    }
+  }
+
+  setAudio(sound: boolean, music: boolean): void {
+    this.soundButton.dataset.on = sound ? '1' : '0';
+    this.soundButton.innerHTML = svg(sound ? ICONS.sound : ICONS.muted, '0 0 16 16');
+    this.soundButton.title = sound ? 'Sesi kapat' : 'Sesi aç';
+    this.musicButton.dataset.on = music ? '1' : '0';
+    this.musicButton.textContent = music ? 'Müzik: açık' : 'Müzik: kapalı';
+    this.musicButton.classList.toggle('on', music);
+  }
+
+  closeMenu(): void {
+    this.menu.hidden = true;
+    this.menuButton.classList.remove('on');
+    this.newGameArmed = false;
+  }
+
+  private renderNewGame(): void {
+    const b = this.menu.querySelector<HTMLButtonElement>('.new-game');
+    if (b === null) return;
+    b.textContent = this.newGameArmed ? 'Emin misin? Şehir baştan kurulur' : 'Yeni oyun';
+    b.classList.toggle('armed', this.newGameArmed);
+  }
+
+  /** Forgets what the ledger last showed, so it redraws for a city just loaded. */
+  refresh(): void {
+    this.statsKey = '';
+    this.affordKey = '';
+  }
+
+  setSpeed(speed: Speed): void {
+    this.speedButtons.forEach((b, k) => b.classList.toggle('on', k === speed));
+  }
+
+  setTool(tool: Tool): void {
+    for (const [t, b] of this.toolButtons) b.classList.toggle('on', t === tool);
+    this.buildBar.hidden = tool !== 'insa';
+    this.affordKey = '';
+    this.refreshAffordable();
+  }
+
+  setBuildKind(kind: BuildingKind): void {
+    for (const [k, b] of this.buildButtons) b.classList.toggle('on', k === kind);
+  }
+
+  /** Shows a tile. A pinned panel stays until closed and offers what can be done there. */
+  showInfo(info: TileInfo | null, pinned = false): void {
+    if (info === null) {
+      this.info.hidden = true;
+      return;
+    }
+    const rows = info.rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`);
+    this.info.innerHTML = `<h3>${info.title}</h3><dl>${rows.join('')}</dl>`;
+    const b = info.building;
+    if (b !== undefined) this.info.appendChild(this.ladder(b, pinned));
+    if (info.army !== undefined) this.info.appendChild(this.armySheet(info.army, pinned));
+    if (pinned) {
+      const close = el('button', 'close btn', '×');
+      close.title = 'Kapat (Esc)';
+      close.addEventListener('click', () => this.cb.onCloseInfo());
+      this.info.prepend(close);
+      if (b !== undefined) {
+        const down = el('button', 'btn demolish', `Yık · +${fmt(b.refund)} akçe`);
+        down.addEventListener('click', () => this.cb.onDemolish(b.id));
+        const bar = el('div', 'actions');
+        bar.appendChild(down);
+        this.info.appendChild(bar);
       }
+    }
+    this.info.classList.toggle('pinned', pinned);
+    this.info.hidden = false;
+  }
 
-      const rounded = Math.ceil(state.health);
-      if (rounded !== lastHealth) {
-        lastHealth = rounded;
-        healthFill.style.width = `${String((state.health / state.maxHealth) * 100)}%`;
-        healthText.textContent = `${String(rounded)} / ${String(Math.round(state.maxHealth))}`;
+  /**
+   * The barracks' companies, counted by kind, and the ones it can raise. Pinned, a kind
+   * can be raised one, five or ten companies at a time and sent home a company at a time;
+   * the reason a kind cannot be raised is shown.
+   */
+  private armySheet(a: ArmyPanel, pinned: boolean): HTMLElement {
+    const box = el('div', 'army');
+    const share = a.room > 0 ? Math.min(100, Math.round((a.men / a.room) * 100)) : 0;
+    box.appendChild(
+      el(
+        'div',
+        'head',
+        `<b>Ordu</b><span>${fmt(a.men)} / ${fmt(a.room)} er${a.pay > 0 ? ` · ulufe ${fmt(a.pay)}/ay` : ''}</span>`,
+      ),
+    );
+    box.appendChild(el('span', 'progress', `<i style="width:${share}%"></i>`));
+    if (a.kinds.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan bölük topla.'));
+    for (const k of a.kinds) {
+      const row = el('div', 'unit');
+      row.appendChild(el('span', 'name', `<b>${k.name}</b> · ${fmt(k.units)} bölük · ${fmt(k.men)} er`));
+      const state =
+        k.drilling === 0
+          ? 'hazır'
+          : k.drilling === k.units
+            ? `talimde · ${k.monthsLeft} ay`
+            : `${fmt(k.ready)} hazır · ${k.drilling} bölük talimde`;
+      row.appendChild(el('small', k.drilling === 0 ? 'ok' : '', state));
+      if (pinned) {
+        const home = el('button', 'btn disband', '− Terhis');
+        home.title = 'Bir bölüğü dağıt (en son toplananı): askerler evlerine döner';
+        home.addEventListener('click', () => this.cb.onDisband(k.kind));
+        row.appendChild(home);
       }
-
-      hurt.style.opacity = String(state.hurt);
-
-      const alive = state.bossHealth >= 0;
-      if (alive !== lastBossAlive) {
-        lastBossAlive = alive;
-        boss.dataset.alive = String(alive);
-      }
-      if (alive) {
-        const percent = Math.round(state.bossHealth * 1000) / 10;
-        if (percent !== lastBossPercent) {
-          lastBossPercent = percent;
-          bossFill.style.width = `${String(percent)}%`;
+      box.appendChild(row);
+    }
+    if (!pinned) return box;
+    if (a.kinds.length > 0) {
+      const command = el('button', 'btn command', `${svg(ICONS.ordu)}<span>Orduyu seç ve komuta et</span>`);
+      command.title = 'Bütün bölükleri seç; sağ tıkla haritada yürüt (O)';
+      command.addEventListener('click', () => this.cb.onArmy({ kind: 'selectAll' }));
+      box.appendChild(command);
+    }
+    box.appendChild(el('div', 'sub', `Asker topla · halk en çok ${fmt(a.levy)} asker verebilir`));
+    for (const o of a.offers) {
+      const line = el('div', 'offer');
+      const go = el(
+        'button',
+        'btn recruit',
+        `<b>${o.name}</b><small>${fmt(o.men)} er · ${fmt(o.cost)} akçe · ${o.months} ay talim · ulufe ${fmt(o.pay)}/ay</small>` +
+          (o.problem !== undefined
+            ? `<small class="${o.locked ? 'need' : 'bad'}">${o.locked ? '🔒 ' : ''}${o.problem}</small>`
+            : `<small class="dim">şimdi en çok ${fmt(o.most)} bölük</small>`),
+      );
+      go.title = `${o.hint} · bir bölük topla`;
+      go.disabled = o.problem !== undefined;
+      go.addEventListener('click', () => this.cb.onRecruit(o.kind, 1));
+      line.appendChild(go);
+      if (!o.locked) {
+        for (const n of [5, 10]) {
+          const many = el('button', 'btn many', `+${n}`);
+          many.title = `${n} bölük birden topla (${fmt(n * o.men)} er, ${fmt(n * o.cost)} akçe)`;
+          many.disabled = o.most < n;
+          many.addEventListener('click', () => this.cb.onRecruit(o.kind, n));
+          line.appendChild(many);
         }
       }
-    },
+      box.appendChild(line);
+    }
+    return box;
+  }
 
-    setLoadout(items): void {
-      // Weapons first, so the row reads as "what I fight with, then what helps".
-      const ordered = [...items].sort((a, b) => Number(b.weapon) - Number(a.weapon));
-      build.replaceChildren();
-
-      for (const item of ordered) {
-        const slot = document.createElement('div');
-        slot.className = 'hud-slot';
-        slot.dataset.weapon = String(item.weapon);
-        slot.title = `${item.name} ${String(item.level)}`;
-
-        const icon = icons.get(item.id);
-        if (icon === undefined) {
-          const text = document.createElement('span');
-          text.className = 'hud-slot-text';
-          text.textContent = item.name.slice(0, 1).toUpperCase();
-          slot.appendChild(text);
-        } else {
-          const image = document.createElement('img');
-          image.src = icon;
-          image.alt = item.name;
-          slot.appendChild(image);
+  /**
+   * A building's three levels as a ladder: those built ticked, the one being built with its
+   * progress, the next with its price and, when the panel is pinned, the button to raise it;
+   * a level the city is not great enough for yet says which rank it waits for.
+   */
+  private ladder(b: BuildingSummary, pinned: boolean): HTMLElement {
+    const box = el('div', 'ladder');
+    for (const r of b.rungs) {
+      const row = el('div', `rung ${r.state}`);
+      row.appendChild(el('span', 'lv', ROMAN[r.level]));
+      const body = el('div', 'body');
+      body.appendChild(el('span', 'fx', r.effect));
+      if (r.state === 'done') {
+        body.appendChild(el('small', 'ok', 'kuruldu'));
+      } else if (r.state === 'work' && b.work !== null) {
+        body.appendChild(el('small', '', `inşaatta · ${b.work.monthsLeft} ay kaldı`));
+        body.appendChild(
+          el('span', 'progress', `<i style="width:${Math.round(b.work.progress * 100)}%"></i>`),
+        );
+      } else {
+        body.appendChild(el('small', 'price', `${r.price} · ${r.months} ay`));
+        if (r.need !== undefined) body.appendChild(el('small', 'need', `🔒 Şehir ${r.need} olunca`));
+        const o = b.offer;
+        if (r.state === 'next' && o !== null && r.need === undefined) {
+          if (pinned) {
+            const up = el('button', 'btn upgrade', `▲ ${ROMAN[r.level]}. seviyeye yükselt`);
+            up.disabled = o.problem !== undefined;
+            up.addEventListener('click', () => this.cb.onUpgrade(b.id));
+            body.appendChild(up);
+          }
+          if (o.problem !== undefined && o.blockedBy !== 'work')
+            body.appendChild(el('small', 'bad', o.problem));
         }
-
-        const level = document.createElement('span');
-        level.className = 'hud-slot-level';
-        level.textContent = String(item.level);
-        slot.appendChild(level);
-
-        build.appendChild(slot);
       }
-    },
+      row.appendChild(body);
+      box.appendChild(row);
+    }
+    return box;
+  }
 
-    dispose(): void {
-      root.remove();
-      style.remove();
-    },
-  };
+  toggleRoster(open = !this.rosterOpen): void {
+    this.roster.hidden = !open;
+    this.rosterButton.classList.toggle('on', open);
+    this.rosterKey = '';
+  }
+
+  get rosterOpen(): boolean {
+    return !this.roster.hidden;
+  }
+
+  /**
+   * The buildings list with the next ring of walls at its head, and the count on its button
+   * of what can be begun now.
+   */
+  setRoster(
+    list: BuildingSummary[],
+    works: { busy: number; max: number },
+    room: { used: number; max: number },
+    expansion: ExpansionView | null,
+  ): void {
+    const ready = list.filter((b) => b.readiness === 'ready').length;
+    const wallsReady = expansion !== null && expansion.offer.problem === undefined ? 1 : 0;
+    this.rosterCount.hidden = ready + wallsReady === 0;
+    this.rosterCount.textContent = String(ready + wallsReady);
+    this.rosterButton.title =
+      ready + wallsReady > 0
+        ? `Yapılar: ${ready + wallsReady} iş başlatılabilir (L)`
+        : 'Yapılar ve yükseltmeler (L)';
+    if (this.roster.hidden) return;
+    const key = JSON.stringify([list, works, room, expansion]);
+    if (key === this.rosterKey) return;
+    this.rosterKey = key;
+    this.rosterSummary.textContent =
+      `${ready > 0 ? `${ready} yapı yükseltilebilir` : 'Şu an yükseltilebilecek yapı yok'}` +
+      ` · yapı hakkı ${room.used}/${room.max} · inşaat ${works.busy}/${works.max}`;
+    this.rosterList.innerHTML = '';
+    if (expansion !== null) this.rosterList.appendChild(this.expansionCard(expansion));
+    if (list.length === 0) this.rosterList.appendChild(el('div', 'dim', 'Henüz yapı yok: İnşa ile kur.'));
+    for (const b of list) this.rosterList.appendChild(this.rosterEntry(b));
+  }
+
+  /** The next ring of walls: what it gives, what it costs, and the button to begin it. */
+  private expansionCard(x: ExpansionView): HTMLElement {
+    const o = x.offer;
+    const state =
+      x.progress !== null
+        ? 'building'
+        : o.problem === undefined
+          ? 'ready'
+          : o.blockedBy === 'rank'
+            ? 'locked'
+            : 'waiting';
+    const card = el('div', `entry walls ${state}`);
+    card.appendChild(el('div', 'top', `<b>${o.def.name}</b><small>şehri çeviren yeni sur</small>`));
+    card.appendChild(
+      el(
+        'div',
+        'now',
+        `+${o.def.slots} yapı hakkı · +${o.def.order} huzur · yeni kapılar, sokaklar ve mahalleler`,
+      ),
+    );
+    const next = el('div', 'next');
+    const price = `${priceText(this.city, o.def.cost, o.def.material)} · ${o.def.months} ay`;
+    if (x.progress !== null) {
+      next.appendChild(el('span', 'progress', `<i style="width:${Math.round(x.progress * 100)}%"></i>`));
+      next.appendChild(el('small', '', `sur yükseliyor · ${x.monthsLeft} ay kaldı`));
+    } else if (o.problem === undefined) {
+      const go = el('button', 'btn upgrade', `▲ Surları yükselt · ${price}`);
+      go.addEventListener('click', () => this.cb.onExpand());
+      next.appendChild(go);
+    } else {
+      next.appendChild(el('small', 'price', price));
+      next.appendChild(
+        el(
+          'small',
+          o.blockedBy === 'rank' ? 'need' : 'bad',
+          o.blockedBy === 'rank' ? `🔒 ${o.problem}` : o.problem,
+        ),
+      );
+    }
+    card.appendChild(next);
+    return card;
+  }
+
+  private rosterEntry(b: BuildingSummary): HTMLElement {
+    const entry = el('div', `entry ${b.readiness}`);
+    const name = el('button', 'name', `<b>${b.name}</b>${b.kind !== '' ? `<small>${b.kind}</small>` : ''}`);
+    name.title = 'Haritada göster';
+    name.addEventListener('click', () => this.cb.onFocus(b.id));
+    const pips = el('span', 'pips');
+    pips.title = `${b.level}. seviye`;
+    for (let k = 1; k <= b.levels; k++) {
+      const done = k <= b.level;
+      const work = b.work !== null && k === b.work.toLevel;
+      pips.appendChild(el('i', done ? 'done' : work ? 'work' : ''));
+    }
+    const top = el('div', 'top');
+    top.append(name, pips);
+    entry.appendChild(top);
+    entry.appendChild(el('div', 'now', b.effect ?? 'ilk seviyesi kuruluyor'));
+    const next = el('div', 'next');
+    const o = b.offer;
+    if (b.work !== null) {
+      next.appendChild(el('span', 'progress', `<i style="width:${Math.round(b.work.progress * 100)}%"></i>`));
+      next.appendChild(el('small', '', `${ROMAN[b.work.toLevel]} · ${b.work.monthsLeft} ay kaldı`));
+    } else if (o === null) {
+      next.appendChild(el('small', 'dim', READINESS_NAMES.top));
+    } else {
+      const rung = b.rungs[o.toLevel - 1];
+      if (b.readiness === 'ready') {
+        const up = el('button', 'btn upgrade', `▲ ${ROMAN[o.toLevel]} · ${rung.price} · ${rung.months} ay`);
+        up.addEventListener('click', () => this.cb.onUpgrade(b.id));
+        next.appendChild(up);
+      } else {
+        next.appendChild(el('small', 'price', `▲ ${ROMAN[o.toLevel]} · ${rung.price} · ${rung.months} ay`));
+        next.appendChild(el('small', 'bad', o.problem ?? READINESS_NAMES[b.readiness]));
+      }
+      next.appendChild(el('small', 'gain', `olunca: ${rung.effect}`));
+    }
+    entry.appendChild(next);
+    return entry;
+  }
+
+  /** Moves each building's badge over it; badges of buildings off the screen are hidden. */
+  placeMarkers(places: MarkerPlace[], visible: boolean): void {
+    this.markerLayer.hidden = !visible;
+    if (!visible) return;
+    const seen = new Set<number>();
+    for (const p of places) {
+      const s = p.summary;
+      seen.add(s.id);
+      let m = this.markers.get(s.id);
+      if (m === undefined) {
+        m = el('button', 'marker');
+        const id = s.id;
+        m.addEventListener('click', () => this.cb.onFocus(id));
+        this.markers.set(s.id, m);
+        this.markerLayer.appendChild(m);
+      }
+      const state = `${s.readiness}|${s.level}|${s.work === null ? '' : Math.round(s.work.progress * 20)}`;
+      if (m.dataset.state !== state) {
+        m.dataset.state = state;
+        m.className = `marker ${s.readiness}`;
+        m.title = `${s.name}: ${s.level > 0 ? `${s.level}. seviye` : 'inşaatta'} · ${
+          s.readiness === 'building'
+            ? `${s.work?.monthsLeft ?? 0} ay kaldı`
+            : (s.offer?.problem ?? READINESS_NAMES[s.readiness])
+        }`;
+        const arrow = s.readiness === 'ready' || s.readiness === 'waiting' ? '<i class="up">▲</i>' : '';
+        const bar =
+          s.work !== null
+            ? `<span class="bar"><i style="width:${Math.round(s.work.progress * 100)}%"></i></span>`
+            : '';
+        m.innerHTML = `<b>${s.level > 0 ? ROMAN[s.level] : '⚒'}</b>${arrow}${bar}`;
+      }
+      m.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -100%)`;
+    }
+    for (const [id, m] of this.markers) {
+      if (seen.has(id)) continue;
+      m.remove();
+      this.markers.delete(id);
+    }
+  }
+
+  notify(n: Notice): void {
+    const item = el('div', `notice panel ${n.kind}`);
+    item.textContent = n.text;
+    this.notices.appendChild(item);
+    while (this.notices.children.length > 3) this.notices.firstElementChild?.remove();
+    window.setTimeout(() => item.remove(), NOTICE_MS);
+  }
+
+  showTip(text: string, x: number, y: number, bad: boolean): void {
+    this.tip.textContent = text;
+    this.tip.classList.toggle('bad', bad);
+    this.tip.style.left = `${x}px`;
+    this.tip.style.top = `${y}px`;
+    this.tip.hidden = false;
+  }
+
+  hideTip(): void {
+    this.tip.hidden = true;
+  }
 }

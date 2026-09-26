@@ -1,0 +1,219 @@
+{
+  "id": "konya",
+  "name": "Konya",
+  "title": "Dârülmülk Konya",
+  "seed": 1230,
+  "size": 200,
+  "start": {
+    "year": 1230,
+    "month": 2,
+    "day": 1
+  },
+  "tepe": {
+    "x": 0,
+    "z": 0,
+    "topRadius": 5.2,
+    "footRadius": 9.8,
+    "height": 2.2
+  },
+  "walls": {
+    "radius": 22.5,
+    "height": 1.35,
+    "towerSpacing": 6.2
+  },
+  "gates": [
+    {
+      "name": "Larende Kapısı",
+      "angle": 62,
+      "road": [
+        [15, 30],
+        [22, 46],
+        [30, 70],
+        [40, 100]
+      ]
+    },
+    {
+      "name": "Aksaray Kapısı",
+      "angle": 338,
+      "road": [
+        [34, -12],
+        [55, -15],
+        [80, -14],
+        [100, -12]
+      ]
+    },
+    {
+      "name": "Sille Kapısı",
+      "angle": 252,
+      "road": [
+        [-9, -34],
+        [-12, -52],
+        [-14, -75],
+        [-12, -100]
+      ]
+    },
+    {
+      "name": "Beyşehir Kapısı",
+      "angle": 158,
+      "road": [
+        [-34, 12],
+        [-55, 15],
+        [-78, 13],
+        [-100, 10]
+      ]
+    }
+  ],
+  "stream": {
+    "name": "Meram Çayı",
+    "width": 1.8,
+    "points": [
+      [-100, 17],
+      [-78, 22],
+      [-52, 27],
+      [-28, 30],
+      [-4, 33],
+      [14, 31],
+      [30, 32],
+      [48, 38],
+      [70, 42],
+      [100, 45]
+    ]
+  },
+  "hills": {
+    "north": {
+      "from": -28,
+      "to": -64,
+      "height": 6.5
+    },
+    "west": {
+      "from": -32,
+      "to": -70,
+      "height": 5.5
+    }
+  },
+  "streets": {
+    "tepeRing": 10.6,
+    "innerRing": 16.4,
+    "alleys": 22
+  },
+  "housing": {
+    "innerRadius": 11.4,
+    "twoStorey": 0.28,
+    "startPopulation": 42000
+  },
+  "landmarks": [
+    {
+      "kind": "cami",
+      "name": "Alaeddin Camii",
+      "x": 0.5,
+      "z": -0.5,
+      "w": 8,
+      "d": 5,
+      "rot": 0
+    },
+    {
+      "kind": "kumbet",
+      "name": "Sultanlar Kümbeti",
+      "x": -2.5,
+      "z": 3.2,
+      "w": 2,
+      "d": 2,
+      "rot": 0
+    },
+    {
+      "kind": "kosk",
+      "name": "Alaeddin Köşkü",
+      "x": -1.5,
+      "z": -4.5,
+      "w": 2,
+      "d": 2,
+      "rot": 0
+    },
+    {
+      "kind": "mescit",
+      "name": "Kapı Mescidi",
+      "angle": 72,
+      "radius": 18.6,
+      "w": 3,
+      "d": 3
+    },
+    {
+      "kind": "mescit",
+      "name": "Tepe Mescidi",
+      "angle": 300,
+      "radius": 13.6,
+      "w": 3,
+      "d": 3
+    },
+    {
+      "kind": "hamam",
+      "name": "Çifte Hamam",
+      "angle": 205,
+      "radius": 13.6,
+      "w": 4,
+      "d": 3
+    }
+  ],
+  "resource": {
+    "good": "Taş",
+    "unit": "araba",
+    "building": "Taş Ocağı",
+    "sites": [
+      {
+        "name": "Sille taş ocakları",
+        "x": -22,
+        "z": -52,
+        "radius": 6
+      },
+      {
+        "name": "Takkeli Dağı ocakları",
+        "x": -62,
+        "z": -4,
+        "radius": 6
+      }
+    ]
+  },
+  "buildings": [
+    {
+      "kind": "carsi",
+      "name": "Larende Çarşısı",
+      "level": 1,
+      "near": [15, 24]
+    },
+    {
+      "kind": "ambar",
+      "name": "Meram Ambarı",
+      "level": 1,
+      "near": [10, 29]
+    }
+  ],
+  "expansions": [
+    {
+      "name": "Dış Sur",
+      "radius": 34,
+      "rank": 1,
+      "cost": 75000,
+      "material": 4000,
+      "months": 10,
+      "slots": 2,
+      "order": 5,
+      "alleys": 14
+    },
+    {
+      "name": "Varoş Suru",
+      "radius": 46,
+      "rank": 2,
+      "cost": 135000,
+      "material": 10000,
+      "months": 14,
+      "slots": 3,
+      "order": 5,
+      "alleys": 20
+    }
+  ],
+  "suburbs": {
+    "rings": [6, 17, 29],
+    "every": 5500,
+    "alleys": 2
+  }
+}
