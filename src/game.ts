@@ -17,6 +17,7 @@ import { inspectTile, priceText } from './sim/inspect';
 import { replaceCity, restoreGame, saveGame, SaveError, type SaveGame } from './sim/save';
 import type { PreviewTile } from './render/cursor-view';
 import { World } from './render/world';
+import { offerFile } from './host';
 import { readJson, removeKey, writeJson } from './storage';
 import { Hud, type SaveSlot, type SlotLabels, type Tool } from './ui/hud';
 
@@ -101,7 +102,7 @@ export class Game {
       onSave: () => this.save('kayit'),
       onLoad: (slot) => this.load(slot),
       onNewGame: () => this.newGame(),
-      onExport: () => this.exportSave(),
+      onExport: () => void this.exportSave(),
       onImport: (file) => void this.importSave(file),
       onSound: (on) => this.setAudio({ ...this.settings, sound: on }),
       onMusic: (on) => this.setAudio({ ...this.settings, music: on }),
@@ -270,14 +271,11 @@ export class Game {
   }
 
   /** Offers the save as a file to keep. */
-  exportSave(): void {
+  async exportSave(): Promise<void> {
     const date = dateOf(this.city.calendar);
-    const blob = new Blob([JSON.stringify(saveGame(this.city))], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `darulmulk-${this.city.def.id}-${date.year}-${date.month + 1}-${date.day}.json`;
-    a.click();
-    window.setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const name = `darulmulk-${this.city.def.id}-${date.year}-${date.month + 1}-${date.day}.json`;
+    const result = await offerFile(name, JSON.stringify(saveGame(this.city)));
+    if (result === 'failed') this.say('Dosya kaydedilemedi.', 'bad');
   }
 
   async importSave(file: File): Promise<boolean> {

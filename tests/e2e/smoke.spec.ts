@@ -141,6 +141,13 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await page.locator('.menu [data-action="yukle"]').click();
   await expect.poll(() => page.evaluate(() => window.__game!.city.treasury)).toBe(kept.akce);
   expect(await page.evaluate(() => window.__game!.city.buildings.size)).toBe(kept.buildings);
+  // The save also leaves as a file.
+  await page.getByRole('button', { name: 'Menü' }).click();
+  const [file] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Dosyaya indir' }).click(),
+  ]);
+  expect(file.suggestedFilename()).toMatch(/^darulmulk-konya-.*\.json$/);
   // The first click started the sound.
   expect(await page.evaluate(() => window.__game!.sound.running)).toBe(true);
 

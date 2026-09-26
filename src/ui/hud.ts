@@ -88,6 +88,7 @@ export class Hud {
   private readonly speedButtons: HTMLButtonElement[] = [];
   private readonly soundButton: HTMLButtonElement;
   private readonly menu: HTMLElement;
+  private readonly menuButton: HTMLButtonElement;
   private readonly slotButtons = new Map<SaveSlot, HTMLButtonElement>();
   private readonly musicButton: HTMLButtonElement;
   private newGameArmed = false;
@@ -192,6 +193,7 @@ export class Hud {
     this.soundButton.setAttribute('aria-label', 'Ses');
     this.soundButton.addEventListener('click', () => cb.onSound(this.soundButton.dataset.on !== '1'));
     const menuButton = el('button', 'btn', svg(ICONS.menu, '0 0 16 16'));
+    this.menuButton = menuButton;
     menuButton.title = 'Menü: kayıt, yükleme, müzik';
     menuButton.setAttribute('aria-label', 'Menü');
     speed.append(this.soundButton, menuButton);
@@ -417,6 +419,7 @@ export class Hud {
 
   closeMenu(): void {
     this.menu.hidden = true;
+    this.menuButton.classList.remove('on');
     this.newGameArmed = false;
   }
 
