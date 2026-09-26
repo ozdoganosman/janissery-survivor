@@ -35,6 +35,15 @@ export interface Gate {
   angle: number;
   /** Tiles of the passage through the wall. */
   tiles: number[];
+  /** Radius of the ring of walls the gate is in. */
+  radius: number;
+}
+
+/** A ring of walls round the tepe: the first one the city was given, then any it has raised. */
+export interface WallRing {
+  name: string;
+  radius: number;
+  height: number;
 }
 
 /**
@@ -66,7 +75,14 @@ export interface CityState {
   field: Int32Array;
   fields: Map<number, Field>;
   landmarks: Landmark[];
+  /** Gates in every ring of walls. */
   gates: Gate[];
+  /** Rings of walls standing, innermost first. */
+  rings: WallRing[];
+  /** How many of the city's planned expansions stand, and the one being built. */
+  expansion: { built: number; work: { days: number; daysLeft: number } | null };
+  /** Streets laid outside the walls as the people spilled out, in the planned order. */
+  streetsLaid: number;
   balance: Balance;
   /** Akçe in the treasury. */
   treasury: number;
@@ -83,17 +99,27 @@ export interface CityState {
   /** The rank and the mood last told to the player, so each change is told once. */
   announced: { level: number; order: OrderState };
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number; buildings: number; fields: number };
+  revision: { roads: number; houses: number; buildings: number; fields: number; walls: number };
 }
 
 export interface CityStats {
   /** Public order, 0..100, and where it comes from. */
   order: number;
-  orderParts: { base: number; tax: number; buildings: number; crowding: number };
+  orderParts: {
+    base: number;
+    tax: number;
+    buildings: number;
+    walls: number;
+    crowding: number;
+    food: number;
+    debt: number;
+  };
   /** Index into `balance.levels`. */
   level: number;
-  /** What a month brings at today's figures. */
-  income: { tax: number; buildings: number; total: number };
+  /** What a month brings at today's figures; `total` is after upkeep. */
+  income: { tax: number; buildings: number; upkeep: number; total: number };
+  /** People the city can feed. */
+  food: number;
   product: number;
   growth: number;
   /** What the last month really brought. */
@@ -112,8 +138,13 @@ export interface Notice {
   topic?: NoticeTopic;
 }
 
-const DEG = Math.PI / 180;
-const polar = (cx: number, cz: number, angle: number, r: number): Vec2 => [
+/** Radius of the outermost ring of walls standing: inside it is the town, outside the suburbs. */
+export function outerRadius(city: CityState): number {
+  return city.rings[city.rings.length - 1].radius;
+}
+
+export const DEG = Math.PI / 180;
+export const polar = (cx: number, cz: number, angle: number, r: number): Vec2 => [
   cx + Math.cos(angle) * r,
   cz + Math.sin(angle) * r,
 ];
@@ -138,6 +169,9 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     fields: new Map(),
     landmarks: [],
     gates: [],
+    rings: [{ name: 'Sur', radius: def.walls.radius, height: def.walls.height }],
+    expansion: { built: 0, work: null },
+    streetsLaid: 0,
     balance,
     treasury: balance.start.treasury,
     product: balance.start.product,
@@ -146,9 +180,10 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     calendar: createCalendar(def.start),
     stats: {
       order: 0,
-      orderParts: { base: 0, tax: 0, buildings: 0, crowding: 0 },
+      orderParts: { base: 0, tax: 0, buildings: 0, walls: 0, crowding: 0, food: 0, debt: 0 },
       level: 0,
-      income: { tax: 0, buildings: 0, total: 0 },
+      income: { tax: 0, buildings: 0, upkeep: 0, total: 0 },
+      food: 0,
       product: 0,
       growth: 0,
       last: { income: 0, product: 0, growth: 0 },
@@ -156,7 +191,7 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     },
     notices: [],
     announced: { level: 0, order: 'sakin' },
-    revision: { roads: 0, houses: 0, buildings: 0, fields: 0 },
+    revision: { roads: 0, houses: 0, buildings: 0, fields: 0, walls: 0 },
   };
   const rng = createRng(def.seed);
   // Gate passages and the streets are generated once; nothing in play removes them.
@@ -237,7 +272,7 @@ function buildWalls(city: CityState, locked: Uint8Array): void {
       city.road[i] = 1;
       locked[i] = 1;
     }
-    city.gates.push({ name: g.name, angle: a, tiles });
+    city.gates.push({ name: g.name, angle: a, tiles, radius: R });
   }
 }
 
@@ -277,7 +312,7 @@ function placeLandmarks(city: CityState): void {
 }
 
 /** Landmark tiles grown by `margin`: streets route around them instead of brushing their walls. */
-function landmarkReserve(city: CityState, margin: number): Uint8Array {
+export function landmarkReserve(city: CityState, margin: number): Uint8Array {
   const { grid } = city;
   const out = new Uint8Array(grid.count);
   for (const l of city.landmarks) {
@@ -307,7 +342,7 @@ function paintRoad(
   }
 }
 
-function ringPath(cx: number, cz: number, r: number, wobble: number, salt: number): Vec2[] {
+export function ringPath(cx: number, cz: number, r: number, wobble: number, salt: number): Vec2[] {
   const pts: Vec2[] = [];
   for (let a = 0; a <= Math.PI * 2 + 1e-6; a += 0.05) {
     const rr = r + (valueNoise(a * 2.2 + salt, salt) - 0.5) * 2 * wobble;
@@ -411,7 +446,7 @@ function layOutsideRoads(city: CityState): void {
  * were one lane wide, so each thick spot loses a tile, but only a tile whose removal keeps
  * every neighbouring piece of road connected.
  */
-function thinRoads(city: CityState, locked: Uint8Array): void {
+export function thinRoads(city: CityState, locked: Uint8Array): void {
   const { grid, road } = city;
   const isRoad = (x: number, z: number): boolean => grid.inBounds(x, z) && road[grid.index(x, z)] === 1;
   const inThickBlock = (x: number, z: number): boolean =>
@@ -469,7 +504,7 @@ function thinRoads(city: CityState, locked: Uint8Array): void {
  * Drops stray road pieces smaller than `minTiles`. Streets clipped around landmarks can
  * leave a tile or two behind that lead nowhere; the gate passages are never touched.
  */
-function pruneRoadFragments(city: CityState, locked: Uint8Array, minTiles: number): void {
+export function pruneRoadFragments(city: CityState, locked: Uint8Array, minTiles: number): void {
   const { grid } = city;
   const seen = new Uint8Array(grid.count);
   for (let start = 0; start < grid.count; start++) {

@@ -101,10 +101,24 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   });
   await page.evaluate((b) => window.__game!.select({ x: b.x, z: b.z }), bazaar);
   await expect(page.locator('.info.pinned h3')).toHaveText('Larende Çarşısı');
-  await page.locator('.info .actions .upgrade').click();
+  await page.locator('.info .ladder .upgrade').click();
   await expect
     .poll(() => page.evaluate((id) => window.__game!.city.buildings.get(id)?.work?.toLevel ?? 0, bazaar.id))
     .toBe(2);
+
+  // The buildings list: each building with its next level, the next ring of walls at its
+  // head, and a name that takes the camera to the building and its badge.
+  await page.keyboard.press('l');
+  await expect(page.locator('.roster')).toBeVisible();
+  await expect(page.locator('.roster .summary')).toContainText('yapı hakkı 3/5');
+  await expect(page.locator('.roster .entry.walls')).toContainText('Dış Sur');
+  await expect(page.locator('.roster .entry.walls')).toContainText('Büyük Şehir');
+  await page.locator('.roster .entry .name', { hasText: 'Meram Ambarı' }).click();
+  await expect(page.locator('.info.pinned h3')).toHaveText('Meram Ambarı');
+  await expect(page.locator('.info.pinned .ladder')).toBeVisible();
+  await expect(page.locator('.markers .marker').first()).toBeVisible();
+  await page.keyboard.press('l');
+  await expect(page.locator('.roster')).toBeHidden();
 
   // Taxes: the ledger's switch, and the accounts fold open.
   await page.getByRole('button', { name: /^Ağır$/ }).click();

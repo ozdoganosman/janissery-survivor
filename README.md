@@ -6,30 +6,36 @@ atadığı emir olarak onu büyütür.
 
 Tasarım, kurallar, sanat yönü ve yol haritası: [docs/TASARIM.md](docs/TASARIM.md).
 
-> Durum: **6. aşama — cila.** Şehir her ay vergiden **akçe**, Sille ocaklarından **taş**
-> üretir; yapıları şehrin istediğin yerine koyar, üç seviyeye kadar büyütürsün. Yıl sahnede
-> döner (bahar çiçekleri, yaz bozkırı, güz yaprakları, kış karı); şehrin sesi, kuşlar,
-> rüzgâr ve Hicaz makamında bir ney eşlik eder. Oyun her ay kendini kaydeder; menüden
-> kaydedip yükleyebilir, kaydı dosyaya alabilirsin. Telefonda da oynanır.
+> Durum: **6. aşama sonrası — zorluk ve büyüme.** Şehir her ay vergiden **akçe**, Sille
+> ocaklarından **taş** üretir; yapıları şehrin istediğin yerine koyar, üç seviyeye kadar
+> büyütürsün. Ama her şeyi kuramazsın: şehrin **yapı hakkı** sınırlıdır, her yapının aylık
+> **bakımı** vardır, halk ancak **erzağın** yettiği kadar çoğalır, borç huzuru bozar.
+> Şehir büyüdükçe dışına **yeni sur halkaları** örülür, sur dışında **yeni sokaklar** ve
+> mahalleler açılır. Hangi yapının yükseltilebileceği haritadaki rozetlerden ve **Yapılar**
+> listesinden görünür. Yıl sahnede döner; şehrin sesi ve Hicaz makamında bir ney eşlik
+> eder. Oyun her ay kendini kaydeder. Telefonda da oynanır.
 
 ## Oynanış
 
-| Ne        | Nasıl                                                                               |
-| --------- | ----------------------------------------------------------------------------------- |
-| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                            |
-| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                        |
-| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                              |
-| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık   |
-| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla                |
-| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur    |
-| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                           |
-| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür           |
-| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                           |
-| Hesap     | Defterde **Hesap**: gelirin, taşın ve huzurun dökümü                                |
-| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir       |
-| Ses       | Saatin yanındaki hoparlör: sesi açar ya da kapar. İlk tıkta başlar                  |
-| Menü      | ☰: kaydet, yükle, otomatik kayıt, dosyaya indir / dosyadan yükle, müzik, yeni oyun |
-| Telefon   | İlk dokunuş yapının yerini ve fiyatını gösterir, ikinci dokunuş kurar ya da yıkar   |
+| Ne        | Nasıl                                                                                 |
+| --------- | ------------------------------------------------------------------------------------- |
+| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                              |
+| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                          |
+| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                                |
+| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık     |
+| Rozetler  | Yapının üstünde seviyesi; nabız atan rozet yükseltilebilir demek. Tıkla, yapıya gider |
+| Yapılar   | **L** ya da araç çubuğu: bütün yapılar, sıradaki basamak, eksikler, yapı hakkı        |
+| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla                  |
+| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur      |
+| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                             |
+| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür             |
+| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                             |
+| Hesap     | Defterde **Hesap**: gelir ve bakım, taş, erzak, huzurun kalem kalem dökümü            |
+| Sur       | Yapılar listesinin başında: Büyük Şehir olunca Dış Sur, Payitaht olunca Varoş Suru    |
+| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir         |
+| Ses       | Saatin yanındaki hoparlör: sesi açar ya da kapar. İlk tıkta başlar                    |
+| Menü      | ☰: kaydet, yükle, otomatik kayıt, dosyaya indir / dosyadan yükle, müzik, yeni oyun   |
+| Telefon   | İlk dokunuş yapının yerini ve fiyatını gösterir, ikinci dokunuş kurar ya da yıkar     |
 
 Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir. Sokaklarda
 halk dolaşır: çarşıda alışveriş eden, cami önünde toplanan, ocakta taş taşıyan, iskelede
@@ -50,8 +56,10 @@ npm run test:e2e   # derlenmiş oyunu tarayıcıda açıp oynayan duman testi
 ## Yapı
 
 ```
-data/konya.json      şehrin tanımı: tepe, surlar, kapılar, çay, anıtlar, ürünü ve ocak yerleri
-data/balance.json    denge sayıları: vergi, huzur, büyüme, şehir düzeyleri, yapılar ve seviyeleri
+data/konya.json      şehrin tanımı: tepe, surlar, kapılar, çay, anıtlar, ürünü, ocak yerleri,
+                     sonraki sur halkaları ve varoş sokakları
+data/balance.json    denge sayıları: vergi, huzur, erzak, borç, şehir düzeyleri, yapılar,
+                     seviyeleri, bakımları ve sınırları
 src/core/            rastgelelik, gürültü, geometri
 src/sim/             oyun mantığı — three.js'ten bağımsız, Node'da test edilir
 src/render/          minyatür çizim hattı, kamera, sahne görünümleri

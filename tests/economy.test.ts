@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { BuildingKind } from '../src/sim/balance';
 import {
   buildBuilding,
   demolishBuilding,
@@ -6,6 +7,7 @@ import {
   upgradeBuilding,
   upgradeOffer,
   type Building,
+  type BuildingProposal,
 } from '../src/sim/buildings';
 import { DAYS_PER_MONTH } from '../src/sim/calendar';
 import type { CityState } from '../src/sim/city';
@@ -22,6 +24,19 @@ function nextMonth(c: CityState): void {
 
 function finish(c: CityState, b: Building): void {
   simulateDays(c, b.work?.daysLeft ?? 0);
+}
+
+/** A proposal on the first spot near `near` where every tile is free, whatever else stops it. */
+function openGround(c: CityState, kind: BuildingKind, near: [number, number]): BuildingProposal {
+  for (let r = 0; r < 20; r++) {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const p = proposeBuilding(c, kind, c.grid.tileOf(near[0]) + dx, c.grid.tileOf(near[1]) + dz);
+        if (p.tiles.every((t) => t.ok) && !(p.problem ?? '').includes('Sur dışına')) return p;
+      }
+    }
+  }
+  throw new Error(`no open ground for ${kind}`);
 }
 
 const carsi = (c: CityState): Building => [...c.buildings.values()].find((b) => b.kind === 'carsi')!;
@@ -92,12 +107,40 @@ describe('placing buildings', () => {
 
   it('runs only as many works at once as the city’s rank allows', () => {
     const c = newCity();
-    const max = balance.levels[0].builders;
-    for (let k = 0; k < max; k++)
-      expect(buildBuilding(c, siteFor(c, 'ambar', [34, 4 + k * 4]))).not.toBeNull();
-    expect(() => siteFor(c, 'ambar', [34, 20], 6)).toThrow();
-    const p = proposeBuilding(c, 'ambar', c.grid.tileOf(-34), c.grid.tileOf(4));
-    expect(p.problem === undefined || p.problem.startsWith('Bütün ustalar')).toBe(true);
+    const site = c.def.resource.sites[0];
+    expect(buildBuilding(c, siteFor(c, 'hamam', [6, 12]))).not.toBeNull();
+    expect(buildBuilding(c, siteFor(c, 'ocak', [site.x, site.z], 8))).not.toBeNull();
+    expect(balance.levels[0].builders).toBe(2);
+    expect(() => siteFor(c, 'ambar', [34, 4], 6)).toThrow();
+    const p = proposeBuilding(c, 'ambar', c.grid.tileOf(34), c.grid.tileOf(4));
+    expect(
+      p.problem === undefined || p.problem.startsWith('Bütün ustalar') || p.tiles.some((t) => !t.ok),
+    ).toBe(true);
+  });
+
+  it('keeps to the buildings the city’s rank allows, and to a few of each kind', () => {
+    const c = newCity();
+    c.treasury = 1e6;
+    c.product = 1e5;
+    const kinds = ['hamam', 'cami', 'medrese'] as const;
+    const spots: Array<[number, number]> = [
+      [6, 12],
+      [-10, 8],
+      [10, -12],
+    ];
+    kinds.forEach((kind, k) => {
+      const b = buildBuilding(c, siteFor(c, kind, spots[k]))!;
+      finish(c, b);
+    });
+    expect(c.buildings.size).toBe(balance.levels[0].slots);
+    expect(() => siteFor(c, 'kisla', [12, 8], 6)).toThrow();
+    expect(openGround(c, 'kisla', [12, 8]).problem).toContain('Yapı hakkı dolu');
+    // A great city has more room, but still only one caravanserai.
+    c.population = balance.levels[1].population + 100;
+    updateStats(c);
+    const first = buildBuilding(c, siteFor(c, 'kervansaray', [34, 0]))!;
+    finish(c, first);
+    expect(openGround(c, 'kervansaray', [-36, 2]).problem).toContain('En çok 1');
   });
 
   it('pulls a building down for a quarter of what it cost', () => {
@@ -155,7 +198,9 @@ describe('the month', () => {
     const people = c.population;
     nextMonth(c);
     const rate = balance.tax.rates[c.policy.tax].perHead;
-    const expected = Math.round(people * rate + balance.buildings.carsi.levels[0].income!);
+    // The bazaar pays; it and the granary cost their upkeep.
+    const upkeep = balance.buildings.carsi.levels[0].upkeep + balance.buildings.ambar.levels[0].upkeep;
+    const expected = Math.round(people * rate + balance.buildings.carsi.levels[0].income! - upkeep);
     expect(orderState(c)).toBe('sakin');
     expect(c.stats.last.income).toBe(expected);
     expect(c.treasury).toBe(akce + expected);
@@ -172,12 +217,14 @@ describe('the month', () => {
 
   it('loses order to crowding and wins it back with mosques', () => {
     const c = newCity();
-    c.population = 9000;
+    c.population = 5500;
     updateStats(c);
     const crowded = c.stats.order;
-    expect(c.stats.orderParts.crowding).toBeCloseTo(-24);
+    expect(c.stats.orderParts.crowding).toBeCloseTo(-10);
+    expect(c.stats.orderParts.food).toBe(0);
     const b = buildBuilding(c, siteFor(c, 'cami', [4, 14]))!;
     finish(c, b);
+    c.population = 5500;
     updateStats(c);
     expect(c.stats.order).toBeCloseTo(crowded + balance.buildings.cami.levels[0].order!);
   });
@@ -192,6 +239,39 @@ describe('the month', () => {
     nextMonth(c);
     expect(c.population).toBeLessThan(people);
     expect(c.notices.some((n) => n.text.includes('isyan'))).toBe(true);
+  });
+
+  it('feeds only so many: past the fields and granaries people go hungry and leave', () => {
+    const c = newCity();
+    updateStats(c);
+    const cap = c.stats.food;
+    expect(cap).toBeGreaterThan(c.population);
+    c.population = Math.round(cap * 0.97);
+    updateStats(c);
+    const slow = c.stats.growth;
+    c.population = Math.round(cap * 0.7);
+    updateStats(c);
+    expect(c.stats.growth / c.population).toBeGreaterThan(slow / (cap * 0.97));
+    c.population = Math.round(cap * 1.2);
+    updateStats(c);
+    expect(c.stats.growth).toBeLessThan(0);
+    expect(c.stats.orderParts.food).toBeLessThan(0);
+  });
+
+  it('pays upkeep every month, and a treasury in debt costs order', () => {
+    const c = newCity();
+    const b = buildBuilding(c, siteFor(c, 'hamam', [6, 12]))!;
+    finish(c, b);
+    updateStats(c);
+    expect(c.stats.income.upkeep).toBe(
+      balance.buildings.carsi.levels[0].upkeep +
+        balance.buildings.ambar.levels[0].upkeep +
+        balance.buildings.hamam.levels[0].upkeep,
+    );
+    const calm = c.stats.order;
+    c.treasury = -10;
+    updateStats(c);
+    expect(c.stats.order).toBeCloseTo(calm + balance.debt.order);
   });
 
   it('grows faster with a granary', () => {

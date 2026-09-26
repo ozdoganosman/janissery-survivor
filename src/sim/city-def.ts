@@ -28,6 +28,35 @@ export interface CityDef {
   resource: ResourceDef;
   /** Buildings the city already has on day one. */
   buildings: StartBuildingDef[];
+  /** New rings of walls the city can raise as it grows, innermost first. */
+  expansions: ExpansionDef[];
+  /** Streets that open outside the walls as the people spill out. */
+  suburbs: SuburbsDef;
+}
+
+export interface ExpansionDef {
+  name: string;
+  /** Radius of the new ring of walls around the tepe. */
+  radius: number;
+  /** City rank (index into the balance's levels) the work needs. */
+  rank: number;
+  cost: number;
+  material: number;
+  months: number;
+  /** Building slots and points of order the new walls add. */
+  slots: number;
+  order: number;
+  /** Dead-end alleys laid off the new ring street. */
+  alleys: number;
+}
+
+export interface SuburbsDef {
+  /** Ring roads outside the first walls, as distances beyond them. */
+  rings: number[];
+  /** People more the city needs for each new street. */
+  every: number;
+  /** Lanes run out from each stretch of ring road. */
+  alleys: number;
 }
 
 export interface ResourceDef {
@@ -104,6 +133,12 @@ export function validateCityDef(def: CityDef): CityDef {
   if (def.resource.sites.length === 0) problems.push('the city needs somewhere to get its product');
   for (const s of def.resource.sites) if (s.radius <= 0) problems.push(`site "${s.name}" has no size`);
   for (const b of def.buildings) if (b.level < 1) problems.push(`start building "${b.name}" has no level`);
+  let last = def.walls.radius;
+  for (const e of def.expansions) {
+    if (e.radius <= last + 4) problems.push(`walls "${e.name}" must lie well outside the ring inside them`);
+    last = e.radius;
+  }
+  if (last * 2 >= def.size) problems.push('the outer walls do not fit on the map');
   if (problems.length > 0) throw new Error(`Invalid city "${def.id}": ${problems.join('; ')}`);
   return def;
 }

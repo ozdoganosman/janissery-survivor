@@ -1,5 +1,5 @@
 import { hash2 } from '../core/rng';
-import type { CityState } from './city';
+import { outerRadius, type CityState } from './city';
 import { WALL_NONE } from './constants';
 import { removeField } from './countryside';
 import { roadDistance } from './distance';
@@ -17,7 +17,7 @@ const SUBURB_REACH = 40;
 
 export function layLots(city: CityState): void {
   const { grid, def, terrain } = city;
-  const R = def.walls.radius;
+  const R = outerRadius(city);
   const depth = roadDistance(city, 3);
   const scored: Array<[number, number]> = [];
   for (let z = 0; z < grid.size; z++) {
@@ -58,7 +58,7 @@ export function syncHouses(city: CityState): void {
   const want = housesWanted(city);
   const rank = city.stats.level;
   const twoStorey = city.def.housing.twoStorey + 0.12 * rank;
-  const R = city.def.walls.radius;
+  const R = outerRadius(city);
   let placed = 0;
   for (const i of city.lots) {
     if (placed >= want) break;

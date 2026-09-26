@@ -186,5 +186,34 @@
       "level": 1,
       "near": [10, 29]
     }
-  ]
+  ],
+  "expansions": [
+    {
+      "name": "Dış Sur",
+      "radius": 34,
+      "rank": 1,
+      "cost": 5000,
+      "material": 400,
+      "months": 10,
+      "slots": 2,
+      "order": 5,
+      "alleys": 14
+    },
+    {
+      "name": "Varoş Suru",
+      "radius": 46,
+      "rank": 2,
+      "cost": 9000,
+      "material": 800,
+      "months": 14,
+      "slots": 3,
+      "order": 5,
+      "alleys": 20
+    }
+  ],
+  "suburbs": {
+    "rings": [6, 17, 29],
+    "every": 550,
+    "alleys": 2
+  }
 }

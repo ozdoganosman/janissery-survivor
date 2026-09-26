@@ -1,10 +1,11 @@
 import type { Balance, BuildingKind, TaxRate } from '../sim/balance';
 import { BUILDING_KINDS, TAX_RATES } from '../sim/balance';
-import { kindName } from '../sim/buildings';
+import { kindName, slots } from '../sim/buildings';
+import type { ExpansionOffer } from '../sim/growth';
 import type { Speed } from '../sim/calendar';
 import type { CityState, Notice } from '../sim/city';
 import { ORDER_NAMES, orderState } from '../sim/economy';
-import { effectText, priceText, type TileInfo } from '../sim/inspect';
+import { effectText, priceText, type BuildingSummary, type Readiness, type TileInfo } from '../sim/inspect';
 
 export type Tool = 'incele' | 'insa' | 'yik';
 
@@ -24,7 +25,37 @@ export interface HudCallbacks {
   onImport(file: File): void;
   onSound(on: boolean): void;
   onMusic(on: boolean): void;
+  /** Points the view at a building and opens its panel. */
+  onFocus(buildingId: number): void;
+  /** Begins the next ring of walls. */
+  onExpand(): void;
 }
+
+/** The next ring of walls as the roster shows it. */
+export interface ExpansionView {
+  offer: ExpansionOffer;
+  /** Share of the work done, while the walls are going up. */
+  progress: number | null;
+  monthsLeft: number;
+}
+
+/** A building's badge on the map, where the camera sees it this frame. */
+export interface MarkerPlace {
+  summary: BuildingSummary;
+  x: number;
+  y: number;
+}
+
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
+
+/** What each state of a building says in the list. */
+const READINESS_NAMES: Record<Readiness, string> = {
+  ready: 'Yükseltilebilir',
+  waiting: 'Bekliyor',
+  locked: 'Kilitli',
+  building: 'İnşaatta',
+  top: 'En yüksek seviye',
+};
 
 /** The player's own save, and the one the game keeps each month. */
 export type SaveSlot = 'kayit' | 'oto';
@@ -44,6 +75,7 @@ const ICONS = {
     '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6 6 0 0 1 0 9"/>',
   muted: '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="m11 6 4 4M15 6l-4 4"/>',
   menu: '<path class="s" d="M2 4h12M2 8h12M2 12h12"/>',
+  yapilar: '<path d="M4 20V9l4-3 4 3v11M12 20v-7l4-3 4 3v7M3 20h18"/><path d="M8 3v3M16 7v3"/>',
 } as const;
 
 const svg = (body: string, viewBox = '0 0 24 24'): string =>
@@ -76,6 +108,8 @@ export class Hud {
   private readonly orderName: HTMLElement;
   private readonly rank: HTMLElement;
   private readonly works: HTMLElement;
+  private readonly food: HTMLElement;
+  private readonly foodShare: HTMLElement;
   private readonly accounts: HTMLElement;
   private readonly accountsToggle: HTMLButtonElement;
   private readonly taxButtons = new Map<TaxRate, HTMLButtonElement>();
@@ -92,6 +126,14 @@ export class Hud {
   private readonly slotButtons = new Map<SaveSlot, HTMLButtonElement>();
   private readonly musicButton: HTMLButtonElement;
   private newGameArmed = false;
+  private readonly roster: HTMLElement;
+  private readonly rosterList: HTMLElement;
+  private readonly rosterSummary: HTMLElement;
+  private readonly rosterButton: HTMLButtonElement;
+  private readonly rosterCount: HTMLElement;
+  private rosterKey = '';
+  private readonly markerLayer: HTMLElement;
+  private readonly markers = new Map<number, HTMLButtonElement>();
   private statsKey = '';
   private affordKey = '';
 
@@ -104,6 +146,9 @@ export class Hud {
     root.appendChild(el('div', 'frame'));
     const ui = el('div', 'ui');
     root.appendChild(ui);
+    // Building badges ride on the map, under every panel.
+    this.markerLayer = el('div', 'markers');
+    ui.appendChild(this.markerLayer);
 
     const cartouche = el('div', 'cartouche panel');
     cartouche.appendChild(el('div', 'title', city.def.title));
@@ -147,6 +192,8 @@ export class Hud {
     this.orderName = el('span', 'sub');
     order.append(track, this.orderName);
     ledger.appendChild(order);
+    [this.food, this.foodShare] = row('Erzak');
+    this.food.title = 'Tarlaların ve ambarların doyurabileceği nüfus';
     [this.rank, this.works] = row('Şehir');
 
     const tax = el('div', 'policy', '<span class="label">Vergi</span>');
@@ -291,7 +338,29 @@ export class Hud {
       this.toolButtons.set(tool, b);
       toolbar.appendChild(b);
     }
+    toolbar.appendChild(el('div', 'sep'));
+    this.rosterButton = el('button', 'btn roster-toggle', `${svg(ICONS.yapilar)}<span>Yapılar</span>`);
+    this.rosterButton.title = 'Yapılar ve yükseltmeler (L)';
+    this.rosterCount = el('i', 'count');
+    this.rosterCount.hidden = true;
+    this.rosterButton.appendChild(this.rosterCount);
+    this.rosterButton.addEventListener('click', () => this.toggleRoster());
+    toolbar.appendChild(this.rosterButton);
     ui.appendChild(toolbar);
+
+    // The roster: every building, how far it has come and what its next level takes.
+    this.roster = el('div', 'roster panel');
+    this.roster.hidden = true;
+    const head = el('div', 'head');
+    head.appendChild(el('h3', '', 'Yapılar'));
+    const closeRoster = el('button', 'close btn', '×');
+    closeRoster.title = 'Kapat (L)';
+    closeRoster.addEventListener('click', () => this.toggleRoster(false));
+    head.appendChild(closeRoster);
+    this.rosterSummary = el('div', 'summary');
+    this.rosterList = el('div', 'list');
+    this.roster.append(head, this.rosterSummary, this.rosterList);
+    ui.appendChild(this.roster);
 
     this.info = el('div', 'info panel');
     this.info.hidden = true;
@@ -328,6 +397,9 @@ export class Hud {
       Math.round(s.order),
       s.level,
       s.works,
+      s.food,
+      city.buildings.size,
+      city.expansion.built,
       city.policy.tax,
       this.accounts.hidden ? '' : `${s.last.income}|${s.last.product}`,
     ].join('|');
@@ -351,7 +423,13 @@ export class Hud {
     this.orderName.classList.toggle('bad', state === 'huzursuz' || state === 'isyan');
     const levels = city.balance.levels;
     this.rank.textContent = levels[s.level].name;
-    this.works.textContent = `inşaat ${s.works}/${levels[s.level].builders}`;
+    const room = slots(city);
+    this.works.textContent = `yapı ${room.used}/${room.max}`;
+    this.works.classList.toggle('bad', room.used >= room.max);
+    this.food.textContent = `${fmt(s.food)} kişi`;
+    const full = city.population / Math.max(1, s.food);
+    this.foodShare.textContent = full > 1 ? 'kıtlık' : `%${Math.round(full * 100)} dolu`;
+    this.foodShare.classList.toggle('bad', full > 0.95);
     for (const [rate, b] of this.taxButtons) b.classList.toggle('on', rate === city.policy.tax);
     if (!this.accounts.hidden) this.renderAccounts();
   }
@@ -369,6 +447,7 @@ export class Hud {
       '<span class="head">Bu ay</span><span class="head n">akçe</span>' +
       line('Hane vergisi', s.income.tax) +
       line('Yapılar', s.income.buildings) +
+      line('Bakım', -s.income.upkeep) +
       line('Toplam', s.income.total, 'total') +
       `<span class="head">${good}</span><span class="head n">${city.def.resource.unit}</span>` +
       line('Şehir ve ocaklar', s.product, 'total') +
@@ -376,7 +455,10 @@ export class Hud {
       line('Temel', s.orderParts.base) +
       line('Vergi', s.orderParts.tax) +
       line('Yapılar', s.orderParts.buildings) +
+      (s.orderParts.walls !== 0 ? line('Surlar', s.orderParts.walls) : '') +
       line('Kalabalık', s.orderParts.crowding) +
+      (s.orderParts.food !== 0 ? line('Kıtlık', s.orderParts.food) : '') +
+      (s.orderParts.debt !== 0 ? line('Borç', s.orderParts.debt) : '') +
       `<span class="wide dim">Geçen ay: ${signed(s.last.income)} akçe · ` +
       `${signed(s.last.product)} ${good.toLocaleLowerCase('tr-TR')} · ${signed(s.last.growth)} kişi</span>` +
       (next !== undefined
@@ -460,41 +542,226 @@ export class Hud {
     const rows = info.rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`);
     this.info.innerHTML = `<h3>${info.title}</h3><dl>${rows.join('')}</dl>`;
     const b = info.building;
-    if (b !== undefined && b.progress !== null) {
-      this.info.insertAdjacentHTML(
-        'beforeend',
-        `<div class="progress" title="İnşaat"><i style="width:${Math.round(b.progress * 100)}%"></i></div>`,
-      );
-    }
+    if (b !== undefined) this.info.appendChild(this.ladder(b, pinned));
     if (pinned) {
       const close = el('button', 'close btn', '×');
       close.title = 'Kapat (Esc)';
       close.addEventListener('click', () => this.cb.onCloseInfo());
       this.info.prepend(close);
       if (b !== undefined) {
-        const bar = el('div', 'actions');
-        const o = b.offer;
-        if (o !== null) {
-          const up = el(
-            'button',
-            'btn upgrade',
-            `<b>${o.toLevel}. seviyeye yükselt</b>` +
-              `<small>${priceText(this.city, o.cost, o.material)} · ${o.months} ay</small>`,
-          );
-          up.disabled = o.problem !== undefined;
-          if (o.problem !== undefined)
-            up.insertAdjacentHTML('beforeend', `<small class="bad">${o.problem}</small>`);
-          up.addEventListener('click', () => this.cb.onUpgrade(b.id));
-          bar.appendChild(up);
-        }
         const down = el('button', 'btn demolish', `Yık · +${fmt(b.refund)} akçe`);
         down.addEventListener('click', () => this.cb.onDemolish(b.id));
+        const bar = el('div', 'actions');
         bar.appendChild(down);
         this.info.appendChild(bar);
       }
     }
     this.info.classList.toggle('pinned', pinned);
     this.info.hidden = false;
+  }
+
+  /**
+   * A building's three levels as a ladder: those built ticked, the one being built with its
+   * progress, the next with its price and, when the panel is pinned, the button to raise it;
+   * a level the city is not great enough for yet says which rank it waits for.
+   */
+  private ladder(b: BuildingSummary, pinned: boolean): HTMLElement {
+    const box = el('div', 'ladder');
+    for (const r of b.rungs) {
+      const row = el('div', `rung ${r.state}`);
+      row.appendChild(el('span', 'lv', ROMAN[r.level]));
+      const body = el('div', 'body');
+      body.appendChild(el('span', 'fx', r.effect));
+      if (r.state === 'done') {
+        body.appendChild(el('small', 'ok', 'kuruldu'));
+      } else if (r.state === 'work' && b.work !== null) {
+        body.appendChild(el('small', '', `inşaatta · ${b.work.monthsLeft} ay kaldı`));
+        body.appendChild(
+          el('span', 'progress', `<i style="width:${Math.round(b.work.progress * 100)}%"></i>`),
+        );
+      } else {
+        body.appendChild(el('small', 'price', `${r.price} · ${r.months} ay`));
+        if (r.need !== undefined) body.appendChild(el('small', 'need', `🔒 Şehir ${r.need} olunca`));
+        const o = b.offer;
+        if (r.state === 'next' && o !== null && r.need === undefined) {
+          if (pinned) {
+            const up = el('button', 'btn upgrade', `▲ ${ROMAN[r.level]}. seviyeye yükselt`);
+            up.disabled = o.problem !== undefined;
+            up.addEventListener('click', () => this.cb.onUpgrade(b.id));
+            body.appendChild(up);
+          }
+          if (o.problem !== undefined && o.blockedBy !== 'work')
+            body.appendChild(el('small', 'bad', o.problem));
+        }
+      }
+      row.appendChild(body);
+      box.appendChild(row);
+    }
+    return box;
+  }
+
+  toggleRoster(open = !this.rosterOpen): void {
+    this.roster.hidden = !open;
+    this.rosterButton.classList.toggle('on', open);
+    this.rosterKey = '';
+  }
+
+  get rosterOpen(): boolean {
+    return !this.roster.hidden;
+  }
+
+  /**
+   * The buildings list with the next ring of walls at its head, and the count on its button
+   * of what can be begun now.
+   */
+  setRoster(
+    list: BuildingSummary[],
+    works: { busy: number; max: number },
+    room: { used: number; max: number },
+    expansion: ExpansionView | null,
+  ): void {
+    const ready = list.filter((b) => b.readiness === 'ready').length;
+    const wallsReady = expansion !== null && expansion.offer.problem === undefined ? 1 : 0;
+    this.rosterCount.hidden = ready + wallsReady === 0;
+    this.rosterCount.textContent = String(ready + wallsReady);
+    this.rosterButton.title =
+      ready + wallsReady > 0
+        ? `Yapılar: ${ready + wallsReady} iş başlatılabilir (L)`
+        : 'Yapılar ve yükseltmeler (L)';
+    if (this.roster.hidden) return;
+    const key = JSON.stringify([list, works, room, expansion]);
+    if (key === this.rosterKey) return;
+    this.rosterKey = key;
+    this.rosterSummary.textContent =
+      `${ready > 0 ? `${ready} yapı yükseltilebilir` : 'Şu an yükseltilebilecek yapı yok'}` +
+      ` · yapı hakkı ${room.used}/${room.max} · inşaat ${works.busy}/${works.max}`;
+    this.rosterList.innerHTML = '';
+    if (expansion !== null) this.rosterList.appendChild(this.expansionCard(expansion));
+    if (list.length === 0) this.rosterList.appendChild(el('div', 'dim', 'Henüz yapı yok: İnşa ile kur.'));
+    for (const b of list) this.rosterList.appendChild(this.rosterEntry(b));
+  }
+
+  /** The next ring of walls: what it gives, what it costs, and the button to begin it. */
+  private expansionCard(x: ExpansionView): HTMLElement {
+    const o = x.offer;
+    const state =
+      x.progress !== null
+        ? 'building'
+        : o.problem === undefined
+          ? 'ready'
+          : o.blockedBy === 'rank'
+            ? 'locked'
+            : 'waiting';
+    const card = el('div', `entry walls ${state}`);
+    card.appendChild(el('div', 'top', `<b>${o.def.name}</b><small>şehri çeviren yeni sur</small>`));
+    card.appendChild(
+      el(
+        'div',
+        'now',
+        `+${o.def.slots} yapı hakkı · +${o.def.order} huzur · yeni kapılar, sokaklar ve mahalleler`,
+      ),
+    );
+    const next = el('div', 'next');
+    const price = `${priceText(this.city, o.def.cost, o.def.material)} · ${o.def.months} ay`;
+    if (x.progress !== null) {
+      next.appendChild(el('span', 'progress', `<i style="width:${Math.round(x.progress * 100)}%"></i>`));
+      next.appendChild(el('small', '', `sur yükseliyor · ${x.monthsLeft} ay kaldı`));
+    } else if (o.problem === undefined) {
+      const go = el('button', 'btn upgrade', `▲ Surları yükselt · ${price}`);
+      go.addEventListener('click', () => this.cb.onExpand());
+      next.appendChild(go);
+    } else {
+      next.appendChild(el('small', 'price', price));
+      next.appendChild(
+        el(
+          'small',
+          o.blockedBy === 'rank' ? 'need' : 'bad',
+          o.blockedBy === 'rank' ? `🔒 ${o.problem}` : o.problem,
+        ),
+      );
+    }
+    card.appendChild(next);
+    return card;
+  }
+
+  private rosterEntry(b: BuildingSummary): HTMLElement {
+    const entry = el('div', `entry ${b.readiness}`);
+    const name = el('button', 'name', `<b>${b.name}</b>${b.kind !== '' ? `<small>${b.kind}</small>` : ''}`);
+    name.title = 'Haritada göster';
+    name.addEventListener('click', () => this.cb.onFocus(b.id));
+    const pips = el('span', 'pips');
+    pips.title = `${b.level}. seviye`;
+    for (let k = 1; k <= b.levels; k++) {
+      const done = k <= b.level;
+      const work = b.work !== null && k === b.work.toLevel;
+      pips.appendChild(el('i', done ? 'done' : work ? 'work' : ''));
+    }
+    const top = el('div', 'top');
+    top.append(name, pips);
+    entry.appendChild(top);
+    entry.appendChild(el('div', 'now', b.effect ?? 'ilk seviyesi kuruluyor'));
+    const next = el('div', 'next');
+    const o = b.offer;
+    if (b.work !== null) {
+      next.appendChild(el('span', 'progress', `<i style="width:${Math.round(b.work.progress * 100)}%"></i>`));
+      next.appendChild(el('small', '', `${ROMAN[b.work.toLevel]} · ${b.work.monthsLeft} ay kaldı`));
+    } else if (o === null) {
+      next.appendChild(el('small', 'dim', READINESS_NAMES.top));
+    } else {
+      const rung = b.rungs[o.toLevel - 1];
+      if (b.readiness === 'ready') {
+        const up = el('button', 'btn upgrade', `▲ ${ROMAN[o.toLevel]} · ${rung.price} · ${rung.months} ay`);
+        up.addEventListener('click', () => this.cb.onUpgrade(b.id));
+        next.appendChild(up);
+      } else {
+        next.appendChild(el('small', 'price', `▲ ${ROMAN[o.toLevel]} · ${rung.price} · ${rung.months} ay`));
+        next.appendChild(el('small', 'bad', o.problem ?? READINESS_NAMES[b.readiness]));
+      }
+      next.appendChild(el('small', 'gain', `olunca: ${rung.effect}`));
+    }
+    entry.appendChild(next);
+    return entry;
+  }
+
+  /** Moves each building's badge over it; badges of buildings off the screen are hidden. */
+  placeMarkers(places: MarkerPlace[], visible: boolean): void {
+    this.markerLayer.hidden = !visible;
+    if (!visible) return;
+    const seen = new Set<number>();
+    for (const p of places) {
+      const s = p.summary;
+      seen.add(s.id);
+      let m = this.markers.get(s.id);
+      if (m === undefined) {
+        m = el('button', 'marker');
+        const id = s.id;
+        m.addEventListener('click', () => this.cb.onFocus(id));
+        this.markers.set(s.id, m);
+        this.markerLayer.appendChild(m);
+      }
+      const state = `${s.readiness}|${s.level}|${s.work === null ? '' : Math.round(s.work.progress * 20)}`;
+      if (m.dataset.state !== state) {
+        m.dataset.state = state;
+        m.className = `marker ${s.readiness}`;
+        m.title = `${s.name}: ${s.level > 0 ? `${s.level}. seviye` : 'inşaatta'} · ${
+          s.readiness === 'building'
+            ? `${s.work?.monthsLeft ?? 0} ay kaldı`
+            : (s.offer?.problem ?? READINESS_NAMES[s.readiness])
+        }`;
+        const arrow = s.readiness === 'ready' || s.readiness === 'waiting' ? '<i class="up">▲</i>' : '';
+        const bar =
+          s.work !== null
+            ? `<span class="bar"><i style="width:${Math.round(s.work.progress * 100)}%"></i></span>`
+            : '';
+        m.innerHTML = `<b>${s.level > 0 ? ROMAN[s.level] : '⚒'}</b>${arrow}${bar}`;
+      }
+      m.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -100%)`;
+    }
+    for (const [id, m] of this.markers) {
+      if (seen.has(id)) continue;
+      m.remove();
+      this.markers.delete(id);
+    }
   }
 
   notify(n: Notice): void {

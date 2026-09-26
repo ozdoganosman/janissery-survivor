@@ -8,17 +8,17 @@
     "rates": {
       "hafif": {
         "name": "Hafif",
-        "perHead": 0.08,
-        "order": 12
+        "perHead": 0.06,
+        "order": 10
       },
       "orta": {
         "name": "Orta",
-        "perHead": 0.12,
+        "perHead": 0.09,
         "order": 0
       },
       "agir": {
         "name": "Ağır",
-        "perHead": 0.17,
+        "perHead": 0.13,
         "order": -15
       }
     }
@@ -49,21 +49,24 @@
       "population": 0,
       "maxBuildingLevel": 2,
       "builders": 2,
-      "peoplePerHouse": 7
+      "peoplePerHouse": 7,
+      "slots": 5
     },
     {
       "name": "Büyük Şehir",
       "population": 6000,
       "maxBuildingLevel": 3,
       "builders": 3,
-      "peoplePerHouse": 9
+      "peoplePerHouse": 9,
+      "slots": 8
     },
     {
       "name": "Payitaht",
       "population": 10000,
       "maxBuildingLevel": 3,
       "builders": 4,
-      "peoplePerHouse": 11
+      "peoplePerHouse": 11,
+      "slots": 12
     }
   ],
   "demolishRefund": 0.25,
@@ -79,21 +82,25 @@
           "cost": 600,
           "material": 0,
           "months": 2,
+          "upkeep": 5,
           "income": 50
         },
         {
           "cost": 1200,
           "material": 40,
           "months": 3,
+          "upkeep": 10,
           "income": 110
         },
         {
           "cost": 2200,
           "material": 100,
           "months": 4,
+          "upkeep": 16,
           "income": 180
         }
-      ]
+      ],
+      "max": 2
     },
     "ocak": {
       "name": "Ocak",
@@ -106,21 +113,25 @@
           "cost": 500,
           "material": 0,
           "months": 2,
+          "upkeep": 8,
           "product": 20
         },
         {
           "cost": 1000,
           "material": 30,
           "months": 3,
+          "upkeep": 14,
           "product": 40
         },
         {
           "cost": 1800,
           "material": 80,
           "months": 4,
+          "upkeep": 22,
           "product": 70
         }
-      ]
+      ],
+      "max": 2
     },
     "cami": {
       "name": "Cami",
@@ -132,21 +143,25 @@
           "cost": 900,
           "material": 50,
           "months": 4,
+          "upkeep": 15,
           "order": 6
         },
         {
           "cost": 1600,
           "material": 100,
           "months": 5,
+          "upkeep": 25,
           "order": 10
         },
         {
           "cost": 2600,
           "material": 180,
           "months": 6,
+          "upkeep": 40,
           "order": 15
         }
-      ]
+      ],
+      "max": 2
     },
     "hamam": {
       "name": "Hamam",
@@ -158,6 +173,7 @@
           "cost": 700,
           "material": 30,
           "months": 3,
+          "upkeep": 10,
           "order": 3,
           "growth": 0.0005
         },
@@ -165,6 +181,7 @@
           "cost": 1300,
           "material": 60,
           "months": 4,
+          "upkeep": 18,
           "order": 5,
           "growth": 0.001
         },
@@ -172,10 +189,12 @@
           "cost": 2100,
           "material": 120,
           "months": 5,
+          "upkeep": 28,
           "order": 8,
           "growth": 0.0015
         }
-      ]
+      ],
+      "max": 2
     },
     "kervansaray": {
       "name": "Kervansaray",
@@ -188,25 +207,29 @@
           "cost": 1000,
           "material": 60,
           "months": 4,
+          "upkeep": 10,
           "income": 80
         },
         {
           "cost": 1800,
           "material": 100,
           "months": 5,
+          "upkeep": 18,
           "income": 160
         },
         {
           "cost": 3000,
           "material": 180,
           "months": 6,
+          "upkeep": 30,
           "income": 260
         }
-      ]
+      ],
+      "max": 1
     },
     "ambar": {
       "name": "Ambar",
-      "hint": "Zahire; nüfus daha hızlı artar",
+      "hint": "Zahire deposu: erzak sınırı artar, nüfus daha hızlı büyür",
       "w": 2,
       "d": 2,
       "levels": [
@@ -214,21 +237,28 @@
           "cost": 500,
           "material": 0,
           "months": 2,
+          "upkeep": 8,
+          "food": 1500,
           "growth": 0.0015
         },
         {
           "cost": 900,
           "material": 30,
           "months": 3,
+          "upkeep": 14,
+          "food": 3000,
           "growth": 0.0025
         },
         {
           "cost": 1500,
           "material": 70,
           "months": 4,
+          "upkeep": 22,
+          "food": 5000,
           "growth": 0.004
         }
-      ]
+      ],
+      "max": 2
     },
     "kisla": {
       "name": "Kışla",
@@ -240,21 +270,25 @@
           "cost": 800,
           "material": 40,
           "months": 3,
+          "upkeep": 22,
           "order": 5
         },
         {
           "cost": 1400,
           "material": 80,
           "months": 4,
+          "upkeep": 36,
           "order": 9
         },
         {
           "cost": 2400,
           "material": 150,
           "months": 5,
+          "upkeep": 55,
           "order": 14
         }
-      ]
+      ],
+      "max": 1
     },
     "medrese": {
       "name": "Medrese",
@@ -266,6 +300,7 @@
           "cost": 1100,
           "material": 60,
           "months": 4,
+          "upkeep": 18,
           "incomePct": 0.05,
           "order": 1
         },
@@ -273,6 +308,7 @@
           "cost": 1900,
           "material": 120,
           "months": 5,
+          "upkeep": 30,
           "incomePct": 0.1,
           "order": 2
         },
@@ -280,10 +316,12 @@
           "cost": 3000,
           "material": 200,
           "months": 6,
+          "upkeep": 45,
           "incomePct": 0.15,
           "order": 3
         }
-      ]
+      ],
+      "max": 1
     },
     "darussifa": {
       "name": "Darüşşifa",
@@ -295,6 +333,7 @@
           "cost": 1000,
           "material": 50,
           "months": 4,
+          "upkeep": 15,
           "growth": 0.001,
           "order": 2
         },
@@ -302,6 +341,7 @@
           "cost": 1700,
           "material": 100,
           "months": 5,
+          "upkeep": 25,
           "growth": 0.002,
           "order": 3
         },
@@ -309,10 +349,21 @@
           "cost": 2800,
           "material": 180,
           "months": 6,
+          "upkeep": 40,
           "growth": 0.003,
           "order": 5
         }
-      ]
+      ],
+      "max": 1
     }
+  },
+  "food": {
+    "base": 2500,
+    "perFieldTile": 3,
+    "starve": 0.04,
+    "orderPer10Pct": -6
+  },
+  "debt": {
+    "order": -15
   }
 }

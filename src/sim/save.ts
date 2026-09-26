@@ -6,6 +6,7 @@ import { createCity, type CityState } from './city';
 import type { CityDef } from './city-def';
 import { removeField } from './countryside';
 import { updateStats, type OrderState } from './economy';
+import { replayGrowth } from './growth';
 import { syncHouses } from './housing';
 
 /**
@@ -49,6 +50,9 @@ export interface SaveGame {
   fields: number[];
   announced: { level: number; order: OrderState };
   last: { income: number; product: number; growth: number };
+  /** Rings of walls raised, the one going up, and the suburb streets opened. */
+  expansion: { built: number; work: { days: number; daysLeft: number } | null };
+  streetsLaid: number;
 }
 
 export function saveGame(city: CityState): SaveGame {
@@ -79,6 +83,11 @@ export function saveGame(city: CityState): SaveGame {
     nextBuildingId: city.nextBuildingId,
     fields: [...city.fields.keys()],
     announced: { ...city.announced },
+    expansion: {
+      built: city.expansion.built,
+      work: city.expansion.work === null ? null : { ...city.expansion.work },
+    },
+    streetsLaid: city.streetsLaid,
     last: { ...city.stats.last },
   };
 }
@@ -148,6 +157,10 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
   updateStats(city);
   if (s.last !== undefined) city.stats.last = { ...s.last };
   city.announced = s.announced !== undefined ? { ...s.announced } : city.announced;
+  // Walls and streets are laid again from the plan, up to where the save had them.
+  replayGrowth(city, s.expansion?.built ?? 0, s.streetsLaid ?? 0);
+  city.expansion.work = s.expansion?.work != null ? { ...s.expansion.work } : null;
+  updateStats(city);
   syncHouses(city);
   city.revision.buildings++;
   return city;
@@ -165,5 +178,6 @@ export function replaceCity(city: CityState, next: CityState): void {
     houses: rev.houses + 1,
     buildings: rev.buildings + 1,
     fields: rev.fields + 1,
+    walls: rev.walls + 1,
   };
 }

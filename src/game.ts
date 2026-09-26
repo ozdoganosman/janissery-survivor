@@ -2,24 +2,28 @@ import * as THREE from 'three';
 import type { BuildingKind, TaxRate } from './sim/balance';
 import {
   buildBuilding,
+  builders,
   demolishBuilding,
   demolishRefund,
   kindName,
   proposeBuilding,
+  slots,
   upgradeBuilding,
   type BuildingProposal,
 } from './sim/buildings';
 import { Sound, type Cue } from './audio/sound';
 import { dateOf, DAYS_PER_MONTH, formatDate, type Speed } from './sim/calendar';
 import { createCity, type CityState, type Notice } from './sim/city';
-import { sellProduct, stepTime, updateStats } from './sim/economy';
-import { inspectTile, priceText } from './sim/inspect';
+import { sellProduct, simulateDays, stepTime, updateStats } from './sim/economy';
+import { buildingRoster, inspectTile, priceText, type BuildingSummary } from './sim/inspect';
+import { expansionOffer, startExpansion } from './sim/growth';
+import { sampleHeight } from './sim/terrain';
 import { replaceCity, restoreGame, saveGame, SaveError, type SaveGame } from './sim/save';
 import type { PreviewTile } from './render/cursor-view';
 import { World } from './render/world';
 import { offerFile } from './host';
 import { readJson, removeKey, writeJson } from './storage';
-import { Hud, type SaveSlot, type SlotLabels, type Tool } from './ui/hud';
+import { Hud, type MarkerPlace, type SaveSlot, type SlotLabels, type Tool } from './ui/hud';
 
 type TilePos = { x: number; z: number };
 
@@ -44,6 +48,10 @@ interface Settings {
 }
 
 const SETTINGS_KEY = 'darulmulk.ayar';
+
+/** Badges float this high over a building's ground, and show only this close in. */
+const MARKER_HEIGHT = 2.2;
+const MARKER_ZOOM = 42;
 
 /**
  * Wires the city, the world view and the HUD together and turns input into actions.
@@ -74,6 +82,10 @@ export class Game {
   private pendingTap: { x: number; z: number; tool: Tool } | null = null;
   private settings: Settings;
   readonly sound: Sound;
+  /** The buildings as the list and the badges show them, refreshed a few times a second. */
+  private roster: BuildingSummary[] = [];
+  private sinceRoster = Infinity;
+  private readonly projected = new THREE.Vector3();
   frames = 0;
 
   constructor(
@@ -106,6 +118,8 @@ export class Game {
       onImport: (file) => void this.importSave(file),
       onSound: (on) => this.setAudio({ ...this.settings, sound: on }),
       onMusic: (on) => this.setAudio({ ...this.settings, music: on }),
+      onFocus: (id) => this.focusBuilding(id),
+      onExpand: () => this.expand(),
     });
     this.hud.setAudio(this.settings.sound, this.settings.music);
     this.hud.setSlots(this.slotLabels());
@@ -167,6 +181,12 @@ export class Game {
       this.refreshInfo();
     }
     this.world.frame(dt, this.elapsed);
+    this.sinceRoster += dt;
+    if (this.sinceRoster > 0.25 || days > 0) {
+      this.sinceRoster = 0;
+      this.refreshRoster();
+    }
+    this.placeMarkers();
     this.frames++;
   }
 
@@ -316,6 +336,7 @@ export class Game {
     this.hud.setSpeed(this.city.calendar.speed);
     this.hud.showInfo(null);
     this.world.cursor.setHover(null);
+    this.refreshRoster();
   }
 
   private setAudio(settings: Settings): void {
@@ -336,6 +357,74 @@ export class Game {
     updateStats(this.city);
     this.hud.setStats();
     this.refreshInfo();
+    this.refreshRoster();
+  }
+
+  private refreshRoster(): void {
+    this.roster = buildingRoster(this.city);
+    const offer = expansionOffer(this.city);
+    const w = this.city.expansion.work;
+    this.hud.setRoster(
+      this.roster,
+      builders(this.city),
+      slots(this.city),
+      offer === null
+        ? null
+        : {
+            offer,
+            progress: w === null ? null : 1 - w.daysLeft / w.days,
+            monthsLeft: w === null ? 0 : Math.ceil(w.daysLeft / DAYS_PER_MONTH),
+          },
+    );
+  }
+
+  /** Runs whole days without drawing them: for tests, and for trying out a long game. */
+  fastForward(days: number): void {
+    simulateDays(this.city, days);
+    for (const n of this.city.notices.splice(0)) this.hud.notify(n);
+    this.changed();
+  }
+
+  /** Begins the next ring of walls, if the city can. */
+  expand(): boolean {
+    const ok = startExpansion(this.city);
+    if (ok) this.sound.play('build');
+    this.changed();
+    return ok;
+  }
+
+  /** Each building's badge, over its roof wherever the camera has it this frame. */
+  private placeMarkers(): void {
+    const rig = this.world.rig;
+    const show = rig.zoom < MARKER_ZOOM && this.roster.length > 0;
+    const places: MarkerPlace[] = [];
+    if (show) {
+      const rect = this.canvas.getBoundingClientRect();
+      const { grid, terrain } = this.city;
+      for (const s of this.roster) {
+        const x = grid.centre(s.tile.x);
+        const z = grid.centre(s.tile.z);
+        this.projected.set(x, sampleHeight(terrain, x, z) + MARKER_HEIGHT, z).project(rig.camera);
+        if (Math.abs(this.projected.x) > 1.05 || Math.abs(this.projected.y) > 1.05) continue;
+        places.push({
+          summary: s,
+          x: ((this.projected.x + 1) / 2) * rect.width,
+          y: ((1 - this.projected.y) / 2) * rect.height,
+        });
+      }
+    }
+    this.hud.placeMarkers(places, show);
+  }
+
+  /** Turns the view to a building and pins its panel. */
+  focusBuilding(id: number): void {
+    const s = this.roster.find((b) => b.id === id);
+    if (s === undefined) return;
+    const { grid } = this.city;
+    const rig = this.world.rig;
+    rig.setView(grid.centre(s.tile.x), grid.centre(s.tile.z), Math.min(rig.zoom, 14));
+    this.setTool('incele');
+    this.select(s.tile);
   }
 
   /** Pins the info panel to a tile, or unpins it. */
@@ -610,6 +699,10 @@ export class Game {
         break;
       case 'b':
         this.setTool('yik');
+        break;
+      case 'l':
+        this.hud.toggleRoster();
+        this.refreshRoster();
         break;
     }
   }

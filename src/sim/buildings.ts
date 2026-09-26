@@ -1,6 +1,7 @@
 import type { BuildingDef, BuildingKind, LevelDef } from './balance';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
+import { outerRadius } from './city';
 import { WALL_NONE } from './constants';
 import { removeField } from './countryside';
 import { syncHouses } from './housing';
@@ -62,7 +63,18 @@ export interface UpgradeOffer {
   material: number;
   months: number;
   problem?: string;
+  /** What stands in the way, when something does. */
+  blockedBy?: Blocker;
 }
+
+/**
+ * - `work`     the building is already being worked on;
+ * - `rank`     the city must grow before this level can be built;
+ * - `akce`     not enough akçe;
+ * - `urun`     not enough of the city's product;
+ * - `builders` every builder is busy elsewhere.
+ */
+export type Blocker = 'work' | 'rank' | 'akce' | 'urun' | 'builders';
 
 /** Unit steps out of each side, in `facing` order. */
 export const FACING_DIRS: ReadonlyArray<readonly [number, number]> = [
@@ -80,6 +92,20 @@ export function kindName(city: CityState, kind: BuildingKind): string {
 /** What one level gives; nothing at level 0. */
 export function levelEffects(city: CityState, b: Building): LevelDef | null {
   return b.level >= 1 ? city.balance.buildings[b.kind].levels[b.level - 1] : null;
+}
+
+/** Buildings standing or going up, and how many the city's rank allows in all. */
+export function slots(city: CityState): { used: number; max: number } {
+  let walls = 0;
+  for (const e of city.def.expansions.slice(0, city.expansion.built)) walls += e.slots;
+  return { used: city.buildings.size, max: city.balance.levels[city.stats.level].slots + walls };
+}
+
+/** How many of a kind the city has, and the most it may have. */
+export function kindCount(city: CityState, kind: BuildingKind): { count: number; max: number } {
+  let count = 0;
+  for (const b of city.buildings.values()) if (b.kind === kind) count++;
+  return { count, max: city.balance.buildings[kind].max };
 }
 
 /** Works under way, and how many the city's rank allows at once. */
@@ -166,7 +192,7 @@ export function proposeBuilding(
   let onSite = 0;
   let inside = 0;
   let clears = 0;
-  const R = city.def.walls.radius;
+  const R = outerRadius(city);
   for (let z = z0; z < z0 + d; z++) {
     for (let x = x0; x < x0 + w; x++) {
       const reason = tileReason(city, x, z);
@@ -196,6 +222,12 @@ export function proposeBuilding(
     problem = `${kindName(city, kind)} yalnız ocak yerine kurulur`;
   }
   if (problem === undefined && def.outside === true && inside > 0) problem = 'Sur dışına kurulur';
+  if (problem === undefined && !free) {
+    const k = kindCount(city, kind);
+    const s = slots(city);
+    if (k.count >= k.max) problem = `En çok ${k.max} ${kindName(city, kind)} kurulabilir`;
+    else if (s.used >= s.max) problem = `Yapı hakkı dolu (${s.used}/${s.max}); şehir büyüyünce artar`;
+  }
   if (problem === undefined && !free) problem = fundsProblem(city, first.cost, first.material);
   if (problem === undefined && !free) {
     const b = builders(city);
@@ -261,17 +293,16 @@ export function upgradeOffer(city: CityState, b: Building): UpgradeOffer | null 
   const lv = def.levels[target - 1];
   const offer: UpgradeOffer = { toLevel: target, cost: lv.cost, material: lv.material, months: lv.months };
   const rank = city.balance.levels[city.stats.level];
-  let problem: string | undefined;
-  if (b.work !== null) problem = 'İnşaat sürüyor';
-  else if (target > rank.maxBuildingLevel) {
+  const block = (by: Blocker, problem: string): UpgradeOffer => ({ ...offer, blockedBy: by, problem });
+  if (b.work !== null) return block('work', 'İnşaat sürüyor');
+  if (target > rank.maxBuildingLevel) {
     const needed = city.balance.levels.find((l) => l.maxBuildingLevel >= target);
-    problem = needed === undefined ? 'Bu şehirde olmaz' : `Şehir ${needed.name} olunca`;
-  } else {
-    problem = fundsProblem(city, lv.cost, lv.material);
-    const w = builders(city);
-    if (problem === undefined && w.busy >= w.max) problem = `Bütün ustalar işte (${w.busy}/${w.max})`;
+    return block('rank', needed === undefined ? 'Bu şehirde olmaz' : `Şehir ${needed.name} olunca`);
   }
-  if (problem !== undefined) offer.problem = problem;
+  if (city.treasury < lv.cost) return block('akce', 'Akçe yetmiyor');
+  if (city.product < lv.material) return block('urun', `${city.def.resource.good} yetmiyor`);
+  const w = builders(city);
+  if (w.busy >= w.max) return block('builders', `Bütün ustalar işte (${w.busy}/${w.max})`);
   return offer;
 }
 

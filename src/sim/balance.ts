@@ -30,6 +30,10 @@ export interface LevelDef {
   material: number;
   /** Months of work. */
   months: number;
+  /** Akçe a month to keep it standing and staffed. */
+  upkeep: number;
+  /** People more the city can feed. */
+  food?: number;
   /** Akçe a month. */
   income?: number;
   /** Share added to the household tax. */
@@ -52,6 +56,8 @@ export interface BuildingDef {
   site?: boolean;
   /** Must stand outside the walls. */
   outside?: boolean;
+  /** Most of this kind one city may have. */
+  max: number;
   levels: LevelDef[];
 }
 
@@ -65,6 +71,8 @@ export interface CityLevelDef {
   builders: number;
   /** People to a house: houses grow larger as the city does. */
   peoplePerHouse: number;
+  /** Buildings the city may have in all, standing or going up. */
+  slots: number;
 }
 
 export interface Balance {
@@ -88,6 +96,13 @@ export interface Balance {
     revoltLoss: number;
   };
   growth: { base: number };
+  /**
+   * How many the city can feed: a base, the fields round it (fewer as the suburbs spread
+   * over them) and its granaries. Past that people go hungry and leave, and order suffers.
+   */
+  food: { base: number; perFieldTile: number; starve: number; orderPer10Pct: number };
+  /** Order lost while the treasury is in debt and salaries go unpaid. */
+  debt: { order: number };
   product: { base: number; price: number; sellLot: number };
   levels: CityLevelDef[];
   demolishRefund: number;

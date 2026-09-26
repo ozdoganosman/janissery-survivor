@@ -1,4 +1,5 @@
 import { buildDay, builders, levelEffects } from './buildings';
+import { expansionDay, growStreets, wallGifts } from './growth';
 import { DAYS_PER_MONTH, DAYS_PER_SECOND } from './calendar';
 import type { CityState } from './city';
 import { syncHouses } from './housing';
@@ -53,6 +54,7 @@ export function simulateDays(city: CityState, days: number): void {
 
 export function simulateDay(city: CityState): void {
   buildDay(city);
+  expansionDay(city);
   if (city.calendar.day % DAYS_PER_MONTH === 0) closeMonth(city);
   updateStats(city);
 }
@@ -65,12 +67,23 @@ export function orderState(city: CityState, order = city.stats.order): OrderStat
   return 'isyan';
 }
 
+/** People the city can feed: the base, the fields still farmed round it, and its granaries. */
+export function foodCapacity(city: CityState): number {
+  const f = city.balance.food;
+  let tiles = 0;
+  for (const field of city.fields.values()) tiles += field.tiles.length;
+  let granaries = 0;
+  for (const b of city.buildings.values()) granaries += levelEffects(city, b)?.food ?? 0;
+  return f.base + tiles * f.perFieldTile + granaries;
+}
+
 /** The month's accounts, at today's figures: what the HUD shows and what the month pays. */
 export function updateStats(city: CityState): void {
   const b = city.balance;
   const s = city.stats;
   let income = 0;
   let incomePct = 0;
+  let upkeep = 0;
   let product = b.product.base;
   let orderFromBuildings = 0;
   let growthRate = b.growth.base;
@@ -79,14 +92,32 @@ export function updateStats(city: CityState): void {
     if (e === null) continue;
     income += e.income ?? 0;
     incomePct += e.incomePct ?? 0;
+    upkeep += e.upkeep;
     product += e.product ?? 0;
     orderFromBuildings += e.order ?? 0;
     growthRate += e.growth ?? 0;
   }
+  s.food = foodCapacity(city);
+  const fullness = city.population / Math.max(1, s.food);
   const rate = b.tax.rates[city.policy.tax];
   const crowding = (-Math.max(0, city.population - b.order.crowdingFrom) / 1000) * b.order.crowdingPer1000;
-  s.orderParts = { base: b.order.base, tax: rate.order, buildings: orderFromBuildings, crowding };
-  s.order = Math.max(0, Math.min(100, b.order.base + rate.order + orderFromBuildings + crowding));
+  // Hunger costs order for every tenth the city is over what it can feed.
+  const hunger = fullness > 1 ? ((fullness - 1) / 0.1) * b.food.orderPer10Pct : 0;
+  const debt = city.treasury < 0 ? b.debt.order : 0;
+  const walls = wallGifts(city).order;
+  s.orderParts = {
+    base: b.order.base,
+    tax: rate.order,
+    buildings: orderFromBuildings,
+    walls,
+    crowding,
+    food: hunger,
+    debt,
+  };
+  s.order = Math.max(
+    0,
+    Math.min(100, b.order.base + rate.order + orderFromBuildings + walls + crowding + hunger + debt),
+  );
   const state = orderState(city);
   const incomeFactor =
     state === 'isyan' ? b.order.revoltIncome : state === 'huzursuz' ? b.order.unrestIncome : 1;
@@ -94,12 +125,23 @@ export function updateStats(city: CityState): void {
   s.income = {
     tax: Math.round(tax * incomeFactor),
     buildings: Math.round(income * incomeFactor),
-    total: Math.round((tax + income) * incomeFactor),
+    upkeep: Math.round(upkeep),
+    total: Math.round((tax + income) * incomeFactor - upkeep),
   };
   s.product = Math.round(product * (state === 'isyan' ? b.order.revoltIncome : 1));
-  if (state === 'isyan') s.growth = -city.population * b.order.revoltLoss;
-  else if (state === 'huzursuz') s.growth = 0;
-  else s.growth = city.population * growthRate * (state === 'huzurlu' ? b.order.calmGrowth : 1);
+  if (fullness > 1) {
+    // More mouths than bread: people go hungry and leave.
+    s.growth = -city.population * Math.min(1, fullness - 1) * b.food.starve * 10;
+  } else if (state === 'isyan') {
+    s.growth = -city.population * b.order.revoltLoss;
+  } else if (state === 'huzursuz') {
+    s.growth = 0;
+  } else {
+    // Growth slows as the city nears what its fields and granaries can feed.
+    const room = 1 - fullness;
+    s.growth =
+      city.population * growthRate * (state === 'huzurlu' ? b.order.calmGrowth : 1) * Math.min(1, room * 4);
+  }
   s.works = builders(city).busy;
   let level = 0;
   b.levels.forEach((l, k) => {
@@ -118,7 +160,8 @@ function closeMonth(city: CityState): void {
   s.last = { income: s.income.total, product: s.product, growth: s.growth };
   updateStats(city);
   announce(city);
-  syncHouses(city);
+  // The people have come or gone: streets open where the suburbs reach, houses follow.
+  if (!growStreets(city)) syncHouses(city);
 }
 
 /** Tells the player when the city's rank or mood has changed since it was last told. */

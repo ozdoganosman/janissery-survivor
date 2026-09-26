@@ -212,7 +212,7 @@ export class PeopleView {
     const netKey = String(r.roads);
     const weightKey = `${Math.floor(r.houses / 8)}:${r.buildings}`;
     const month = dateOf(c.calendar).month;
-    const placesKey = `${r.buildings}:${r.fields}:${month}:${Math.round(c.population / 200)}`;
+    const placesKey = `${r.buildings}:${r.fields}:${r.walls}:${month}:${Math.round(c.population / 200)}`;
     if (netKey === this.netKey && weightKey === this.weightKey && placesKey === this.placesKey) return false;
     const newNet = netKey !== this.netKey;
     if (newNet) this.net = buildWalkNetwork(c, busyness(c));
@@ -532,7 +532,7 @@ export class PeopleView {
     // A knot of people at each gate, where the town meets the road.
     c.gates.forEach((g, index) => {
       r = createRng(7001 + index);
-      const inner = c.def.walls.radius - 2.6;
+      const inner = g.radius - 2.6;
       const gx = c.def.tepe.x + Math.cos(g.angle) * inner;
       const gz = c.def.tepe.z + Math.sin(g.angle) * inner;
       for (let j = 0; j < 3; j++) at(gx + (r.next() - 0.5) * 1.2, gz + (r.next() - 0.5) * 1.2, r.next() * 6);
@@ -573,8 +573,8 @@ export class PeopleView {
       const ca = Math.cos(g.angle);
       const sa = Math.sin(g.angle);
       for (const side of [-1, 1]) {
-        const x = def.tepe.x + ca * (R - 1.0) - sa * side * 0.7;
-        const z = def.tepe.z + sa * (R - 1.0) + ca * side * 0.7;
+        const x = def.tepe.x + ca * (g.radius - 1.0) - sa * side * 0.7;
+        const z = def.tepe.z + sa * (g.radius - 1.0) + ca * side * 0.7;
         stand(x, z, sampleHeight(terrain, x, z), Math.atan2(ca, sa));
       }
     }
@@ -585,7 +585,8 @@ export class PeopleView {
     const towers: number[] = [];
     for (let k = 0; k < count; k++) {
       const a = (k / count) * Math.PI * 2;
-      if (c.gates.some((g) => Math.abs(angleStep(a, g.angle)) < gateHalf + 2.2 / R)) continue;
+      const first = c.gates.filter((g) => g.radius === R);
+      if (first.some((g) => Math.abs(angleStep(a, g.angle)) < gateHalf + 2.2 / R)) continue;
       towers.push(a);
     }
     const n = Math.min(MAX_SENTRIES, towers.length, 6 + barracks(c) * 6);
