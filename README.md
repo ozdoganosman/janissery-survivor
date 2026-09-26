@@ -6,35 +6,31 @@ atadığı emir olarak onu büyütür.
 
 Tasarım, kurallar, sanat yönü ve yol haritası: [docs/TASARIM.md](docs/TASARIM.md).
 
-> Durum: **4. aşama** — hizmetler ve bütçe. Çeşme, mescit, hamam, medrese ve darüşşifa
-> kur; evler hizmet aldıkça iki katlı eve ve konağa gelişir, hizmeti kesilen ev küçülür.
-> Vergi oranını ve narhı seç, bakım ve sultan payını öde; parası yetmeyen yapıyı bir
-> eşrafa vakıf olarak yaptır. Bilgi katmanları hangi mahallenin neyi eksik olduğunu
-> gösterir. Sırada olaylar ve savunma var.
+> Durum: **sade çekirdek.** Şehir her ay vergiden **akçe**, Sille ocaklarından **taş**
+> üretir. Yapıları şehrin istediğin yerine koy: çarşı, taş ocağı, kervansaray, cami, hamam,
+> ambar, darüşşifa, medrese, kışla. Her yapı birkaç ayda iskele içinde yükselir ve üç
+> seviyeye kadar büyütülür. Vergi oranı, nüfus ve huzur dengesini gözet; şehir büyüdükçe
+> Büyük Şehir ve Payitaht olur, evler kendiliğinden sur dışına taşar.
 
 ## Oynanış
 
-| Ne         | Nasıl                                                                           |
-| ---------- | ------------------------------------------------------------------------------- |
-| Kaydır     | Sürükle (İncele aracında), orta tuş, WASD / oklar, iki parmak                   |
-| Döndür     | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                    |
-| Yakınlaş   | Tekerlek, Z / X, iki parmakla sıkıştır                                          |
-| İncele     | Bir karoya tıkla: bilgi paneli sabitlenir; tarlada gelecek ekim seçilir         |
-| Yol        | **R** ya da araç çubuğu; iki nokta arasında sürükle. Su üstünde köprü olur      |
-| Konut      | **K**; yol kenarında alan sürükle. Evler yola 2 karo yakın arsada çıkar         |
-| Tarla      | **T**; verimli arazide dikdörtgen sürükle. Tarlaya bir yol değmeli              |
-| Mera       | Tarla aracında **Mera**; zayıf ya da eğimli toprağa da çizilir, yün verir       |
-| Yapı       | **Y**; sekmeden yapı seç, yol kenarına tıkla. Kamu yapısı **vakıf** da olabilir |
-| Bütçe      | Defterde **Bütçe**: geçen ayın gelir-gideri, vergi oranı ve narh                |
-| Katman     | **Katman** düğmesi: verim, hizmetler, sulama, duman ve konut katmanları         |
-| Mallar     | Sağ üstteki defterde **Mallar**: depodaki mallar ve aylık artış/azalış          |
-| Yık        | **B**; sürükleyerek alan seç: yol, ev, imar, tarla ve yapılar kalkar            |
-| Verimlilik | **F**; verimlilik katmanını açar ya da kapar                                    |
-| Zaman      | Boşluk: duraklat · 1 / 2 / 3: hız                                               |
+| Ne        | Nasıl                                                                             |
+| --------- | --------------------------------------------------------------------------------- |
+| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                          |
+| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                      |
+| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                            |
+| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık |
+| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla              |
+| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur  |
+| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                         |
+| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür         |
+| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                         |
+| Hesap     | Defterde **Hesap**: gelirin, taşın ve huzurun dökümü                              |
+| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir     |
 
 Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir. Sokaklarda
-halk dolaşır: çarşıda alışveriş eden, çeşmeden su taşıyan, cami önünde toplanan,
-tarlada çalışan insanlar; nüfus arttıkça kalabalık da artar.
+halk dolaşır: çarşıda alışveriş eden, cami önünde toplanan, ocakta taş taşıyan, iskelede
+çalışan, tarlada mevsiminde ekip biçen insanlar; nüfus arttıkça kalabalık da artar.
 
 ## Geliştirme
 
@@ -51,8 +47,8 @@ npm run test:e2e   # derlenmiş oyunu tarayıcıda açıp oynayan duman testi
 ## Yapı
 
 ```
-data/konya.json      şehrin tanımı: tepe, surlar, kapılar, çay, anıtlar
-data/balance.json    denge sayıları: nüfus, yiyecek, vergi, tarla, mallar, yapılar, esnaf, hizmet
+data/konya.json      şehrin tanımı: tepe, surlar, kapılar, çay, anıtlar, ürünü ve ocak yerleri
+data/balance.json    denge sayıları: vergi, huzur, büyüme, şehir düzeyleri, yapılar ve seviyeleri
 src/core/            rastgelelik, gürültü, geometri
 src/sim/             oyun mantığı — three.js'ten bağımsız, Node'da test edilir
 src/render/          minyatür çizim hattı, kamera, sahne görünümleri

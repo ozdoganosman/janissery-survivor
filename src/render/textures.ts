@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createRng } from '../core/rng';
-import { FERTILITY_RAMP } from './palette';
+import { SITE_COLOR } from './palette';
 import type { Terrain } from '../sim/terrain';
 
 function canvasTexture(
@@ -90,25 +90,18 @@ export function waterTexture(color: string): THREE.CanvasTexture {
   });
 }
 
-/** One texel per tile: the fertility layer the player reads before drawing fields. */
-export function fertilityTexture(terrain: Terrain): THREE.DataTexture {
+/** One texel per tile: the city's resource sites, shown while a quarry is being placed. */
+export function siteTexture(terrain: Terrain): THREE.DataTexture {
   const n = terrain.grid.size;
   const data = new Uint8Array(n * n * 4);
-  const ramp = FERTILITY_RAMP.map((c) => new THREE.Color(c));
-  const tmp = new THREE.Color();
   const srgb = { r: 0, g: 0, b: 0 };
+  // Stored as sRGB bytes, matching the texture's colour space below.
+  new THREE.Color(SITE_COLOR).getRGB(srgb, THREE.SRGBColorSpace);
   for (let i = 0; i < n * n; i++) {
-    const f = terrain.fertility[i];
-    const farmable = terrain.water[i] === 0 && f > 0;
-    const t = f * (ramp.length - 1);
-    const k = Math.min(ramp.length - 2, Math.floor(t));
-    tmp.copy(ramp[k]).lerp(ramp[k + 1], t - k);
-    // Stored as sRGB bytes, matching the texture's colour space below.
-    tmp.getRGB(srgb, THREE.SRGBColorSpace);
     data[i * 4] = Math.round(srgb.r * 255);
     data[i * 4 + 1] = Math.round(srgb.g * 255);
     data[i * 4 + 2] = Math.round(srgb.b * 255);
-    data[i * 4 + 3] = farmable ? 190 : 0;
+    data[i * 4 + 3] = terrain.site[i] > 0 ? 170 : 0;
   }
   const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;

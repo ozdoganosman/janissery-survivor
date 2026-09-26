@@ -6,36 +6,24 @@ import { expect, test, type Page } from '@playwright/test';
  * to each other and that WebGL accepts every draw.
  */
 
-/** Finds open plain outside the walls, clear of roads, fields and houses, and centres the view on it. */
-async function lookAtOpenGround(page: Page): Promise<void> {
-  const found = await page.evaluate(() => {
-    const c = window.__game!.city;
-    const { grid } = c;
-    const free = (x: number, z: number): boolean => {
-      if (!grid.inBounds(x, z)) return false;
-      const i = grid.index(x, z);
-      return (
-        c.road[i] === 0 &&
-        c.house[i] === 0 &&
-        c.field[i] < 0 &&
-        c.zone[i] === 0 &&
-        c.terrain.water[i] === 0 &&
-        c.terrain.slope[i] < 0.3 &&
-        c.terrain.fertility[i] > 0.2
-      );
-    };
-    for (let wz = -30; wz < 20; wz++) {
-      for (let wx = 30; wx < 80; wx++) {
-        const x0 = grid.tileOf(wx);
-        const z0 = grid.tileOf(wz);
-        let ok = true;
-        for (let dz = 0; dz < 18 && ok; dz++)
-          for (let dx = 0; dx < 20 && ok; dx++) ok = free(x0 + dx, z0 + dz);
-        if (ok) return { x: wx + 10, z: wz + 7 };
+/** Centres the view on the first spot near `near` where the chosen building may go. */
+async function lookAtSite(page: Page, near: [number, number]): Promise<void> {
+  const found = await page.evaluate((near) => {
+    const g = window.__game!;
+    const c = g.city;
+    const cx = c.grid.tileOf(near[0]);
+    const cz = c.grid.tileOf(near[1]);
+    for (let r = 0; r < 30; r++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const plan = g.previewPlacement({ x: cx + dx, z: cz + dz }, 0, 0);
+          if (plan.problem === undefined) return { x: c.grid.centre(cx + dx), z: c.grid.centre(cz + dz) };
+        }
       }
     }
     return null;
-  });
+  }, near);
   expect(found).not.toBeNull();
   await page.evaluate((p) => {
     const rig = window.__game!.world.rig;
@@ -44,15 +32,14 @@ async function lookAtOpenGround(page: Page): Promise<void> {
   }, found);
 }
 
-async function drag(page: Page, from: [number, number], to: [number, number]): Promise<void> {
+async function clickCentre(page: Page): Promise<void> {
   const box = (await page.locator('#view').boundingBox())!;
-  await page.mouse.move(box.x + box.width * from[0], box.y + box.height * from[1]);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * to[0], box.y + box.height * to[1], { steps: 6 });
   await page.mouse.up();
 }
 
-test('the city draws, grows on zoned land, takes fields, a bazaar, layers, a budget and events', async ({
+test('the city draws and grows; buildings go up where they are put, rise a level, come down', async ({
   page,
 }) => {
   const problems: string[] = [];
@@ -65,9 +52,10 @@ test('the city draws, grows on zoned land, takes fields, a bazaar, layers, a bud
   await page.goto('/');
   await page.waitForFunction(() => (window.__game?.frames ?? 0) > 5, null, { timeout: 90_000 });
   await expect(page.locator('.cartouche .title')).toHaveText('Dârülmülk Konya');
-  await expect(page.locator('.treasury .amount')).toHaveText('20.000');
+  await expect(page.locator('.treasury .amount')).toHaveText('3.000');
+  await expect(page.locator('.ledger')).toContainText('Taş');
   await expect(page.locator('#boot')).toBeHidden();
-  expect(await page.evaluate(() => window.__game!.city.stats.population)).toBeGreaterThan(1000);
+  expect(await page.evaluate(() => window.__game!.city.population)).toBeGreaterThan(1000);
   // The townspeople are out in the streets.
   expect(await page.evaluate(() => window.__game!.world.people.count)).toBeGreaterThan(200);
 
@@ -81,110 +69,64 @@ test('the city draws, grows on zoned land, takes fields, a bazaar, layers, a bud
   await page.keyboard.press('Space');
   expect(await page.evaluate(() => window.__game!.city.calendar.speed)).toBe(0);
 
-  await lookAtOpenGround(page);
+  // A quarry on the stone: the build bar marks the sites, a click puts the quarry there.
+  await page.getByRole('button', { name: /İnşa/ }).click();
+  await page.locator('.buildbar button[data-kind="ocak"]').click();
+  expect(await page.evaluate(() => window.__game!.world.terrain.sitesVisible)).toBe(true);
+  const site = await page.evaluate(() => window.__game!.city.def.resource.sites[0]);
+  await lookAtSite(page, [site.x, site.z]);
+  await clickCentre(page);
+  await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(3);
+  await expect(page.locator('.info.pinned h3')).toHaveText('Taş Ocağı');
+  expect(await page.evaluate(() => window.__game!.city.treasury)).toBe(2500);
 
-  // A road across the middle of the screen.
-  await page.getByRole('button', { name: /Yol/ }).click();
-  await drag(page, [0.3, 0.45], [0.7, 0.45]);
-  await expect.poll(() => page.evaluate(() => window.__game!.city.treasury)).toBeLessThan(20000);
-
-  // Zone a strip beside it, then let time run until houses rise on those new lots.
-  await page.getByRole('button', { name: /Konut/ }).click();
-  const zonesBefore = await page.evaluate(() => Array.from(window.__game!.city.zone));
-  await drag(page, [0.35, 0.49], [0.65, 0.53]);
-  const newLots = await page.evaluate((prev) => {
-    const c = window.__game!.city;
-    const out: number[] = [];
-    for (let i = 0; i < c.zone.length; i++) if (c.zone[i] === 1 && prev[i] === 0) out.push(i);
-    return out;
-  }, zonesBefore);
-  expect(newLots.length).toBeGreaterThan(5);
+  // Time runs until the quarry stands.
   await page.keyboard.press('3');
   await expect
     .poll(
       () =>
-        page.evaluate((lots) => {
-          const c = window.__game!.city;
-          return lots.filter((i) => c.house[i] > 0).length;
-        }, newLots),
+        page.evaluate(
+          () => [...window.__game!.city.buildings.values()].find((b) => b.kind === 'ocak')?.level ?? 0,
+        ),
       { timeout: 40_000 },
     )
-    .toBeGreaterThan(0);
+    .toBe(1);
   await page.keyboard.press('Space');
 
-  // A barley field further out.
-  const fieldsBefore = await page.evaluate(() => window.__game!.city.fields.size);
-  await page.getByRole('button', { name: /Tarla/ }).click();
-  await page.getByRole('button', { name: /Arpa/ }).click();
-  await drag(page, [0.38, 0.66], [0.6, 0.78]);
-  await expect.poll(() => page.evaluate(() => window.__game!.city.fields.size)).toBe(fieldsBefore + 1);
+  // The old bazaar rises a level from its panel.
+  const bazaar = await page.evaluate(() => {
+    const c = window.__game!.city;
+    const b = [...c.buildings.values()].find((x) => x.kind === 'carsi')!;
+    return { x: b.x0, z: b.z0, id: b.id };
+  });
+  await page.evaluate((b) => window.__game!.select({ x: b.x, z: b.z }), bazaar);
+  await expect(page.locator('.info.pinned h3')).toHaveText('Larende Çarşısı');
+  await page.locator('.info .actions .upgrade').click();
+  await expect
+    .poll(() => page.evaluate((id) => window.__game!.city.buildings.get(id)?.work?.toLevel ?? 0, bazaar.id))
+    .toBe(2);
 
-  // A bazaar on the far side of the road: the build tool shows where it would stand, and a
-  // click where the tip names no problem puts it there.
-  const buildingsBefore = await page.evaluate(() => window.__game!.city.buildings.size);
-  await page.getByRole('button', { name: /Yapı/ }).click();
-  await page.getByRole('button', { name: /Arasta/ }).click();
-  const view = (await page.locator('#view').boundingBox())!;
-  let placed = false;
-  for (let y = 0.34; y <= 0.445 && !placed; y += 0.005) {
-    await page.mouse.move(view.x + view.width * 0.5, view.y + view.height * y);
-    if (/^Arasta ·/.test((await page.locator('.tip').textContent()) ?? '')) {
-      await page.mouse.down();
-      await page.mouse.up();
-      placed = true;
-    }
-  }
-  expect(placed).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(buildingsBefore + 1);
-  await expect(page.locator('.info.pinned h3')).toHaveText('Arasta');
-
-  // The ledger shows the city's figures, the depot folds open, and the fertility layer
-  // toggles from the toolbar.
-  await expect(page.locator('.ledger')).toContainText('Nüfus');
-  await expect(page.locator('.ledger')).toContainText('kile');
-  await expect(page.locator('.ledger')).toContainText('Refah');
-  await page.getByRole('button', { name: /Mallar/ }).click();
-  await expect(page.locator('.ledger .goods')).toContainText('Un');
-  await page.getByRole('button', { name: /Katman/ }).click();
-  await page.getByRole('button', { name: /Verimlilik/ }).click();
-  expect(await page.evaluate(() => window.__game!.world.terrain.fertilityVisible)).toBe(true);
-  // A service layer replaces it, and the budget opens with the tax switch.
-  await page.getByRole('button', { name: /^Su$/ }).click();
-  expect(await page.evaluate(() => window.__game!.world.activeLayer)).toBe('su');
-  expect(await page.evaluate(() => window.__game!.world.terrain.fertilityVisible)).toBe(false);
-  await page.getByRole('button', { name: /Bütçe/ }).click();
-  await expect(page.locator('.ledger .budget')).toContainText('Sultan payı');
+  // Taxes: the ledger's switch, and the accounts fold open.
   await page.getByRole('button', { name: /^Ağır$/ }).click();
   expect(await page.evaluate(() => window.__game!.city.policy.tax)).toBe('agir');
+  await page.getByRole('button', { name: /Hesap/ }).click();
+  await expect(page.locator('.ledger .accounts')).toContainText('Hane vergisi');
+  await expect(page.locator('.ledger .accounts')).toContainText('Kalabalık');
 
-  // Defence: the garrison grows from the panel.
-  await page.getByRole('button', { name: /Savunma/ }).click();
-  await expect(page.locator('.ledger .defense')).toContainText('Sur sağlamlığı');
-  const soldiers = await page.evaluate(() => window.__game!.city.policy.garrison);
-  await page.getByRole('button', { name: 'Asker ekle' }).click();
-  expect(await page.evaluate(() => window.__game!.city.policy.garrison)).toBeGreaterThan(soldiers);
-
-  // A fire breaks out: the clock stops, the flames show, and the governor's answer goes into
-  // the chronicle.
-  await page.keyboard.press('1');
-  expect(await page.evaluate(() => window.__game!.debugEvent('yangin'))).toBe(true);
-  await expect(page.locator('.event')).toBeVisible();
-  await expect(page.locator('.event h2')).toContainText('Yangın');
-  await expect.poll(() => page.evaluate(() => window.__game!.world.fire.burning)).toBeGreaterThan(0);
-  const day = await page.evaluate(() => window.__game!.city.calendar.day);
-  await page.waitForTimeout(600);
-  expect(await page.evaluate(() => window.__game!.city.calendar.day)).toBe(day);
-  await page.locator('.event button.choice').first().click();
-  await expect(page.locator('.event')).toBeHidden();
-  await page.getByRole('button', { name: /Vakayiname/ }).click();
-  await expect(page.locator('.ledger .chronicle')).toContainText('Yangın');
-
-  // Mongol envoys ride in and wait at the gate until they are answered.
-  expect(await page.evaluate(() => window.__game!.debugEvent('elci'))).toBe(true);
-  await expect(page.locator('.event h2')).toContainText('Moğol');
-  await expect.poll(() => page.evaluate(() => window.__game!.world.people.riders)).toBe(4);
-  await page.locator('.event button.choice:enabled').first().click();
-  await expect(page.locator('.event')).toBeHidden();
+  // The quarry comes down again with the demolish tool.
+  const quarry = await page.evaluate(() => {
+    const c = window.__game!.city;
+    const b = [...c.buildings.values()].find((x) => x.kind === 'ocak')!;
+    return { x: c.grid.centre(b.x0), z: c.grid.centre(b.z0) };
+  });
+  await page.evaluate((p) => {
+    const rig = window.__game!.world.rig;
+    rig.setView(p.x, p.z, 10, 0);
+    rig.snap();
+  }, quarry);
+  await page.locator('.toolbar button[data-tool="yik"]').click();
+  await clickCentre(page);
+  await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(2);
 
   expect(problems).toEqual([]);
 });

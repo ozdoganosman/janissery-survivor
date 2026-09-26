@@ -3,7 +3,6 @@ import { smoothstep } from '../core/geom';
 import { createRng, hash2, type Rng } from '../core/rng';
 import { FACING_DIRS } from '../sim/buildings';
 import { dateOf } from '../sim/calendar';
-import { eastGate } from '../sim/events';
 import type { CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { faceNearestRoad } from './buildings-view';
@@ -65,7 +64,7 @@ interface Figure {
   small: boolean;
   /** Raised off the ground: a rider in the saddle. */
   lift: number;
-  /** A soldier walking the rounds; patrols follow the garrison, not the population. */
+  /** A soldier walking the rounds; patrols follow the barracks, not the population. */
   patrol: boolean;
 }
 
@@ -89,8 +88,8 @@ const PACKS = ['#c9a071', '#a8834f'];
 const SOLDIER_ROBES = ['#8c2a1c', '#a8261c', '#2f4f9a', '#6b2f1c'];
 const SHIELDS = ['#b8322a', '#c98b4a', '#2f4f9a', '#e0b13a'];
 const HORSES = ['#7a5238', '#5e3b22', '#a67c52', '#e8dcc4', '#3b2c24'];
-/** Mongol riders: dark quilted coats and fur-trimmed caps. */
-const MONGOL_ROBES = ['#3b4a5e', '#5e3b22', '#4a5a3a', '#6b4a8a'];
+/** Caravan merchants from the east: dark quilted coats and fur-trimmed caps. */
+const RIDER_ROBES = ['#3b4a5e', '#5e3b22', '#4a5a3a', '#6b4a8a'];
 const FURS = ['#6b4a2a', '#8a6a44', '#4a3222'];
 
 /** Walking pace in tiles a second at each game speed; paused, the town holds still. */
@@ -213,10 +212,7 @@ export class PeopleView {
     const netKey = String(r.roads);
     const weightKey = `${Math.floor(r.houses / 8)}:${r.buildings}`;
     const month = dateOf(c.calendar).month;
-    const ev = c.events;
-    const placesKey =
-      `${r.buildings}:${r.fields}:${month}:${Math.round(c.stats.staffing * 10)}:${Math.round(c.stats.population / 200)}` +
-      `:${Math.round(c.policy.garrison / 10)}:${ev.pendingEvent?.kind ?? ''}:${ev.plague !== null}:${ev.defense.kosedag}`;
+    const placesKey = `${r.buildings}:${r.fields}:${month}:${Math.round(c.population / 200)}`;
     if (netKey === this.netKey && weightKey === this.weightKey && placesKey === this.placesKey) return false;
     const newNet = netKey !== this.netKey;
     if (newNet) this.net = buildWalkNetwork(c, busyness(c));
@@ -234,7 +230,6 @@ export class PeopleView {
     this.placePatrols();
     this.placeGatherings();
     this.placeGarrison();
-    this.placeMongols();
     this.placeFieldHands(month);
     this.buildMeshes();
     return true;
@@ -363,9 +358,7 @@ export class PeopleView {
   private fillWalkers(): void {
     const net = this.net;
     if (net === null || net.edges.length === 0) return;
-    // In a plague year people keep indoors, and the streets empty.
-    const indoors = this.city.events.plague !== null ? 0.35 : 1;
-    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round((this.city.stats.population / 9) * indoors)));
+    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round(this.city.population / 9)));
     let have = this.figures.filter((f) => f.leader === null && !f.patrol).length;
     while (have < want) {
       const f = this.person('walk');
@@ -438,36 +431,78 @@ export class PeopleView {
         const z = cz - fx * u + fz * v;
         at(x, z, Math.atan2(fx, fz) + (toward ? Math.PI : 0) + (r.next() - 0.5) * 0.8, item);
       };
+      if (b.level === 0) {
+        // Masons at work round the scaffold, bending to the stones.
+        for (let j = 0; j < 3; j++) {
+          const f = this.person('work', null, r);
+          const u = (r.next() - 0.5) * along;
+          const v = (r.chance(0.5) ? 1 : -1) * (front + 0.25);
+          f.x = cx + fz * u + fx * v;
+          f.z = cz - fx * u + fz * v;
+          f.y = sampleHeight(c.terrain, f.x, f.z);
+          f.heading = r.next() * 6;
+          this.figures.push(f);
+        }
+        continue;
+      }
       switch (b.kind) {
-        case 'arasta':
-          b.shops.forEach((shop, k) => {
-            if (shop.trade === null) return;
-            const u = -along / 2 + 0.1 + (k + 0.5) * ((along - 0.2) / b.shops.length);
+        case 'carsi': {
+          // Customers before the stalls, more as the bazaar grows.
+          const bays = 2 + b.level;
+          for (let k = 0; k < bays; k++) {
+            const u = -along / 2 + 0.1 + (k + 0.5) * ((along - 0.2) / bays);
             const n = 1 + Math.floor(hash2(b.id, k, 81) * 3);
             for (let j = 0; j < n; j++) put(u + (r.next() - 0.5) * 0.4, front + 0.35 + r.next() * 0.35);
-          });
-          break;
-        case 'cesme':
-          put(-0.12, front + 0.3, true, 'jug');
-          if (hash2(b.id, 1, 82) < 0.6) put(0.18, front + 0.45, true, 'jug');
-          break;
-        case 'mescit':
-        case 'hamam':
-        case 'zaviye':
-        case 'darussifa':
-          for (let j = 0; j < 2 + Math.floor(hash2(b.id, 2, 83) * 2); j++) {
-            put((r.next() - 0.5) * 1.2, front + 0.4 + r.next() * 0.4, r.chance(0.6));
           }
+          break;
+        }
+        case 'cami':
+          for (let j = 0; j < 3 + b.level * 2; j++)
+            put((r.next() - 0.5) * along * 0.8, front + 0.4 + r.next() * 0.5);
+          break;
+        case 'hamam':
+        case 'darussifa':
+          for (let j = 0; j < 1 + b.level; j++)
+            put((r.next() - 0.5) * 1.2, front + 0.4 + r.next() * 0.4, r.chance(0.6));
           break;
         case 'medrese':
           // Students in the court and at the gate.
-          for (let j = 0; j < 4; j++)
+          for (let j = 0; j < 2 + b.level * 2; j++)
             at(cx + (r.next() - 0.5) * 0.9, cz + (r.next() - 0.5) * 0.9, r.next() * 6);
           put(0.2, front + 0.4);
           break;
+        case 'kervansaray':
+          // Merchants on horseback and laden donkeys before the portal.
+          for (let j = 0; j < b.level; j++) {
+            const u = (j - (b.level - 1) / 2) * 0.55;
+            this.rider(
+              cx + fz * u + fx * (front + 0.6),
+              cz - fx * u + fz * (front + 0.6),
+              Math.atan2(fx, fz) + Math.PI,
+              r,
+            );
+          }
+          for (let j = 0; j < 1 + b.level; j++)
+            put((r.next() - 0.5) * 1.4, front + 1.1 + r.next() * 0.4, r.chance(0.5), 'sack');
+          break;
+        case 'kisla':
+          for (let j = 0; j < 1 + b.level; j++) {
+            const f = this.soldier('stand', r);
+            const u = (j - b.level / 2) * 0.35;
+            f.x = cx + fz * u + fx * (front + 0.3);
+            f.z = cz - fx * u + fz * (front + 0.3);
+            f.y = sampleHeight(c.terrain, f.x, f.z);
+            f.heading = Math.atan2(fx, fz);
+            this.figures.push(f);
+          }
+          break;
+        case 'ocak':
+          // Quarrymen hauling stone, and a donkey waiting to be loaded.
+          for (let j = 0; j < 1 + b.level; j++)
+            put((r.next() - 0.5) * along, front + 0.3 + r.next() * 0.3, false, 'sack');
+          break;
         default:
-          if (b.status === 'calisiyor')
-            put((r.next() - 0.5) * 0.8, front + 0.35, false, r.chance(0.5) ? 'sack' : null);
+          put((r.next() - 0.5) * 0.8, front + 0.35, false, r.chance(0.5) ? 'sack' : null);
       }
     }
     // The congregation at the mosque doors, and a few at every mescit and the bath.
@@ -504,11 +539,11 @@ export class PeopleView {
     });
   }
 
-  /** Soldiers walking the rounds, a few for every company in the garrison. */
+  /** Soldiers walking the rounds, a few for every level of barracks. */
   private placePatrols(): void {
     const net = this.net;
     if (net === null || net.edges.length === 0) return;
-    const n = Math.min(MAX_PATROLS, Math.round(this.city.policy.garrison / 12));
+    const n = Math.min(MAX_PATROLS, barracks(this.city) * 4);
     for (let k = 0; k < n; k++) {
       const f = this.soldier('walk');
       f.walk = spawnWalk(net, this.rng);
@@ -518,11 +553,9 @@ export class PeopleView {
     }
   }
 
-  /** Guards at every gate and sentries on the towers, as many as the garrison can spare. */
+  /** Guards at every gate and sentries on the towers, more with every level of barracks. */
   private placeGarrison(): void {
     const c = this.city;
-    const soldiers = c.policy.garrison;
-    if (soldiers <= 0) return;
     const { def, terrain } = c;
     const R = def.walls.radius;
     const H = def.walls.height;
@@ -555,50 +588,12 @@ export class PeopleView {
       if (c.gates.some((g) => Math.abs(angleStep(a, g.angle)) < gateHalf + 2.2 / R)) continue;
       towers.push(a);
     }
-    const n = Math.min(MAX_SENTRIES, towers.length, Math.round(soldiers / 8));
+    const n = Math.min(MAX_SENTRIES, towers.length, 6 + barracks(c) * 6);
     for (let k = 0; k < n; k++) {
       const a = towers[Math.floor((k * towers.length) / n)];
       const x = def.tepe.x + Math.cos(a) * R;
       const z = def.tepe.z + Math.sin(a) * R;
       stand(x, z, sampleHeight(terrain, x, z) + H + 0.5, Math.atan2(Math.cos(a), Math.sin(a)));
-    }
-  }
-
-  /**
-   * Mongol horsemen: envoys waiting inside the east gate while their demand is unanswered,
-   * the whole host drawn up outside it on the eve of Kösedağ, and the Ilkhan's overseer
-   * with his escort once the city has bowed.
-   */
-  private placeMongols(): void {
-    const c = this.city;
-    const pending = c.events.pendingEvent?.kind;
-    const kosedag = c.events.defense.kosedag;
-    let riders = 0;
-    let outside = false;
-    if (pending === 'kosedag') {
-      riders = 14;
-      outside = true;
-    } else if (pending === 'elci') {
-      riders = 4;
-    } else if (kosedag === 'teslim' || kosedag === 'yagma') {
-      riders = 2;
-    }
-    if (riders === 0 || c.gates.length === 0) return;
-    // They come from the east: the gate that faces the rising sun.
-    const gate = c.gates.find((g) => g.tiles === eastGate(c)) ?? c.gates[0];
-    const { def } = c;
-    const R = def.walls.radius;
-    const ca = Math.cos(gate.angle);
-    const sa = Math.sin(gate.angle);
-    const r = createRng(9101);
-    for (let k = 0; k < riders; k++) {
-      // Rows of three, across the road; inside they face the city, outside the walls.
-      const row = Math.floor(k / 3);
-      const col = (k % 3) - 1;
-      const out = outside ? R + 3 + row * 0.9 : R - 2.2 - row * 0.9;
-      const x = def.tepe.x + ca * out - sa * col * 0.55 + (r.next() - 0.5) * 0.15;
-      const z = def.tepe.z + sa * out + ca * col * 0.55 + (r.next() - 0.5) * 0.15;
-      this.rider(x, z, Math.atan2(-ca, -sa), r);
     }
   }
 
@@ -609,7 +604,6 @@ export class PeopleView {
     const winter = month === 11 || month <= 1;
     if (winter) return;
     for (const f of c.fields.values()) {
-      if (!f.roadAccess) continue;
       const x0 = f.x0 - grid.half;
       const z0 = f.z0 - grid.half;
       const r = createRng(f.id * 131 + 17);
@@ -622,9 +616,10 @@ export class PeopleView {
         this.figures.push(fig);
         continue;
       }
-      if (f.stage === 'nadas' && month > 4) continue;
-      const busy = f.stage === 'hasat' ? 0.4 : 1;
-      const n = Math.round(Math.min(6, (f.tiles.length * c.stats.staffing * busy) / 7));
+      if (f.fallow) continue;
+      // Most hands at the summer harvest, fewer hoeing in spring or ploughing in autumn.
+      const busy = month === 5 || month === 6 ? 1 : month === 7 ? 0.3 : 0.6;
+      const n = Math.round(Math.min(6, (f.tiles.length * busy) / 7));
       for (let j = 0; j < n; j++) {
         const fig = this.person('work', null, r);
         fig.x = x0 + 0.3 + hash2(f.id, j, 92) * (f.w - 0.6);
@@ -705,7 +700,7 @@ export class PeopleView {
     return f;
   }
 
-  /** A Mongol horseman, in two figures: the horse, and the rider sat on it. */
+  /** A horseman, in two figures: the horse, and the rider sat on it in a fur-trimmed cap. */
   private rider(x: number, z: number, heading: number, r: Rng): void {
     const pick = <T>(list: readonly T[]): T => list[Math.floor(r.next() * list.length)];
     const y = sampleHeight(this.city.terrain, x, z);
@@ -714,7 +709,7 @@ export class PeopleView {
     horse.colors = { horse: pick(HORSES) };
     const man = this.person('stand', null, r);
     man.parts = ['robe', 'head', 'furcap'];
-    man.colors = { robe: pick(MONGOL_ROBES), head: pick(SKIN), furcap: pick(FURS) };
+    man.colors = { robe: pick(RIDER_ROBES), head: pick(SKIN), furcap: pick(FURS) };
     man.lift = SADDLE;
     for (const f of [horse, man]) {
       f.small = false;
@@ -744,7 +739,7 @@ function busyness(city: CityState): (tile: number) => number {
     if (city.house[i] > 0) mark(i % grid.size, Math.floor(i / grid.size), city.house[i], 2);
   }
   for (const b of city.buildings.values()) {
-    const amount = b.kind === 'arasta' ? 30 : b.kind === 'cesme' ? 4 : 8;
+    const amount = b.kind === 'carsi' ? 20 + b.level * 10 : b.kind === 'cami' ? 15 : 8;
     mark(b.x0 + Math.floor(b.w / 2), b.z0 + Math.floor(b.d / 2), amount, 3);
   }
   for (const l of city.landmarks) mark(grid.tileOf(l.x), grid.tileOf(l.z), l.kind === 'cami' ? 40 : 10, 4);
@@ -758,6 +753,13 @@ function streetHeight(city: CityState, x: number, z: number): number {
   const tz = grid.tileOf(z);
   if (grid.inBounds(tx, tz) && terrain.water[grid.index(tx, tz)] === 1) return terrain.waterLevel + 0.26;
   return Math.max(sampleHeight(terrain, x, z), terrain.waterLevel + 0.14) + 0.03;
+}
+
+/** Levels of barracks in the city, all counted together. */
+function barracks(city: CityState): number {
+  let n = 0;
+  for (const b of city.buildings.values()) if (b.kind === 'kisla') n += b.level;
+  return n;
 }
 
 /** Signed smallest turn from `a` to `b`. */

@@ -1,56 +1,42 @@
-import type { Vec2 } from '../core/geom';
-import type { BuildingKind, Trade } from './balance';
+import type { BuildingDef, BuildingKind, LevelDef } from './balance';
+import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
 import { WALL_NONE } from './constants';
-import { vakifFounders } from './services';
+import { removeField } from './countryside';
+import { syncHouses } from './housing';
+import { notify } from './notices';
 
 /**
- * State workshops and bazaars: rectangles of tiles the player places whole, each with a
- * front that faces the road it stands on.
+ * The buildings the player puts up: anywhere in the city that is free, each with three
+ * levels. A new building or a new level costs akçe and usually some of the city's own
+ * product, and takes months of work; until the work is done a building keeps giving what
+ * its old level gave.
  */
 
-/**
- * - `calisiyor` working;
- * - `yolsuz`    no road reaches it, so nobody can work there;
- * - `iscisiz`   no free hands in the city;
- * - `girdisiz`  waiting for its input;
- * - `dolu`      the depot is full of what it makes;
- * - `bos`       an empty shop;
- * - `maassiz`   the treasury is in debt and cannot pay its staff.
- */
-export type BuildingStatus = 'calisiyor' | 'yolsuz' | 'iscisiz' | 'girdisiz' | 'dolu' | 'bos' | 'maassiz';
-
-export interface Shop {
-  trade: Trade | null;
-  status: BuildingStatus;
-  /** Output made this month, and last month. */
-  made: number;
-  madeLastMonth: number;
-  /** Days this month the shop stood idle for want of its input. */
-  shortDays: number;
-  /** Months in a row it went short. */
-  starvedMonths: number;
+export interface Work {
+  /** Level the building will have when the work is done. */
+  toLevel: number;
+  days: number;
+  daysLeft: number;
 }
 
 export interface Building {
   id: number;
   kind: BuildingKind;
   name: string;
+  /** Tile rectangle. */
   x0: number;
   z0: number;
   w: number;
   d: number;
   tiles: number[];
-  /** Side facing the road: 0 south (+z), 1 east (+x), 2 north (-z), 3 west (-x). */
+  /** Side the front faces: 0 south (+z), 1 east (+x), 2 north (-z), 3 west (-x). */
   facing: number;
-  roadAccess: boolean;
-  status: BuildingStatus;
-  made: number;
-  madeLastMonth: number;
-  /** Bazaar shops; empty for a workshop. */
-  shops: Shop[];
-  /** The notable whose vakıf built and keeps it, if it was not paid from the treasury. */
-  vakif?: string;
+  /** 0 while it is first going up. */
+  level: number;
+  work: Work | null;
+  /** Akçe spent on it so far, for the refund when it is pulled down. */
+  spent: number;
 }
 
 export interface BuildingProposal {
@@ -59,12 +45,22 @@ export interface BuildingProposal {
   z0: number;
   w: number;
   d: number;
-  tiles: Array<{ x: number; z: number; ok: boolean; reason?: string }>;
   facing: number;
-  /** What the treasury pays: nothing for a vakıf. */
+  tiles: Array<{ x: number; z: number; ok: boolean; reason?: string }>;
   cost: number;
-  /** Built as a vakıf: only public buildings, and only while a notable is ready. */
-  vakif: boolean;
+  material: number;
+  months: number;
+  /** Houses that would make way for it. */
+  clears: number;
+  problem?: string;
+}
+
+/** What raising a building one level would take, or why it cannot be raised now. */
+export interface UpgradeOffer {
+  toLevel: number;
+  cost: number;
+  material: number;
+  months: number;
   problem?: string;
 }
 
@@ -76,267 +72,277 @@ export const FACING_DIRS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
 ];
 
-function tileReason(city: CityState, x: number, z: number, maxSlope: number): string | undefined {
+/** Display name of a kind in this city: the resource building takes the city's own name. */
+export function kindName(city: CityState, kind: BuildingKind): string {
+  return kind === 'ocak' ? city.def.resource.building : city.balance.buildings[kind].name;
+}
+
+/** What one level gives; nothing at level 0. */
+export function levelEffects(city: CityState, b: Building): LevelDef | null {
+  return b.level >= 1 ? city.balance.buildings[b.kind].levels[b.level - 1] : null;
+}
+
+/** Works under way, and how many the city's rank allows at once. */
+export function builders(city: CityState): { busy: number; max: number } {
+  let busy = 0;
+  for (const b of city.buildings.values()) if (b.work !== null) busy++;
+  return { busy, max: city.balance.levels[city.stats.level].builders };
+}
+
+function tileReason(city: CityState, x: number, z: number): string | undefined {
   const { grid, terrain } = city;
   if (!grid.inBounds(x, z)) return 'Harita dışı';
   const i = grid.index(x, z);
   if (terrain.water[i] === 1) return 'Su';
   if (city.wall[i] !== WALL_NONE) return 'Sur';
-  if (city.structure[i] >= 0 || city.building[i] >= 0) return 'Yapı';
-  if (city.road[i] === 1) return 'Yol';
-  if (city.house[i] > 0) return 'Ev';
-  if (city.field[i] >= 0) return city.fields.get(city.field[i])?.kind === 'mera' ? 'Mera' : 'Tarla';
-  if (terrain.slope[i] > maxSlope) return 'Çok dik';
+  if (city.structure[i] >= 0) return 'Anıt';
+  if (city.building[i] >= 0) return 'Yapı';
+  if (city.road[i] === 1) return 'Sokak';
+  if (terrain.slope[i] > city.balance.maxSlope) return 'Çok dik';
   return undefined;
 }
 
-/** Road tiles touching each side of a rectangle, in `facing` order. */
-function roadContacts(city: CityState, x0: number, z0: number, w: number, d: number): number[] {
-  const { grid } = city;
-  const road = (x: number, z: number): number =>
-    grid.inBounds(x, z) && city.road[grid.index(x, z)] === 1 ? 1 : 0;
-  const out = [0, 0, 0, 0];
-  for (let x = x0; x < x0 + w; x++) {
-    out[0] += road(x, z0 + d);
-    out[2] += road(x, z0 - 1);
-  }
-  for (let z = z0; z < z0 + d; z++) {
-    out[1] += road(x0 + w, z);
-    out[3] += road(x0 - 1, z);
-  }
-  return out;
-}
-
-function waterWithin(city: CityState, x0: number, z0: number, w: number, d: number, reach: number): boolean {
-  const { grid } = city;
-  for (let z = z0 - reach; z < z0 + d + reach; z++) {
-    for (let x = x0 - reach; x < x0 + w + reach; x++) {
-      if (grid.inBounds(x, z) && city.terrain.water[grid.index(x, z)] === 1) return true;
-    }
-  }
-  return false;
-}
-
-/** The proposal for one exact rectangle. */
-function proposeAt(
-  city: CityState,
-  kind: BuildingKind,
-  x0: number,
-  z0: number,
-  w: number,
-  d: number,
-  asVakif: boolean,
-): BuildingProposal {
-  const def = city.balance.works[kind];
-  const vakif = asVakif && def.service !== undefined;
-  const tiles: BuildingProposal['tiles'] = [];
-  let problem: string | undefined;
-  let ore = 0;
-  for (let z = z0; z < z0 + d; z++) {
-    for (let x = x0; x < x0 + w; x++) {
-      const reason = tileReason(city, x, z, def.maxSlope);
-      tiles.push(reason === undefined ? { x, z, ok: true } : { x, z, ok: false, reason });
-      problem ??= reason;
-      if (reason === undefined && city.terrain.ore[city.grid.index(x, z)] > 0) ore++;
-    }
-  }
-  const contacts = roadContacts(city, x0, z0, w, d);
-  // Face the side with the most road along it; on a tie, the longer side.
-  let facing = 0;
-  for (let k = 1; k < 4; k++) {
-    const len = (s: number): number => (s % 2 === 0 ? w : d);
-    if (contacts[k] > contacts[facing] || (contacts[k] === contacts[facing] && len(k) > len(facing)))
-      facing = k;
-  }
-  if (
-    problem === undefined &&
-    def.site === 'water' &&
-    !waterWithin(city, x0, z0, w, d, def.waterReach ?? 1)
-  ) {
-    problem = (def.waterReach ?? 1) <= 1 ? 'Suya bitişik olmalı' : 'Suya yakın olmalı';
-  }
-  if (problem === undefined && def.site === 'ore' && ore * 2 < w * d)
-    problem = 'Demir damarı üstüne kurulmalı';
-  if (problem === undefined && contacts[facing] === 0) problem = 'Yola bitişik olmalı';
-  if (problem === undefined && vakif && vakifFounders(city) <= 0) problem = 'Vakıf yaptıracak eşraf yok';
-  if (problem === undefined && !vakif && def.cost > city.treasury) problem = 'Hazine yetersiz';
-  const p: BuildingProposal = { kind, x0, z0, w, d, tiles, facing, cost: vakif ? 0 : def.cost, vakif };
-  if (problem !== undefined) p.problem = problem;
-  return p;
+/** Footprint of a building of `def` centred on a tile and facing `facing`. */
+function footprint(
+  def: BuildingDef,
+  cx: number,
+  cz: number,
+  facing: number,
+): [number, number, number, number] {
+  const across = facing % 2 === 0;
+  const w = across ? def.w : def.d;
+  const d = across ? def.d : def.w;
+  return [cx - Math.floor(w / 2), cz - Math.floor(d / 2), w, d];
 }
 
 /**
- * A building of `kind` centred on a tile. Both turns of the footprint are tried; the one
- * that fits wins, preferring the turn that puts the long side on the road.
+ * Faces the street it touches most; with no street beside it, faces the tepe, the heart
+ * of the city.
+ */
+function chooseFacing(city: CityState, def: BuildingDef, cx: number, cz: number): number {
+  const { grid } = city;
+  const road = (x: number, z: number): number =>
+    grid.inBounds(x, z) && city.road[grid.index(x, z)] === 1 ? 1 : 0;
+  let best = 0;
+  let bestScore = -1;
+  const toX = city.def.tepe.x - grid.centre(cx);
+  const toZ = city.def.tepe.z - grid.centre(cz);
+  for (let f = 0; f < 4; f++) {
+    const [x0, z0, w, d] = footprint(def, cx, cz, f);
+    let contact = 0;
+    if (f === 0) for (let x = x0; x < x0 + w; x++) contact += road(x, z0 + d);
+    if (f === 2) for (let x = x0; x < x0 + w; x++) contact += road(x, z0 - 1);
+    if (f === 1) for (let z = z0; z < z0 + d; z++) contact += road(x0 + w, z);
+    if (f === 3) for (let z = z0; z < z0 + d; z++) contact += road(x0 - 1, z);
+    const [fx, fz] = FACING_DIRS[f];
+    const toward = (fx * toX + fz * toZ) / (Math.hypot(toX, toZ) || 1);
+    const score = contact + toward * 0.5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = f;
+    }
+  }
+  return best;
+}
+
+/**
+ * Where a building of `kind` would stand if placed at the tile, what it would cost and
+ * what stops it. `free` skips the cost and the builders, for the city's starting set.
  */
 export function proposeBuilding(
   city: CityState,
   kind: BuildingKind,
   cx: number,
   cz: number,
-  opts: { vakif?: boolean } = {},
+  free = false,
 ): BuildingProposal {
-  const [a, b] = city.balance.works[kind].size;
-  const shapes: Array<[number, number]> =
-    a === b
-      ? [[a, b]]
-      : [
-          [a, b],
-          [b, a],
-        ];
-  const usable = (p: BuildingProposal): boolean => p.problem === undefined || p.problem === 'Hazine yetersiz';
-  let best: BuildingProposal | null = null;
-  for (const [w, d] of shapes) {
-    const p = proposeAt(
-      city,
-      kind,
-      cx - Math.floor((w - 1) / 2),
-      cz - Math.floor((d - 1) / 2),
-      w,
-      d,
-      opts.vakif === true,
-    );
-    if (best === null) {
-      best = p;
-      continue;
+  const def = city.balance.buildings[kind];
+  const { grid, terrain } = city;
+  const facing = chooseFacing(city, def, cx, cz);
+  const [x0, z0, w, d] = footprint(def, cx, cz, facing);
+  const first = def.levels[0];
+  const tiles: BuildingProposal['tiles'] = [];
+  let problem: string | undefined;
+  let onSite = 0;
+  let inside = 0;
+  let clears = 0;
+  const R = city.def.walls.radius;
+  for (let z = z0; z < z0 + d; z++) {
+    for (let x = x0; x < x0 + w; x++) {
+      const reason = tileReason(city, x, z);
+      tiles.push(reason === undefined ? { x, z, ok: true } : { x, z, ok: false, reason });
+      problem ??= reason;
+      if (!grid.inBounds(x, z)) continue;
+      const i = grid.index(x, z);
+      if (terrain.site[i] > 0) onSite++;
+      if (city.house[i] > 0) clears++;
+      if (Math.hypot(grid.centre(x) - city.def.tepe.x, grid.centre(z) - city.def.tepe.z) < R + 1) inside++;
     }
-    const frontage = (q: BuildingProposal): number => (q.facing % 2 === 0 ? q.w : q.d);
-    if ((usable(p) && !usable(best)) || (usable(p) === usable(best) && frontage(p) > frontage(best)))
-      best = p;
   }
-  return best as BuildingProposal;
+  const p: BuildingProposal = {
+    kind,
+    x0,
+    z0,
+    w,
+    d,
+    facing,
+    tiles,
+    cost: first.cost,
+    material: first.material,
+    months: first.months,
+    clears,
+  };
+  if (problem === undefined && def.site === true && onSite * 2 < w * d) {
+    problem = `${kindName(city, kind)} yalnız ocak yerine kurulur`;
+  }
+  if (problem === undefined && def.outside === true && inside > 0) problem = 'Sur dışına kurulur';
+  if (problem === undefined && !free) problem = fundsProblem(city, first.cost, first.material);
+  if (problem === undefined && !free) {
+    const b = builders(city);
+    if (b.busy >= b.max) problem = `Bütün ustalar işte (${b.busy}/${b.max})`;
+  }
+  if (problem !== undefined) p.problem = problem;
+  return p;
 }
 
-/**
- * Builds a proposal, charging the treasury unless `free`. Returns null, changing nothing,
- * if the ground is no longer clear.
- */
-export function buildBuilding(
-  city: CityState,
-  p: BuildingProposal,
-  opts: { free?: boolean; name?: string } = {},
-): Building | null {
-  const fresh = proposeAt(city, p.kind, p.x0, p.z0, p.w, p.d, p.vakif);
-  if (fresh.problem !== undefined && !(opts.free === true && fresh.problem === 'Hazine yetersiz'))
-    return null;
-  const def = city.balance.works[p.kind];
-  const id = city.nextBuildingId++;
-  const tiles = fresh.tiles.map((t) => city.grid.index(t.x, t.z));
-  const b: Building = {
-    id,
-    kind: p.kind,
-    name: opts.name ?? def.name,
-    x0: fresh.x0,
-    z0: fresh.z0,
-    w: fresh.w,
-    d: fresh.d,
-    tiles,
-    facing: fresh.facing,
-    roadAccess: true,
-    status: 'calisiyor',
-    made: 0,
-    madeLastMonth: 0,
-    shops: Array.from({ length: def.shops ?? 0 }, () => emptyShop()),
-  };
-  let unzoned = false;
-  for (const i of tiles) {
-    city.building[i] = id;
-    if (city.zone[i] === 1) {
-      city.zone[i] = 0;
-      unzoned = true;
-    }
-  }
-  city.buildings.set(id, b);
-  if (fresh.vakif) {
-    // Founders come forward in the order the city's book lists them.
-    let n = 0;
-    for (const other of city.buildings.values()) if (other.vakif !== undefined) n++;
-    const founders = city.balance.vakif.founders;
-    b.vakif = founders[n % founders.length];
-  } else if (opts.free !== true) {
-    city.treasury -= fresh.cost;
-  }
-  city.revision.buildings++;
-  if (unzoned) city.revision.zones++;
+function fundsProblem(city: CityState, cost: number, material: number): string | undefined {
+  if (city.treasury < cost) return 'Akçe yetmiyor';
+  if (city.product < material) return `${city.def.resource.good} yetmiyor`;
+  return undefined;
+}
+
+/** Pays for the building and sets the work going. Null when the proposal has a problem. */
+export function buildBuilding(city: CityState, p: BuildingProposal, name?: string): Building | null {
+  if (p.problem !== undefined) return null;
+  city.treasury -= p.cost;
+  city.product -= p.material;
+  const b = place(city, p, name ?? kindName(city, p.kind));
+  const days = p.months * DAYS_PER_MONTH;
+  b.work = { toLevel: 1, days, daysLeft: days };
+  b.spent = p.cost;
   return b;
 }
 
-export function emptyShop(): Shop {
-  return { trade: null, status: 'bos', made: 0, madeLastMonth: 0, shortDays: 0, starvedMonths: 0 };
+function place(city: CityState, p: BuildingProposal, name: string): Building {
+  const { grid } = city;
+  const id = city.nextBuildingId++;
+  const tiles = p.tiles.map((t) => grid.index(t.x, t.z));
+  const b: Building = {
+    id,
+    kind: p.kind,
+    name,
+    x0: p.x0,
+    z0: p.z0,
+    w: p.w,
+    d: p.d,
+    tiles,
+    facing: p.facing,
+    level: 0,
+    work: null,
+    spent: 0,
+  };
+  for (const i of tiles) {
+    city.building[i] = id;
+    city.house[i] = 0;
+    if (city.field[i] >= 0) removeField(city, city.field[i]);
+  }
+  city.buildings.set(id, b);
+  city.revision.buildings++;
+  // The families living there move to the next free lots.
+  syncHouses(city);
+  return b;
 }
 
-export function removeBuilding(city: CityState, id: number): boolean {
+/** What the next level would take, or null at the top. */
+export function upgradeOffer(city: CityState, b: Building): UpgradeOffer | null {
+  const def = city.balance.buildings[b.kind];
+  const target = (b.work?.toLevel ?? b.level) + 1;
+  if (target > def.levels.length) return null;
+  const lv = def.levels[target - 1];
+  const offer: UpgradeOffer = { toLevel: target, cost: lv.cost, material: lv.material, months: lv.months };
+  const rank = city.balance.levels[city.stats.level];
+  let problem: string | undefined;
+  if (b.work !== null) problem = 'İnşaat sürüyor';
+  else if (target > rank.maxBuildingLevel) {
+    const needed = city.balance.levels.find((l) => l.maxBuildingLevel >= target);
+    problem = needed === undefined ? 'Bu şehirde olmaz' : `Şehir ${needed.name} olunca`;
+  } else {
+    problem = fundsProblem(city, lv.cost, lv.material);
+    const w = builders(city);
+    if (problem === undefined && w.busy >= w.max) problem = `Bütün ustalar işte (${w.busy}/${w.max})`;
+  }
+  if (problem !== undefined) offer.problem = problem;
+  return offer;
+}
+
+/** Starts raising a building one level. False, changing nothing, when it cannot be done. */
+export function upgradeBuilding(city: CityState, id: number): boolean {
   const b = city.buildings.get(id);
   if (b === undefined) return false;
-  for (const i of b.tiles) city.building[i] = -1;
-  city.buildings.delete(id);
+  const offer = upgradeOffer(city, b);
+  if (offer === null || offer.problem !== undefined) return false;
+  city.treasury -= offer.cost;
+  city.product -= offer.material;
+  b.spent += offer.cost;
+  const days = offer.months * DAYS_PER_MONTH;
+  b.work = { toLevel: offer.toLevel, days, daysLeft: days };
   city.revision.buildings++;
   return true;
 }
 
-export function buildingTouchesRoad(city: CityState, b: Building): boolean {
-  return roadContacts(city, b.x0, b.z0, b.w, b.d).some((n) => n > 0);
+/** Akçe that pulling a building down gives back. */
+export function demolishRefund(city: CityState, b: Building): number {
+  return Math.round(b.spent * city.balance.demolishRefund);
 }
 
-const smokeCache = new WeakMap<CityState, { rev: number; map: Uint8Array }>();
+/** Pulls a building down. Returns the refund, or -1 when there is no such building. */
+export function demolishBuilding(city: CityState, id: number): number {
+  const b = city.buildings.get(id);
+  if (b === undefined) return -1;
+  const refund = demolishRefund(city, b);
+  city.treasury += refund;
+  for (const i of b.tiles) city.building[i] = -1;
+  city.buildings.delete(id);
+  city.revision.buildings++;
+  syncHouses(city);
+  notify(city, `${b.name} yıkıldı; ${refund.toLocaleString('tr-TR')} akçe geri geldi.`);
+  return refund;
+}
 
-/** 1 on every tile within reach of a smoking chimney. */
-export function smokeMap(city: CityState): Uint8Array {
-  const cached = smokeCache.get(city);
-  if (cached !== undefined && cached.rev === city.revision.buildings) return cached.map;
-  const { grid } = city;
-  const map = new Uint8Array(grid.count);
+/** A day of building work; completed works raise their building a level. */
+export function buildDay(city: CityState): void {
   for (const b of city.buildings.values()) {
-    const r = city.balance.works[b.kind].smoke ?? 0;
-    if (r <= 0) continue;
-    const cx = b.x0 + (b.w - 1) / 2;
-    const cz = b.z0 + (b.d - 1) / 2;
-    for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++) {
-      for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
-        if (grid.inBounds(x, z) && Math.hypot(x - cx, z - cz) <= r) map[grid.index(x, z)] = 1;
-      }
-    }
+    const w = b.work;
+    if (w === null) continue;
+    w.daysLeft--;
+    if (w.daysLeft > 0) continue;
+    b.level = w.toLevel;
+    b.work = null;
+    city.revision.buildings++;
+    notify(city, b.level === 1 ? `${b.name} tamamlandı.` : `${b.name} ${b.level}. seviyeye çıktı.`, 'good');
   }
-  smokeCache.set(city, { rev: city.revision.buildings, map });
-  return map;
 }
 
-function startPosition(city: CityState, near?: Vec2, angle?: number, radius?: number): Vec2 {
-  if (near !== undefined) return near;
-  const a = ((angle ?? 0) * Math.PI) / 180;
-  const { tepe } = city.def;
-  return [tepe.x + Math.cos(a) * (radius ?? 0), tepe.z + Math.sin(a) * (radius ?? 0)];
-}
-
-/**
- * The workshops and bazaars the city starts with. Each goes at the nearest spot to its
- * authored position where the ordinary building rules allow it.
- */
+/** The buildings the city already has: placed as near their spot as the rules allow, already standing. */
 export function placeStartBuildings(city: CityState): void {
   const { grid } = city;
-  for (const w of city.def.works) {
-    const [nx, nz] = startPosition(city, w.near, w.angle, w.radius);
-    const cx = grid.tileOf(nx);
-    const cz = grid.tileOf(nz);
-    let built: Building | null = null;
-    for (let r = 0; r <= 12 && built === null; r++) {
-      for (let dz = -r; dz <= r && built === null; dz++) {
-        for (let dx = -r; dx <= r && built === null; dx++) {
+  for (const s of city.def.buildings) {
+    const cx = grid.tileOf(s.near[0]);
+    const cz = grid.tileOf(s.near[1]);
+    let found: BuildingProposal | null = null;
+    for (let r = 0; r <= 12 && found === null; r++) {
+      for (let dz = -r; dz <= r && found === null; dz++) {
+        for (let dx = -r; dx <= r && found === null; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-          const p = proposeBuilding(city, w.kind, cx + dx, cz + dz);
-          if (p.problem === undefined || p.problem === 'Hazine yetersiz') {
-            built = buildBuilding(city, p, { free: true, name: w.name });
-          }
+          const p = proposeBuilding(city, s.kind, cx + dx, cz + dz, true);
+          if (p.problem === undefined) found = p;
         }
       }
     }
-    if (built === null) throw new Error(`No room for "${w.name}" near ${nx.toFixed(1)}, ${nz.toFixed(1)}`);
-    (w.shops ?? []).forEach((trade, k) => {
-      const shop = built?.shops[k];
-      if (shop !== undefined) {
-        shop.trade = trade;
-        shop.status = 'calisiyor';
-      }
-    });
+    if (found === null) continue;
+    const b = place(city, found, s.name);
+    const levels = city.balance.buildings[s.kind].levels;
+    b.level = Math.min(s.level, levels.length);
+    b.spent = levels.slice(0, b.level).reduce((sum, l) => sum + l.cost, 0);
   }
 }

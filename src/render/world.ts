@@ -5,9 +5,7 @@ import { BuildingsView } from './buildings-view';
 import { CameraRig } from './camera-rig';
 import { CursorView } from './cursor-view';
 import { FieldsView } from './fields-view';
-import { FireView } from './fire-view';
 import { HousesView } from './houses-view';
-import { houseTint, layerKey, layerTexture, paintLayer, type Layer } from './layers';
 import { shading } from './materials';
 import { PeopleView } from './people-view';
 import { MiniPipeline } from './pipeline';
@@ -15,7 +13,6 @@ import { RoadsView } from './roads-view';
 import { TerrainView } from './terrain-view';
 import { TreesView } from './trees-view';
 import { WorksView } from './works-view';
-import { ZonesView } from './zones-view';
 
 /** Sun direction, from the ground towards the light: low from the south-west. */
 const SUN = new THREE.Vector3(-0.55, 0.9, 0.5).normalize();
@@ -33,14 +30,9 @@ export class World {
   private readonly houses: HousesView;
   private readonly trees: TreesView;
   private readonly fields: FieldsView;
-  private readonly zones: ZonesView;
   private readonly works: WorksView;
-  readonly fire: FireView;
   readonly people: PeopleView;
   private readonly pipeline: MiniPipeline;
-  private layer: Layer | null = null;
-  private layerStamp = '';
-  private readonly layerTex: THREE.DataTexture;
   /** Seconds since the city layers were last compared with the simulation. */
   private sinceSync = Infinity;
   private readonly sun = new THREE.DirectionalLight('#ffffff', Math.PI);
@@ -66,22 +58,17 @@ export class World {
     this.houses = new HousesView(city);
     this.trees = new TreesView(city);
     this.fields = new FieldsView(city);
-    this.zones = new ZonesView(city);
     this.works = new WorksView(city);
-    this.fire = new FireView(city);
     this.people = new PeopleView(city);
     this.cursor = new CursorView(city);
-    this.layerTex = layerTexture(city.grid.size);
     this.scene.add(
       this.terrain.group,
       this.fields.group,
-      this.zones.group,
       this.roads.group,
       this.houses.group,
       this.trees.group,
       new BuildingsView(city).group,
       this.works.group,
-      this.fire.group,
       this.people.group,
       this.cursor.group,
     );
@@ -95,36 +82,9 @@ export class World {
     this.pipeline = new MiniPipeline(renderer, this.scene, this.rig.camera);
   }
 
-  /** Shows one information layer over the ground, or none. */
-  setLayer(layer: Layer | null): void {
-    this.layer = layer;
-    this.layerStamp = '';
-    if (layer === null) {
-      this.terrain.setOverlay(null);
-      this.houses.setTint(null);
-    } else if (layer === 'verim') {
-      this.terrain.setFertilityVisible(true);
-      this.houses.setTint(null);
-    } else {
-      this.refreshLayer();
-    }
-  }
-
-  get activeLayer(): Layer | null {
-    return this.layer;
-  }
-
-  private refreshLayer(): void {
-    const layer = this.layer;
-    if (layer === null || layer === 'verim') return;
-    const stamp = `${layer}|${layerKey(this.city, layer)}`;
-    if (stamp === this.layerStamp) return;
-    this.layerStamp = stamp;
-    paintLayer(this.city, layer, this.layerTex.image.data as Uint8Array);
-    this.layerTex.needsUpdate = true;
-    this.terrain.setOverlay(this.layerTex);
-    this.houses.setTint(houseTint(this.city, layer));
-    this.shadowDirty = true;
+  /** Marks the resource sites on the ground, while a quarry is being placed. */
+  showSites(on: boolean): void {
+    if (this.terrain.sitesVisible !== on) this.terrain.setSitesVisible(on);
   }
 
   resize(width: number, height: number, pixelRatio: number): void {
@@ -149,17 +109,13 @@ export class World {
         this.houses.sync(),
         this.trees.sync(),
         this.fields.sync(),
-        this.zones.sync(),
         this.works.sync(),
-        this.fire.sync(),
       ];
       this.people.sync();
       changed = results.some((r) => r);
-      this.refreshLayer();
     }
     this.terrain.update(elapsed);
     this.works.update(elapsed);
-    this.fire.update(elapsed);
     this.people.update(dt, this.rig.zoom);
     this.applyCloseness(moved || changed);
     this.pipeline.render();

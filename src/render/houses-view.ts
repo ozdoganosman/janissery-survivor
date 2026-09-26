@@ -22,21 +22,14 @@ export class HousesView {
 
   constructor(private readonly city: CityState) {
     setInkClass(this.group, INK_CLASS.building);
-    this.sync(true);
+    this.sync();
   }
 
   /** Rebuilds when houses changed, or when roads changed (houses turn to face them). */
   /** Colour for each house while an information layer is shown, or null for its own. */
-  private tint: ((i: number) => string | null) | null = null;
-
-  setTint(tint: ((i: number) => string | null) | null): void {
-    this.tint = tint;
-    this.sync(true);
-  }
-
-  sync(force = false): boolean {
+  sync(): boolean {
     const rev = this.city.revision.houses * 100003 + this.city.revision.roads;
-    if (!force && rev === this.revision) return false;
+    if (rev === this.revision) return false;
     this.revision = rev;
     for (const child of this.group.children.slice()) {
       this.group.remove(child);
@@ -89,9 +82,8 @@ export class HousesView {
         base = Math.min(base, sampleHeight(terrain, cx, cz));
       }
       const wallH = storeys * STOREY + 0.06;
-      const tinted = this.tint?.(i) ?? null;
-      const color = tinted ?? PAL.houses[Math.floor(hash2(tx, tz, 4) * PAL.houses.length)];
-      const roof = tinted ?? PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
+      const color = PAL.houses[Math.floor(hash2(tx, tz, 4) * PAL.houses.length)];
+      const roof = PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
       const frame = new Frame(x, base, z, rot);
       bodies.push(frame.part(0, -0.3, 0, w, wallH + 0.3, d, color));
       roofs.push(frame.part(0, wallH, 0, w + (konak ? 0.16 : 0.06), 0.05, d + (konak ? 0.16 : 0.06), roof));

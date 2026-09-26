@@ -1,5 +1,5 @@
 import type { Vec2 } from '../core/geom';
-import type { BuildingKind, Trade } from './balance';
+import type { BuildingKind } from './balance';
 
 /**
  * The authored description of a city: what the player inherits on day one.
@@ -14,40 +14,45 @@ export interface CityDef {
   seed: number;
   /** Tiles per side of the square map. */
   size: number;
-  start: { year: number; month: number; day: number; treasury: number };
+  start: { year: number; month: number; day: number };
   tepe: { x: number; z: number; topRadius: number; footRadius: number; height: number };
   walls: { radius: number; height: number; towerSpacing: number };
   gates: GateDef[];
   stream: { name: string; width: number; points: Vec2[] };
   hills: { north: HillDef; west: HillDef };
   streets: { tepeRing: number; innerRing: number; alleys: number };
-  housing: { innerRadius: number; frontFill: number; backFill: number; twoStorey: number };
+  /** Where houses may stand, and how many people the city starts with. */
+  housing: { innerRadius: number; twoStorey: number; startPopulation: number };
   landmarks: LandmarkDef[];
-  /** Iron ore in the hills, where a mine can be sunk. */
-  deposits: DepositDef[];
-  /** Workshops and bazaars the city already has on day one. */
-  works: StartWorkDef[];
+  /** What the city makes of its own, and where it is dug or cut. */
+  resource: ResourceDef;
+  /** Buildings the city already has on day one. */
+  buildings: StartBuildingDef[];
 }
 
-export interface DepositDef {
+export interface ResourceDef {
+  /** Name of the good, as the ledger shows it: Taş, Odun, Demir. */
+  good: string;
+  /** What it is counted in. */
+  unit: string;
+  /** Name of the building that brings it in: Taş Ocağı, Baltacı Ocağı, Maden. */
+  building: string;
+  sites: SiteDef[];
+}
+
+export interface SiteDef {
   name: string;
   x: number;
   z: number;
   radius: number;
 }
 
-export interface StartWorkDef {
+export interface StartBuildingDef {
   kind: BuildingKind;
   name: string;
-  /**
-   * Where to build, or as close to it as the rules allow: a world position, or a polar
-   * one around the tepe as for landmarks.
-   */
-  near?: Vec2;
-  angle?: number;
-  radius?: number;
-  /** Crafts already working in a bazaar's shops. */
-  shops?: Trade[];
+  level: number;
+  /** Where to build, or as close to it as the rules allow. */
+  near: Vec2;
 }
 
 export interface GateDef {
@@ -96,12 +101,9 @@ export function validateCityDef(def: CityDef): CityDef {
     if (!explicit && !polar) problems.push(`landmark "${l.name}" has no position`);
     if (l.w < 1 || l.d < 1) problems.push(`landmark "${l.name}" has an empty footprint`);
   }
-  for (const d of def.deposits) if (d.radius <= 0) problems.push(`deposit "${d.name}" has no size`);
-  for (const w of def.works) {
-    if (w.near === undefined && (w.angle === undefined || w.radius === undefined)) {
-      problems.push(`start building "${w.name}" has no position`);
-    }
-  }
+  if (def.resource.sites.length === 0) problems.push('the city needs somewhere to get its product');
+  for (const s of def.resource.sites) if (s.radius <= 0) problems.push(`site "${s.name}" has no size`);
+  for (const b of def.buildings) if (b.level < 1) problems.push(`start building "${b.name}" has no level`);
   if (problems.length > 0) throw new Error(`Invalid city "${def.id}": ${problems.join('; ')}`);
   return def;
 }

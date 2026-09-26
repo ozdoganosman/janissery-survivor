@@ -7,8 +7,7 @@
   "start": {
     "year": 1230,
     "month": 2,
-    "day": 1,
-    "treasury": 20000
+    "day": 1
   },
   "tepe": {
     "x": 0,
@@ -99,9 +98,8 @@
   },
   "housing": {
     "innerRadius": 11.4,
-    "frontFill": 0.93,
-    "backFill": 0.72,
-    "twoStorey": 0.28
+    "twoStorey": 0.28,
+    "startPopulation": 4200
   },
   "landmarks": [
     {
@@ -156,103 +154,37 @@
       "d": 3
     }
   ],
-  "deposits": [
+  "resource": {
+    "good": "Taş",
+    "unit": "araba",
+    "building": "Taş Ocağı",
+    "sites": [
+      {
+        "name": "Sille taş ocakları",
+        "x": -22,
+        "z": -52,
+        "radius": 6
+      },
+      {
+        "name": "Takkeli Dağı ocakları",
+        "x": -62,
+        "z": -4,
+        "radius": 6
+      }
+    ]
+  },
+  "buildings": [
     {
-      "name": "Sille demir damarı",
-      "x": -22,
-      "z": -54,
-      "radius": 3.2
+      "kind": "carsi",
+      "name": "Larende Çarşısı",
+      "level": 1,
+      "near": [15, 24]
     },
     {
-      "name": "Takkeli demir damarı",
-      "x": -64,
-      "z": -4,
-      "radius": 3.2
-    }
-  ],
-  "works": [
-    {
-      "kind": "degirmen",
-      "name": "Meram Değirmeni",
-      "near": [12, 28]
-    },
-    {
-      "kind": "arasta",
-      "name": "Larende Arastası",
-      "near": [15, 23],
-      "shops": ["firinci", "firinci"]
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 0,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 30,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 60,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 90,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 120,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 150,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 180,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 210,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 240,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 270,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 300,
-      "radius": 16.4
-    },
-    {
-      "kind": "cesme",
-      "name": "Çeşme",
-      "angle": 330,
-      "radius": 16.4
+      "kind": "ambar",
+      "name": "Meram Ambarı",
+      "level": 1,
+      "near": [10, 29]
     }
   ]
 }

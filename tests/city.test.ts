@@ -5,19 +5,12 @@ import { advanceCalendar, createCalendar, dateOf, formatDate } from '../src/sim/
 import { createCity, WALL, WALL_GATE, type CityState } from '../src/sim/city';
 import type { Balance } from '../src/sim/balance';
 import type { CityDef } from '../src/sim/city-def';
-import { removeField } from '../src/sim/fields';
 import { DIRS4 } from '../src/sim/grid';
 import { inspectTile } from '../src/sim/inspect';
-import { bulldoze, buildRoad, planRoad, BRIDGE_COST } from '../src/sim/roads';
+import { housesWanted } from '../src/sim/housing';
 
 const def = konya as unknown as CityDef;
 const balance = balanceJson as unknown as Balance;
-/** A fresh Konya with its starting fields cleared, for tests about roads on open ground. */
-function openCity(): CityState {
-  const c = createCity(def, balance);
-  for (const id of [...c.fields.keys()]) removeField(c, id);
-  return c;
-}
 let city: CityState;
 beforeAll(() => {
   city = createCity(def, balance);
@@ -112,7 +105,6 @@ describe('walls and gates', () => {
       expect(g.tiles.length).toBeGreaterThan(0);
       for (const i of g.tiles) {
         expect(city.road[i]).toBe(1);
-        expect(city.roadLocked[i]).toBe(1);
       }
     }
   });
@@ -146,12 +138,32 @@ describe('initial city', () => {
       expect(city.road[i]).toBe(0);
       expect(city.wall[i]).toBe(0);
     }
+    expect(houses).toBe(housesWanted(city));
     expect(houses).toBeGreaterThan(400);
     expect(houses).toBeLessThan(1400);
   });
 
+  it('lays fields round the city, clear of roads and houses', () => {
+    expect(city.fields.size).toBeGreaterThan(10);
+    for (const f of city.fields.values()) {
+      for (const i of f.tiles) {
+        expect(city.field[i]).toBe(f.id);
+        expect(city.road[i]).toBe(0);
+        expect(city.house[i]).toBe(0);
+      }
+    }
+  });
+
   it('keeps generated streets one lane wide', () => {
-    const { grid, road, roadLocked } = city;
+    const { grid, road, def } = city;
+    // The gate passages are laid straight through the wall and may run two wide.
+    const nearWall = (i: number): boolean =>
+      Math.abs(
+        Math.hypot(
+          grid.centre(i % grid.size) - def.tepe.x,
+          grid.centre(Math.floor(i / grid.size)) - def.tepe.z,
+        ) - def.walls.radius,
+      ) < 2.6;
     let thick = 0;
     for (let z = 0; z < grid.size - 1; z++) {
       for (let x = 0; x < grid.size - 1; x++) {
@@ -161,7 +173,7 @@ describe('initial city', () => {
           grid.index(x, z + 1),
           grid.index(x + 1, z + 1),
         ];
-        if (block.every((i) => road[i] === 1) && block.every((i) => roadLocked[i] === 0)) thick++;
+        if (block.every((i) => road[i] === 1) && !block.some(nearWall)) thick++;
       }
     }
     expect(thick).toBe(0);
@@ -169,67 +181,13 @@ describe('initial city', () => {
 
   it('describes tiles for the info panel', () => {
     const tepe = inspectTile(city, city.grid.tileOf(0), city.grid.tileOf(0));
-    expect(tepe?.land).toBe('Alaeddin Tepesi');
-    expect(tepe?.feature).toBe('Alaeddin Camii');
+    expect(tepe?.title).toBe('Alaeddin Camii');
     const gate = city.gates[0];
     const g = gate.tiles[0];
-    expect(inspectTile(city, g % city.grid.size, Math.floor(g / city.grid.size))?.feature).toBe(gate.name);
+    expect(inspectTile(city, g % city.grid.size, Math.floor(g / city.grid.size))?.title).toBe(gate.name);
+    const site = city.def.resource.sites[0];
+    expect(inspectTile(city, city.grid.tileOf(site.x), city.grid.tileOf(site.z))?.title).toBe(site.name);
     expect(inspectTile(city, -1, 0)).toBeNull();
-  });
-});
-
-describe('roads', () => {
-  it('prices a straight road on open ground', () => {
-    const c = openCity();
-    const x = c.grid.tileOf(40);
-    const z = c.grid.tileOf(10);
-    const plan = planRoad(c, x, z, x + 6, z);
-    expect(plan.problem).toBeUndefined();
-    expect(plan.tiles).toHaveLength(7);
-    expect(plan.cost).toBeGreaterThanOrEqual(70);
-  });
-
-  it('refuses to cut through the walls', () => {
-    const c = openCity();
-    const plan = planRoad(c, c.grid.tileOf(0), c.grid.tileOf(-15), c.grid.tileOf(0), c.grid.tileOf(-30));
-    expect(plan.problem).toBeDefined();
-    expect(buildRoad(c, plan)).toBe(false);
-  });
-
-  it('builds a bridge over the stream and charges for it', () => {
-    const c = openCity();
-    const x = c.grid.tileOf(-40);
-    const plan = planRoad(c, x, c.grid.tileOf(22), x, c.grid.tileOf(38));
-    expect(plan.problem).toBeUndefined();
-    expect(plan.tiles.some((t) => t.status === 'bridge')).toBe(true);
-    expect(plan.cost).toBeGreaterThan(BRIDGE_COST);
-    const before = c.treasury;
-    expect(buildRoad(c, plan)).toBe(true);
-    expect(c.treasury).toBe(before - plan.cost);
-    expect(c.road[c.grid.index(x, c.grid.tileOf(30))]).toBe(1);
-  });
-
-  it('will not build what the treasury cannot pay for', () => {
-    const c = openCity();
-    c.treasury = 5;
-    const x = c.grid.tileOf(40);
-    const plan = planRoad(c, x, c.grid.tileOf(0), x, c.grid.tileOf(8));
-    expect(plan.problem).toBe('Hazine yetersiz');
-    expect(buildRoad(c, plan)).toBe(false);
-    expect(c.treasury).toBe(5);
-  });
-
-  it('bulldozes ordinary roads but not gate passages', () => {
-    const c = openCity();
-    const x = c.grid.tileOf(40);
-    const z = c.grid.tileOf(0);
-    buildRoad(c, planRoad(c, x, z, x + 4, z));
-    expect(bulldoze(c, x, z, x + 4, z)).toBe(5);
-    const g = c.gates[0].tiles[0];
-    const gx = g % c.grid.size;
-    const gz = Math.floor(g / c.grid.size);
-    bulldoze(c, gx, gz, gx, gz);
-    expect(c.road[g]).toBe(1);
   });
 });
 

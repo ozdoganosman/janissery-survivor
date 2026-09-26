@@ -4,14 +4,14 @@ import { fbm } from '../core/noise';
 import type { CityState } from '../sim/city';
 import { miniMaterial, markOverlay, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
-import { fertilityTexture, groundTexture, GROUND_TEXTURE_UNITS, waterTexture } from './textures';
+import { groundTexture, GROUND_TEXTURE_UNITS, siteTexture, waterTexture } from './textures';
 
 /** The ground mesh, the fertility layer that can be laid over it, and the stream. */
 export class TerrainView {
   readonly group = new THREE.Group();
   private readonly overlay: THREE.Mesh;
   private readonly overlayMat: THREE.MeshBasicMaterial;
-  private readonly fertilityTex: THREE.Texture;
+  private readonly siteTex: THREE.Texture;
   private readonly waterTex: THREE.Texture;
 
   constructor(city: CityState) {
@@ -31,9 +31,9 @@ export class TerrainView {
       rock: new THREE.Color(PAL.hillRock),
       tepe: new THREE.Color(PAL.tepe),
       bank: new THREE.Color(PAL.bank),
-      ore: new THREE.Color(PAL.ore),
+      site: new THREE.Color(PAL.siteGround),
     };
-    const oreAround = (cx: number, cz: number): number => {
+    const siteAround = (cx: number, cz: number): number => {
       let k = 0;
       for (const [x, z] of [
         [cx - 1, cz - 1],
@@ -41,7 +41,7 @@ export class TerrainView {
         [cx - 1, cz],
         [cx, cz],
       ]) {
-        if (terrain.grid.inBounds(x, z) && terrain.ore[terrain.grid.index(x, z)] > 0) k++;
+        if (terrain.grid.inBounds(x, z) && terrain.site[terrain.grid.index(x, z)] > 0) k++;
       }
       return k / 4;
     };
@@ -76,7 +76,7 @@ export class TerrainView {
       );
       c.lerp(col.bank, 1 - smoothstep(0.9, 1.9, ds));
       // Iron stains the ground rust-red where a seam comes to the surface.
-      c.lerp(col.ore, 0.6 * oreAround(cx, cz));
+      c.lerp(col.site, 0.6 * siteAround(cx, cz));
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -88,10 +88,10 @@ export class TerrainView {
     setInkClass(ground, INK_CLASS.ground);
     this.group.add(ground);
 
-    // Information layers: same surface, lifted a hair, drawn only when asked for.
-    this.fertilityTex = fertilityTexture(terrain);
+    // Overlay layer: same surface, lifted a hair, drawn only when asked for.
+    this.siteTex = siteTexture(terrain);
     const overlayMat = new THREE.MeshBasicMaterial({
-      map: this.fertilityTex,
+      map: this.siteTex,
       transparent: true,
       depthWrite: false,
       polygonOffset: true,
@@ -126,17 +126,18 @@ export class TerrainView {
   }
 
   /** Lays a one-texel-per-tile layer over the ground, or takes it away. */
-  setOverlay(texture: THREE.Texture | null): void {
+  private setOverlay(texture: THREE.Texture | null): void {
     if (texture !== null) this.overlayMat.map = texture;
     this.overlay.visible = texture !== null;
   }
 
-  setFertilityVisible(visible: boolean): void {
-    this.setOverlay(visible ? this.fertilityTex : null);
+  /** Marks where the city's quarry, forest or mine may go. */
+  setSitesVisible(visible: boolean): void {
+    this.setOverlay(visible ? this.siteTex : null);
   }
 
-  get fertilityVisible(): boolean {
-    return this.overlay.visible && this.overlayMat.map === this.fertilityTex;
+  get sitesVisible(): boolean {
+    return this.overlay.visible && this.overlayMat.map === this.siteTex;
   }
 
   /** Slow drift of the water motifs. */

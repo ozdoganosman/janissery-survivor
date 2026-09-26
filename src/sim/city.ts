@@ -1,19 +1,16 @@
 import { smoothPath, supercoverLine, type Vec2 } from '../core/geom';
 import { valueNoise } from '../core/noise';
 import { createRng, type Rng } from '../core/rng';
-import type { Balance, Good, TaxRate } from './balance';
+import type { Balance, TaxRate } from './balance';
 import { placeStartBuildings, type Building } from './buildings';
 import { createCalendar, type Calendar } from './calendar';
 import { validateCityDef, type CityDef, type LandmarkDef, type LandmarkKind } from './city-def';
+import { seedCountryside, type Field } from './countryside';
+import { orderState, updateStats, type OrderState } from './economy';
 import type { Grid } from './grid';
 import { DIRS4 } from './grid';
+import { layLots, syncHouses } from './housing';
 import { generateTerrain, type Terrain } from './terrain';
-import { roadDistance } from './distance';
-import { updateStats } from './economy';
-import { seedStartingFields } from './fields';
-import type { Field } from './fields';
-import { initialEvents, type EventState } from './events';
-import { emptyFlows, emptyGoods, estimateNeeds, type Flows } from './production';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
 
@@ -42,7 +39,10 @@ export interface Gate {
 
 /**
  * The whole mutable state of one city. Plain data in typed arrays so it can be saved,
- * copied into tests and later run headless for balance simulations.
+ * copied into tests and later run headless on the campaign map.
+ *
+ * The streets, walls and landmarks are the city as it was handed over; the player adds
+ * buildings. Houses follow the population on their own.
  */
 export interface CityState {
   def: CityDef;
@@ -50,89 +50,56 @@ export interface CityState {
   terrain: Terrain;
   /** WALL_NONE, WALL or WALL_GATE per tile. */
   wall: Uint8Array;
-  /** 1 where a road runs. A road on a water tile is a bridge. */
+  /** 1 where a street runs. A street on a water tile is a bridge. */
   road: Uint8Array;
-  /** 1 for roads the player may not remove, such as gate passages. */
-  roadLocked: Uint8Array;
   /** Index into `landmarks`, or -1. */
   structure: Int16Array;
-  /** 0 = empty, otherwise the number of storeys of the house on this tile. */
+  /** 0 = empty, otherwise 1 or 2 storeys, 3 for a konak. */
   house: Uint8Array;
-  /** 1 where the player has zoned for houses. */
-  zone: Uint8Array;
-  /** Id of the field covering the tile, or -1. */
-  field: Int32Array;
-  /** Fields by id; removed fields leave no entry. */
-  fields: Map<number, Field>;
-  nextFieldId: number;
-  /** Id of the workshop or bazaar covering the tile, or -1. */
+  /** Lots in the order houses take them as the city grows. */
+  lots: Int32Array;
+  /** Id of the building covering the tile, or -1. */
   building: Int32Array;
   buildings: Map<number, Building>;
   nextBuildingId: number;
+  /** Id of the field covering the tile, or -1. The fields are scenery. */
+  field: Int32Array;
+  fields: Map<number, Field>;
   landmarks: Landmark[];
   gates: Gate[];
   balance: Balance;
+  /** Akçe in the treasury. */
   treasury: number;
-  /** Grain in the city granary, in kile. */
-  granary: number;
-  /** Everything else the state holds, in the one city depot. */
-  goods: Record<Good, number>;
-  /** What went in and out of the granary and depot, this month and last. */
-  flows: { current: Flows; last: Flows };
-  /** Share of each need met lately, 0..1: bread and cloth for people, tools for fields. */
-  needs: { ekmek: number; kumas: number; alet: number };
-  /** Someone went without food today. */
-  hungry: boolean;
-  /** The governor's standing orders. */
-  policy: { tax: TaxRate; narh: boolean; garrison: number };
-  /** Fires, plague, the Mongols: all that happens unplanned, and the city's defences. */
-  events: EventState;
-  /** The day the game began. */
-  startDay: number;
-  /** The treasury closed last month in debt: public staff go unpaid. */
-  unpaid: boolean;
+  /** The city's own product in store: stone, wood or iron. */
+  product: number;
+  /** People, fractional so that slow growth still adds up. */
+  population: number;
+  policy: { tax: TaxRate };
   calendar: Calendar;
-  /** State of the simulation's own random stream, so a saved city resumes identically. */
-  rngState: number;
   /** Figures recomputed every day; the HUD reads them, nothing else writes them. */
   stats: CityStats;
   /** Messages for the player, oldest first; the UI drains this queue. */
   notices: Notice[];
+  /** The rank and the mood last told to the player, so each change is told once. */
+  announced: { level: number; order: OrderState };
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number; zones: number; fields: number; buildings: number; fire: number };
+  revision: { roads: number; houses: number; buildings: number; fields: number };
 }
 
 export interface CityStats {
-  population: number;
-  households: number;
-  labor: number;
-  fieldJobs: number;
-  /** Workshop and shop jobs. */
-  industryJobs: number;
-  otherJobs: number;
-  unemployed: number;
-  /** Share of field work that gets done, 0..1. */
-  staffing: number;
-  /** Share of workshop and shop work that gets done, 0..1. */
-  industryStaffing: number;
-  /** How well bread and cloth needs are met, 0..1. */
-  prosperity: number;
-  /** Housing demand, -1..1. */
-  demand: number;
-  /** How long the granary lasts at today's consumption. */
-  foodMonths: number;
-  /** Zoned lots where a house could go up right now. */
-  freeLots: number;
-  incomeLastMonth: number;
-  /** Where last month's income came from, and where it went. */
-  income: { tax: number; sales: number; market: number };
-  expenses: { upkeep: number; vakif: number; tribute: number; garrison: number; ilkhan: number };
-  /** Income less expenses, last month. */
-  netLastMonth: number;
-  /** Notables ready to endow a vakıf. */
-  founders: number;
-  lastHarvest: number;
-  lastShearing: number;
+  /** Public order, 0..100, and where it comes from. */
+  order: number;
+  orderParts: { base: number; tax: number; buildings: number; crowding: number };
+  /** Index into `balance.levels`. */
+  level: number;
+  /** What a month brings at today's figures. */
+  income: { tax: number; buildings: number; total: number };
+  product: number;
+  growth: number;
+  /** What the last month really brought. */
+  last: { income: number; product: number; growth: number };
+  /** Building works under way. */
+  works: number;
 }
 
 export type NoticeKind = 'info' | 'good' | 'bad';
@@ -158,73 +125,54 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     terrain,
     wall: new Uint8Array(grid.count),
     road: new Uint8Array(grid.count),
-    roadLocked: new Uint8Array(grid.count),
     structure: new Int16Array(grid.count).fill(-1),
     house: new Uint8Array(grid.count),
-    zone: new Uint8Array(grid.count),
-    field: new Int32Array(grid.count).fill(-1),
-    fields: new Map(),
-    nextFieldId: 1,
+    lots: new Int32Array(0),
     building: new Int32Array(grid.count).fill(-1),
     buildings: new Map(),
     nextBuildingId: 1,
+    field: new Int32Array(grid.count).fill(-1),
+    fields: new Map(),
     landmarks: [],
     gates: [],
     balance,
-    treasury: def.start.treasury,
-    granary: balance.food.startGranary,
-    goods: emptyGoods(),
-    flows: { current: emptyFlows(), last: emptyFlows() },
-    needs: { ekmek: 0, kumas: 0, alet: 0 },
-    hungry: false,
-    policy: { tax: balance.tax.start, narh: false, garrison: balance.defense.startGarrison },
-    events: initialEvents(grid.count, balance),
-    startDay: 0,
-    unpaid: false,
+    treasury: balance.start.treasury,
+    product: balance.start.product,
+    population: def.housing.startPopulation,
+    policy: { tax: balance.tax.start },
     calendar: createCalendar(def.start),
-    rngState: (def.seed * 2654435761) >>> 0,
     stats: {
-      population: 0,
-      households: 0,
-      labor: 0,
-      fieldJobs: 0,
-      industryJobs: 0,
-      otherJobs: 0,
-      unemployed: 0,
-      staffing: 1,
-      industryStaffing: 1,
-      prosperity: 0,
-      demand: 0,
-      foodMonths: 0,
-      freeLots: 0,
-      incomeLastMonth: 0,
-      income: { tax: 0, sales: 0, market: 0 },
-      expenses: { upkeep: 0, vakif: 0, tribute: 0, garrison: 0, ilkhan: 0 },
-      netLastMonth: 0,
-      founders: 0,
-      lastHarvest: 0,
-      lastShearing: 0,
+      order: 0,
+      orderParts: { base: 0, tax: 0, buildings: 0, crowding: 0 },
+      level: 0,
+      income: { tax: 0, buildings: 0, total: 0 },
+      product: 0,
+      growth: 0,
+      last: { income: 0, product: 0, growth: 0 },
+      works: 0,
     },
     notices: [],
-    revision: { roads: 0, houses: 0, zones: 0, fields: 0, buildings: 0, fire: 0 },
+    announced: { level: 0, order: 'sakin' },
+    revision: { roads: 0, houses: 0, buildings: 0, fields: 0 },
   };
-  city.startDay = city.calendar.day;
   const rng = createRng(def.seed);
-  buildWalls(city);
+  // Gate passages and the streets are generated once; nothing in play removes them.
+  const locked = new Uint8Array(grid.count);
+  buildWalls(city, locked);
   placeLandmarks(city);
   const reserved = landmarkReserve(city, 1);
   layStreets(city, rng, reserved);
   connectLandmarks(city);
   layOutsideRoads(city);
-  thinRoads(city);
-  pruneRoadFragments(city, 4);
-  // Fountains and workshops take their places before the houses fill the lots around them.
+  thinRoads(city, locked);
+  pruneRoadFragments(city, locked, 4);
+  city.revision.roads++;
   placeStartBuildings(city);
-  fillHouses(city, rng);
-  seedStartingFields(city, rng);
+  layLots(city);
+  seedCountryside(city, rng);
   updateStats(city);
-  estimateNeeds(city);
-  updateStats(city);
+  syncHouses(city);
+  city.announced = { level: city.stats.level, order: orderState(city) };
   return city;
 }
 
@@ -262,7 +210,7 @@ function distFromTepe(city: CityState, x: number, z: number): number {
   return Math.hypot(city.grid.centre(x) - tepe.x, city.grid.centre(z) - tepe.z);
 }
 
-function buildWalls(city: CityState): void {
+function buildWalls(city: CityState, locked: Uint8Array): void {
   const { grid, def } = city;
   const R = def.walls.radius;
   for (let z = 0; z < grid.size; z++) {
@@ -284,7 +232,7 @@ function buildWalls(city: CityState): void {
         tiles.push(i);
       }
       city.road[i] = 1;
-      city.roadLocked[i] = 1;
+      locked[i] = 1;
     }
     city.gates.push({ name: g.name, angle: a, tiles });
   }
@@ -460,7 +408,7 @@ function layOutsideRoads(city: CityState): void {
  * were one lane wide, so each thick spot loses a tile, but only a tile whose removal keeps
  * every neighbouring piece of road connected.
  */
-function thinRoads(city: CityState): void {
+function thinRoads(city: CityState, locked: Uint8Array): void {
   const { grid, road } = city;
   const isRoad = (x: number, z: number): boolean => grid.inBounds(x, z) && road[grid.index(x, z)] === 1;
   const inThickBlock = (x: number, z: number): boolean =>
@@ -504,7 +452,7 @@ function thinRoads(city: CityState): void {
     for (let z = 0; z < grid.size; z++) {
       for (let x = 0; x < grid.size; x++) {
         const i = grid.index(x, z);
-        if (road[i] !== 1 || city.roadLocked[i] === 1) continue;
+        if (road[i] !== 1 || locked[i] === 1) continue;
         if (!inThickBlock(x, z) || !isSimple(x, z)) continue;
         road[i] = 0;
         removed++;
@@ -516,9 +464,9 @@ function thinRoads(city: CityState): void {
 
 /**
  * Drops stray road pieces smaller than `minTiles`. Streets clipped around landmarks can
- * leave a tile or two behind that lead nowhere; a player-built road is never touched here.
+ * leave a tile or two behind that lead nowhere; the gate passages are never touched.
  */
-function pruneRoadFragments(city: CityState, minTiles: number): void {
+function pruneRoadFragments(city: CityState, locked: Uint8Array, minTiles: number): void {
   const { grid } = city;
   const seen = new Uint8Array(grid.count);
   for (let start = 0; start < grid.count; start++) {
@@ -540,32 +488,7 @@ function pruneRoadFragments(city: CityState, minTiles: number): void {
         }
       }
     }
-    if (component.length >= minTiles || component.some((i) => city.roadLocked[i] === 1)) continue;
+    if (component.length >= minTiles || component.some((i) => locked[i] === 1)) continue;
     for (const i of component) city.road[i] = 0;
   }
-}
-
-/** Houses fill the lots along the streets inside the walls, thinning out away from them. */
-function fillHouses(city: CityState, rng: Rng): void {
-  const { grid, def } = city;
-  const R = def.walls.radius;
-  const depth = roadDistance(city, 2);
-  for (let z = 0; z < grid.size; z++) {
-    for (let x = 0; x < grid.size; x++) {
-      const i = grid.index(x, z);
-      const r = distFromTepe(city, x, z);
-      if (r < def.housing.innerRadius || r > R - 1.2) continue;
-      if (city.road[i] === 1 || city.wall[i] !== WALL_NONE || city.structure[i] >= 0) continue;
-      if (city.building[i] >= 0) continue;
-      if (city.terrain.water[i] === 1) continue;
-      const d = depth[i];
-      const fill = d === 1 ? def.housing.frontFill : d === 2 ? def.housing.backFill : 0;
-      if (!rng.chance(fill)) continue;
-      city.house[i] = rng.chance(def.housing.twoStorey) ? 2 : 1;
-      // The old town counts as zoned: a house that empties there can be lived in again.
-      city.zone[i] = 1;
-    }
-  }
-  city.revision.houses++;
-  city.revision.zones++;
 }

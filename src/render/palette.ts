@@ -40,17 +40,12 @@ export const PAL = {
   timberDark: '#5e3b22',
   iron: '#4f4a48',
   ember: '#e0632a',
-  flame: '#f4c24a',
-  soot: '#6e6660',
-  ash: '#8f8780',
-  charred: '#3d3430',
   smoke: '#eee8dc',
-  ore: '#b3694c',
+  /** Bare ground of the city's resource site: Sille's grey-red andesite. */
+  siteGround: '#c4ab96',
   rock: '#a58e78',
-  oreDark: '#6e3b2c',
   dyes: ['#b8322a', '#2f4f9a', '#e0b13a'],
   bread: '#c98b4a',
-  copper: '#b8733e',
   banner: '#a8261c',
   horse: '#7a5238',
   wool: '#f6f1e4',
@@ -58,14 +53,10 @@ export const PAL = {
   fence: '#9a7148',
   /** Shop awnings by craft. */
   awning: { firinci: '#d58a4e', dokumaci: '#2f4f9a', demirci: '#7d6a5c' },
-
-  lot: '#f3d7c6',
-  /** A zoned lot no road reaches yet. */
-  lotFar: '#e6d9c4',
 } as const;
 
-/** Fertility overlay ramp, poor to rich, in the same miniature inks. */
-export const FERTILITY_RAMP = ['#c9826a', '#e6b872', '#e9d98a', '#a9c76a', '#5f9a3a'] as const;
+/** Overlay colour of the city's resource sites while a quarry is placed. */
+export const SITE_COLOR = '#d98b3a';
 
 /**
  * Surface classes for the ink pass. Where two classes meet on screen the compositor draws
@@ -75,7 +66,6 @@ export const FERTILITY_RAMP = ['#c9826a', '#e6b872', '#e9d98a', '#a9c76a', '#5f9
 export const INK_CLASS = {
   ground: 0.1,
   road: 0.3,
-  zone: 0.4,
   field: 0.6,
   water: 0.5,
   building: 0.9,

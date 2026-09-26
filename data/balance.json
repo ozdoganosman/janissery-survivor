@@ -1,562 +1,318 @@
 {
-  "people": {
-    "perStorey": 5,
-    "laborShare": 0.42,
-    "serviceShare": 0.12,
-    "landmarkJobs": {
-      "cami": 30,
-      "kumbet": 2,
-      "kosk": 25,
-      "mescit": 6,
-      "hamam": 12
-    }
-  },
-  "food": {
-    "perPersonPerMonth": 0.6,
-    "startGranary": 22000
+  "start": {
+    "treasury": 3000,
+    "product": 60
   },
   "tax": {
-    "rates": {
-      "hafif": 1.5,
-      "orta": 2,
-      "agir": 3
-    },
-    "demand": {
-      "hafif": 0.08,
-      "orta": 0,
-      "agir": -0.15
-    },
     "start": "orta",
-    "konakFactor": 1.5,
-    "tributeShare": 0.25
-  },
-  "zoning": {
-    "maxSlope": 0.5,
-    "roadReach": 2
-  },
-  "fields": {
-    "costPerTile": 4,
-    "minSide": 2,
-    "maxSide": 16,
-    "maxSlope": 0.6,
-    "workersPerTile": 1,
-    "fallowWork": 0.25,
-    "sowMonths": [2, 3],
-    "harvestMonth": 7,
-    "soil": {
-      "drain": 0.12,
-      "regain": 0.3,
-      "floor": 0.55
-    },
-    "distance": {
-      "free": 10,
-      "range": 50,
-      "maxPenalty": 0.35
-    },
-    "crops": {
-      "bugday": {
-        "name": "Buğday",
-        "yield": 48,
-        "fertilityWeight": 1
+    "rates": {
+      "hafif": {
+        "name": "Hafif",
+        "perHead": 0.08,
+        "order": 12
       },
-      "arpa": {
-        "name": "Arpa",
-        "yield": 46,
-        "fertilityWeight": 0.45
+      "orta": {
+        "name": "Orta",
+        "perHead": 0.12,
+        "order": 0
+      },
+      "agir": {
+        "name": "Ağır",
+        "perHead": 0.17,
+        "order": -15
       }
-    },
-    "startTiles": 820
-  },
-  "growth": {
-    "housesPerDay": 3,
-    "abandonPerDay": 1.5,
-    "famineAbandonPerDay": 3,
-    "upgradeChancePerMonth": 0.02,
-    "buildThreshold": 0.05,
-    "abandonThreshold": 0.25
-  },
-  "demand": {
-    "jobWeight": 0.55,
-    "foodWeight": 0.45,
-    "targetUnemployment": 0.08,
-    "unemploymentSpan": 0.12,
-    "comfortMonths": 3,
-    "monthsSpan": 4
-  },
-  "goods": {
-    "un": {
-      "name": "Un",
-      "unit": "kile",
-      "price": 1,
-      "cap": 2000,
-      "food": 1
-    },
-    "ekmek": {
-      "name": "Ekmek",
-      "unit": "somun",
-      "price": 0.06,
-      "cap": 15000,
-      "food": 0.05
-    },
-    "yun": {
-      "name": "Yün",
-      "unit": "batman",
-      "price": 1,
-      "cap": 4000
-    },
-    "iplik": {
-      "name": "İplik",
-      "unit": "batman",
-      "price": 3,
-      "cap": 400
-    },
-    "kumas": {
-      "name": "Kumaş",
-      "unit": "top",
-      "price": 12,
-      "cap": 150
-    },
-    "cevher": {
-      "name": "Cevher",
-      "unit": "yük",
-      "price": 1,
-      "cap": 400
-    },
-    "demir": {
-      "name": "Demir",
-      "unit": "batman",
-      "price": 5,
-      "cap": 150
-    },
-    "alet": {
-      "name": "Alet",
-      "unit": "adet",
-      "price": 6,
-      "cap": 200
     }
   },
-  "works": {
-    "degirmen": {
-      "name": "Değirmen",
-      "size": [2, 2],
-      "cost": 1500,
-      "workers": 6,
-      "in": {
-        "zahire": 600
-      },
-      "out": {
-        "un": 600
-      },
-      "site": "water",
-      "waterReach": 1,
-      "maxSlope": 0.5,
-      "hint": "Suya bitişik; zahireyi una çevirir",
-      "category": "imalat",
-      "upkeep": 15
+  "order": {
+    "base": 50,
+    "crowdingFrom": 3000,
+    "crowdingPer1000": 4,
+    "calm": 65,
+    "unrest": 40,
+    "revolt": 25,
+    "calmGrowth": 1.25,
+    "unrestIncome": 0.85,
+    "revoltIncome": 0.6,
+    "revoltLoss": 0.005
+  },
+  "growth": {
+    "base": 0.003
+  },
+  "product": {
+    "base": 4,
+    "price": 3,
+    "sellLot": 50
+  },
+  "levels": [
+    {
+      "name": "Şehir",
+      "population": 0,
+      "maxBuildingLevel": 2,
+      "builders": 2,
+      "peoplePerHouse": 7
     },
-    "boyahane": {
-      "name": "Boyahane",
-      "size": [3, 2],
-      "cost": 1200,
-      "workers": 8,
-      "in": {
-        "yun": 80
-      },
-      "out": {
-        "iplik": 80
-      },
-      "site": "water",
-      "waterReach": 2,
-      "maxSlope": 0.5,
-      "hint": "Suya yakın; yünü ipliğe çevirir",
-      "category": "imalat",
-      "upkeep": 12
+    {
+      "name": "Büyük Şehir",
+      "population": 6000,
+      "maxBuildingLevel": 3,
+      "builders": 3,
+      "peoplePerHouse": 9
     },
-    "maden": {
-      "name": "Maden",
-      "size": [2, 2],
-      "cost": 2000,
-      "workers": 10,
-      "in": {},
-      "out": {
-        "cevher": 60
-      },
-      "site": "ore",
-      "maxSlope": 1.3,
-      "hint": "Demir damarı üstünde; cevher çıkarır",
-      "category": "imalat",
-      "upkeep": 20
+    {
+      "name": "Payitaht",
+      "population": 10000,
+      "maxBuildingLevel": 3,
+      "builders": 4,
+      "peoplePerHouse": 11
+    }
+  ],
+  "demolishRefund": 0.25,
+  "maxSlope": 0.45,
+  "buildings": {
+    "carsi": {
+      "name": "Çarşı",
+      "hint": "Dükkânlar; akçe getirir",
+      "w": 3,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 600,
+          "material": 0,
+          "months": 2,
+          "income": 50
+        },
+        {
+          "cost": 1200,
+          "material": 40,
+          "months": 3,
+          "income": 110
+        },
+        {
+          "cost": 2200,
+          "material": 100,
+          "months": 4,
+          "income": 180
+        }
+      ]
     },
-    "dokumhane": {
-      "name": "Dökümhane",
-      "size": [3, 3],
-      "cost": 2500,
-      "workers": 8,
-      "in": {
-        "cevher": 60
-      },
-      "out": {
-        "demir": 30
-      },
-      "smoke": 6,
-      "maxSlope": 0.5,
-      "hint": "Cevheri demire çevirir; duman yayar",
-      "category": "imalat",
-      "upkeep": 25
+    "ocak": {
+      "name": "Ocak",
+      "hint": "Şehrin ürününü çıkarır; kaynağın başına kurulur",
+      "w": 2,
+      "d": 2,
+      "site": true,
+      "levels": [
+        {
+          "cost": 500,
+          "material": 0,
+          "months": 2,
+          "product": 20
+        },
+        {
+          "cost": 1000,
+          "material": 30,
+          "months": 3,
+          "product": 40
+        },
+        {
+          "cost": 1800,
+          "material": 80,
+          "months": 4,
+          "product": 70
+        }
+      ]
     },
-    "arasta": {
-      "name": "Arasta",
-      "size": [4, 2],
-      "cost": 1000,
-      "workers": 0,
-      "in": {},
-      "out": {},
-      "shops": 4,
-      "maxSlope": 0.5,
-      "hint": "Dört dükkânlı çarşı; esnaf doldurur",
-      "category": "carsi",
-      "upkeep": 8
-    },
-    "cesme": {
-      "name": "Çeşme",
-      "category": "hizmet",
-      "size": [1, 1],
-      "cost": 150,
-      "upkeep": 2,
-      "workers": 0,
-      "in": {},
-      "out": {},
-      "service": "su",
-      "radius": 6,
-      "maxSlope": 0.6,
-      "hint": "Su; evlerin iki kat olması için"
-    },
-    "mescit": {
-      "name": "Mescit",
-      "category": "hizmet",
-      "size": [3, 3],
-      "cost": 900,
-      "upkeep": 10,
-      "workers": 2,
-      "in": {},
-      "out": {},
-      "service": "ibadet",
-      "radius": 11,
-      "maxSlope": 0.5,
-      "hint": "İbadet; evlerin iki kat olması için"
+    "cami": {
+      "name": "Cami",
+      "hint": "Huzur",
+      "w": 3,
+      "d": 3,
+      "levels": [
+        {
+          "cost": 900,
+          "material": 50,
+          "months": 4,
+          "order": 6
+        },
+        {
+          "cost": 1600,
+          "material": 100,
+          "months": 5,
+          "order": 10
+        },
+        {
+          "cost": 2600,
+          "material": 180,
+          "months": 6,
+          "order": 15
+        }
+      ]
     },
     "hamam": {
       "name": "Hamam",
-      "category": "hizmet",
-      "size": [4, 3],
-      "cost": 1800,
-      "upkeep": 20,
-      "workers": 6,
-      "in": {},
-      "out": {},
-      "service": "temizlik",
-      "radius": 13,
-      "maxSlope": 0.5,
-      "hint": "Temizlik; konak için"
+      "hint": "Huzur ve büyüme",
+      "w": 2,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 700,
+          "material": 30,
+          "months": 3,
+          "order": 3,
+          "growth": 0.0005
+        },
+        {
+          "cost": 1300,
+          "material": 60,
+          "months": 4,
+          "order": 5,
+          "growth": 0.001
+        },
+        {
+          "cost": 2100,
+          "material": 120,
+          "months": 5,
+          "order": 8,
+          "growth": 0.0015
+        }
+      ]
+    },
+    "kervansaray": {
+      "name": "Kervansaray",
+      "hint": "Kervan ticareti; sur dışına kurulur",
+      "w": 3,
+      "d": 3,
+      "outside": true,
+      "levels": [
+        {
+          "cost": 1000,
+          "material": 60,
+          "months": 4,
+          "income": 80
+        },
+        {
+          "cost": 1800,
+          "material": 100,
+          "months": 5,
+          "income": 160
+        },
+        {
+          "cost": 3000,
+          "material": 180,
+          "months": 6,
+          "income": 260
+        }
+      ]
+    },
+    "ambar": {
+      "name": "Ambar",
+      "hint": "Zahire; nüfus daha hızlı artar",
+      "w": 2,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 500,
+          "material": 0,
+          "months": 2,
+          "growth": 0.0015
+        },
+        {
+          "cost": 900,
+          "material": 30,
+          "months": 3,
+          "growth": 0.0025
+        },
+        {
+          "cost": 1500,
+          "material": 70,
+          "months": 4,
+          "growth": 0.004
+        }
+      ]
+    },
+    "kisla": {
+      "name": "Kışla",
+      "hint": "Asker ve asayiş; huzur",
+      "w": 3,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 800,
+          "material": 40,
+          "months": 3,
+          "order": 5
+        },
+        {
+          "cost": 1400,
+          "material": 80,
+          "months": 4,
+          "order": 9
+        },
+        {
+          "cost": 2400,
+          "material": 150,
+          "months": 5,
+          "order": 14
+        }
+      ]
     },
     "medrese": {
       "name": "Medrese",
-      "category": "hizmet",
-      "size": [3, 3],
-      "cost": 3000,
-      "upkeep": 35,
-      "workers": 8,
-      "in": {},
-      "out": {},
-      "service": "egitim",
-      "radius": 18,
-      "maxSlope": 0.5,
-      "hint": "Eğitim; konak için"
+      "hint": "Kâtip ve kadılar; vergi daha iyi toplanır",
+      "w": 3,
+      "d": 3,
+      "levels": [
+        {
+          "cost": 1100,
+          "material": 60,
+          "months": 4,
+          "incomePct": 0.05,
+          "order": 1
+        },
+        {
+          "cost": 1900,
+          "material": 120,
+          "months": 5,
+          "incomePct": 0.1,
+          "order": 2
+        },
+        {
+          "cost": 3000,
+          "material": 200,
+          "months": 6,
+          "incomePct": 0.15,
+          "order": 3
+        }
+      ]
     },
     "darussifa": {
       "name": "Darüşşifa",
-      "category": "hizmet",
-      "size": [3, 3],
-      "cost": 3500,
-      "upkeep": 40,
-      "workers": 10,
-      "in": {},
-      "out": {},
-      "service": "saglik",
-      "radius": 18,
-      "maxSlope": 0.5,
-      "hint": "Sağlık; konak için"
-    },
-    "zaviye": {
-      "name": "Ahi Zaviyesi",
-      "category": "carsi",
-      "size": [2, 2],
-      "cost": 800,
-      "upkeep": 6,
-      "workers": 2,
-      "in": {},
-      "out": {},
-      "service": "esnaf",
-      "radius": 12,
-      "maxSlope": 0.5,
-      "hint": "Yakındaki arastalar daha çok üretir"
-    },
-    "dolap": {
-      "name": "Su Dolabı",
-      "category": "tarim",
-      "size": [2, 2],
-      "cost": 700,
-      "upkeep": 6,
-      "workers": 2,
-      "in": {},
-      "out": {},
-      "service": "sulama",
-      "radius": 9,
-      "site": "water",
-      "waterReach": 1,
-      "maxSlope": 0.5,
-      "hint": "Suya bitişik; yakın tarlaları sular"
-    },
-    "subasi": {
-      "name": "Subaşı Karakolu",
-      "category": "hizmet",
-      "size": [2, 2],
-      "cost": 900,
-      "upkeep": 12,
-      "workers": 4,
-      "in": {},
-      "out": {},
-      "service": "asayis",
-      "radius": 14,
-      "maxSlope": 0.5,
-      "hint": "Asayiş; yangını ve kargaşayı azaltır"
-    },
-    "imaret": {
-      "name": "İmaret",
-      "category": "hizmet",
-      "size": [3, 2],
-      "cost": 1400,
-      "upkeep": 20,
-      "workers": 5,
-      "in": {},
-      "out": {},
-      "service": "imaret",
-      "radius": 16,
-      "maxSlope": 0.5,
-      "hint": "Aşevi; kıtlıkta çevresi göç etmez"
+      "hint": "Hastane; büyüme ve huzur",
+      "w": 3,
+      "d": 2,
+      "levels": [
+        {
+          "cost": 1000,
+          "material": 50,
+          "months": 4,
+          "growth": 0.001,
+          "order": 2
+        },
+        {
+          "cost": 1700,
+          "material": 100,
+          "months": 5,
+          "growth": 0.002,
+          "order": 3
+        },
+        {
+          "cost": 2800,
+          "material": 180,
+          "months": 6,
+          "growth": 0.003,
+          "order": 5
+        }
+      ]
     }
-  },
-  "trades": {
-    "firinci": {
-      "name": "Fırıncı",
-      "workers": 3,
-      "in": {
-        "un": 150
-      },
-      "out": {
-        "ekmek": 3000
-      }
-    },
-    "dokumaci": {
-      "name": "Dokumacı",
-      "workers": 3,
-      "in": {
-        "iplik": 40
-      },
-      "out": {
-        "kumas": 20
-      }
-    },
-    "demirci": {
-      "name": "Demirci",
-      "workers": 2,
-      "in": {
-        "demir": 8
-      },
-      "out": {
-        "alet": 16
-      }
-    }
-  },
-  "needs": {
-    "breadShare": 0.5,
-    "kumasPerHouseholdPerMonth": 0.1,
-    "weights": {
-      "ekmek": 0.6,
-      "kumas": 0.4
-    },
-    "marketTax": 0.1,
-    "demandBonus": 0.15,
-    "smoothingDays": 20
-  },
-  "tools": {
-    "perTilePerMonth": 0.02,
-    "yieldBonus": 0.25
-  },
-  "pasture": {
-    "name": "Mera",
-    "costPerTile": 2,
-    "maxSlope": 0.9,
-    "workersPerTile": 0.25,
-    "woolPerTile": 8,
-    "shearMonth": 4,
-    "sheepPerTile": 0.7
-  },
-  "esnaf": {
-    "closeAfterMonths": 2,
-    "openMinInputMonths": 0.5,
-    "openStockMonths": 4,
-    "starvedDays": 18
-  },
-  "housing": {
-    "konakProsperity": 0.5,
-    "downgradeChancePerMonth": 0.08
-  },
-  "landmarkServices": {
-    "cami": {
-      "ibadet": 30
-    },
-    "mescit": {
-      "ibadet": 11
-    },
-    "hamam": {
-      "temizlik": 13
-    }
-  },
-  "narh": {
-    "priceCut": 0.2,
-    "prosperityBonus": 0.08,
-    "openGap": 1.5
-  },
-  "vakif": {
-    "share": 0.03,
-    "peoplePerFounder": 3000,
-    "konaksPerFounder": 12,
-    "founders": [
-      "Emir Kemaleddin",
-      "Hoca Mes'ud",
-      "Tâceddin Bey",
-      "Seyyide Hatun",
-      "Ahi Ahmed",
-      "Şemseddin Altunaba",
-      "Mübarizeddin",
-      "Esma Hatun",
-      "Bedreddin Gühertaş",
-      "Emineddin Mikail"
-    ]
-  },
-  "serviceEffects": {
-    "esnafOutputBonus": 0.2,
-    "irrigationYieldBonus": 0.3,
-    "minStaffing": 0.5
-  },
-  "events": {
-    "enabled": true,
-    "graceDays": 90,
-    "yangin": {
-      "chancePerDay": 0.004,
-      "summerFactor": 2,
-      "spread": 0.32,
-      "burnDays": 3,
-      "ashDays": 90,
-      "waterFactor": 0.5,
-      "guardFactor": 0.5,
-      "sendCost": 200,
-      "sendFactor": 0.4,
-      "breakRadius": 2,
-      "cooldownDays": 120
-    },
-    "salgin": {
-      "chancePerDay": 0.0006,
-      "crowdPop": 4000,
-      "minDays": 60,
-      "maxDays": 120,
-      "lossPerDay": 0.0012,
-      "healthFactor": 0.5,
-      "quarantineFactor": 0.5,
-      "physicianCost": 600,
-      "physicianFactor": 0.6,
-      "demandPenalty": 0.3,
-      "cooldownDays": 720
-    },
-    "kitlik": {
-      "belowMonths": 2,
-      "sultanMonths": 4,
-      "sultanTributeExtra": 0.05,
-      "sultanDays": 360,
-      "grainPrice": 1.5,
-      "buyMonths": 3,
-      "cooldownDays": 240
-    },
-    "deprem": {
-      "chancePerDay": 0.0003,
-      "houseShare": 0.06,
-      "wallDamage": 0.2,
-      "repairPerHouse": 15,
-      "cooldownDays": 1500
-    },
-    "mevlana": {
-      "fromYear": 1231,
-      "chancePerDay": 0.004,
-      "demandBonus": 0.05,
-      "prosperityBonus": 0.05,
-      "listenDays": 360,
-      "honourCost": 1500
-    },
-    "ahi": {
-      "chancePerDay": 0.01,
-      "heavyTaxMonths": 6,
-      "lowProsperity": 0.25,
-      "lowMonths": 8,
-      "dealCost": 800,
-      "garrisonNeeded": 150,
-      "prosperityPenalty": 0.1,
-      "penaltyDays": 180,
-      "shopsClosed": 2,
-      "cooldownDays": 360
-    },
-    "kervan": {
-      "chancePerDay": 0.004,
-      "priceFactor": 1.6,
-      "sellShare": 0.5,
-      "silkCost": 600,
-      "silkBonus": 0.06,
-      "silkDays": 180,
-      "toll": 250,
-      "cooldownDays": 240
-    },
-    "elci": {
-      "fromYear": 1236,
-      "chancePerDay": 0.004,
-      "giftCost": 1500,
-      "giftThreat": -0.15,
-      "stallThreat": 0.05,
-      "expelThreat": 0.2,
-      "cooldownDays": 500
-    },
-    "kosedag": {
-      "year": 1243,
-      "month": 5,
-      "tributeShare": 0.2,
-      "failTributeShare": 0.25,
-      "graceYears": 5,
-      "laterShare": 0.1,
-      "plunderShare": 0.5,
-      "burnRadius": 4,
-      "fires": 8
-    }
-  },
-  "defense": {
-    "startGarrison": 100,
-    "payPerSoldier": 3,
-    "garrisonStep": 25,
-    "maxGarrisonShare": 0.1,
-    "startWalls": 0.8,
-    "wallDecayPerYear": 0.02,
-    "repairCostFull": 4000,
-    "threatFromYear": 1236,
-    "threatPerYear": 0.1,
-    "requiredBase": 150,
-    "requiredPerThreat": 350
   }
 }

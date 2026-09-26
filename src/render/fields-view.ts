@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { hash2 } from '../core/rng';
 import { dateOf } from '../sim/calendar';
 import type { CityState } from '../sim/city';
-import type { Field } from '../sim/fields';
+import type { Field } from '../sim/countryside';
 import { sampleHeight } from '../sim/terrain';
 import { box, PartBatch } from './builder';
 import { miniMaterial, setInkClass } from './materials';
@@ -12,23 +12,22 @@ import { FIELD_TEXTURE_UNITS, fieldTexture, type FieldLook } from './textures';
 /** Gap left along every field edge, so neighbouring fields read as separate strips. */
 const INSET = 0.08;
 
-/** How a field looks in a given month (0-based). */
+/** Sheep grazing on each tile of pasture, outside winter. */
+const SHEEP_PER_TILE = 0.7;
+
+/**
+ * How a field looks in a given month (0-based). Winter wheat and barley are sown in the
+ * autumn, green through the spring, ripe in early summer and cut in Temmuz.
+ */
 export function fieldLook(f: Field, month: number): FieldLook {
   const winter = month === 11 || month <= 1;
-  switch (f.stage) {
-    case 'otlak':
-      return winter ? 'kis' : 'mera';
-    case 'nadas':
-      return 'nadas';
-    case 'bos':
-      return winter ? 'kis' : 'surulmus';
-    case 'hasat':
-      return winter ? 'kis' : 'aniz';
-    case 'ekili':
-      // Green through spring; ripe gold in the weeks before the August harvest.
-      if (month >= 5) return f.crop === 'arpa' ? 'arpa' : 'bugday';
-      return 'yesil';
-  }
+  if (f.kind === 'mera') return winter ? 'kis' : 'mera';
+  if (f.fallow) return 'nadas';
+  if (winter) return 'kis';
+  if (month === 8 || month === 9) return 'surulmus';
+  if (month === 5 || month === 6) return f.crop;
+  if (month === 7) return 'aniz';
+  return 'yesil';
 }
 
 /**
@@ -79,7 +78,7 @@ export class FieldsView {
 
   /** Wattle fences round every pasture and its flock, out on the grass except in winter. */
   private pastures(month: number): void {
-    const { grid, terrain, balance } = this.city;
+    const { grid, terrain } = this.city;
     const meras = [...this.city.fields.values()].filter((f) => f.kind === 'mera');
     if (meras.length === 0) return;
     const fences = new PartBatch();
@@ -110,7 +109,7 @@ export class FieldsView {
       rail(x1, z1, x0, z1);
       rail(x0, z1, x0, z0);
       if (winter) continue;
-      const count = Math.round(f.tiles.length * balance.pasture.sheepPerTile);
+      const count = Math.round(f.tiles.length * SHEEP_PER_TILE);
       for (let k = 0; k < count; k++) {
         const x = x0 + 0.2 + hash2(f.id, k, 61) * (x1 - x0 - 0.4);
         const z = z0 + 0.2 + hash2(f.id, k, 62) * (z1 - z0 - 0.4);

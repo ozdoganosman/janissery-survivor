@@ -109,8 +109,8 @@ function placeTrees(city: CityState): Tree[] {
     if (!grid.inBounds(tx, tz)) return;
     const tile = grid.index(tx, tz);
     if (terrain.water[tile] === 1 || city.wall[tile] !== WALL_NONE || city.structure[tile] >= 0) return;
-    // Nothing grows on bare ore; the seam should be visible from afar.
-    if (terrain.ore[tile] > 0) return;
+    // Nothing grows on the quarry's bare rock; the site should be visible from afar.
+    if (terrain.site[tile] > 0) return;
     out.push({ kind, x, z, scale, tile });
   };
 

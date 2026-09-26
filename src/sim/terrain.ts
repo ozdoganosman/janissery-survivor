@@ -21,8 +21,8 @@ export interface Terrain {
   waterDistance: Float32Array;
   /** Suitability for fields, 0 (useless) to 1 (the best bottom land). */
   fertility: Float32Array;
-  /** Index + 1 of the ore deposit under the tile, or 0. */
-  ore: Uint8Array;
+  /** Index + 1 of the resource site (the city's quarry, forest or mine) under the tile, or 0. */
+  site: Uint8Array;
   /** The stream's centre line, smoothed. */
   streamPath: Vec2[];
   /** Height of the water surface. */
@@ -105,9 +105,9 @@ export function generateTerrain(def: CityDef): Terrain {
     }
   }
 
-  // Ore deposits: ragged patches, so the seam reads as found rather than drawn.
-  const ore = new Uint8Array(grid.count);
-  def.deposits.forEach((dep, k) => {
+  // Resource sites: ragged patches, so the seam or the wood reads as found rather than drawn.
+  const site = new Uint8Array(grid.count);
+  def.resource.sites.forEach((dep, k) => {
     const reach = Math.ceil(dep.radius * 1.3);
     for (let z = grid.tileOf(dep.z) - reach; z <= grid.tileOf(dep.z) + reach; z++) {
       for (let x = grid.tileOf(dep.x) - reach; x <= grid.tileOf(dep.x) + reach; x++) {
@@ -116,7 +116,7 @@ export function generateTerrain(def: CityDef): Terrain {
         const wz = grid.centre(z);
         const edge = dep.radius * (0.75 + 0.5 * fbm(wx * 0.5, wz * 0.5, 2, def.seed + 13 + k));
         const i = grid.index(x, z);
-        if (Math.hypot(wx - dep.x, wz - dep.z) < edge && water[i] === 0) ore[i] = k + 1;
+        if (Math.hypot(wx - dep.x, wz - dep.z) < edge && water[i] === 0) site[i] = k + 1;
       }
     }
   });
@@ -129,7 +129,7 @@ export function generateTerrain(def: CityDef): Terrain {
     water,
     waterDistance,
     fertility,
-    ore,
+    site,
     streamPath,
     waterLevel: WATER_LEVEL,
   };
