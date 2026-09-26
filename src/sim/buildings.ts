@@ -319,7 +319,12 @@ export function buildDay(city: CityState): void {
     b.level = w.toLevel;
     b.work = null;
     city.revision.buildings++;
-    notify(city, b.level === 1 ? `${b.name} tamamlandı.` : `${b.name} ${b.level}. seviyeye çıktı.`, 'good');
+    notify(
+      city,
+      b.level === 1 ? `${b.name} tamamlandı.` : `${b.name} ${b.level}. seviyeye çıktı.`,
+      'good',
+      'works',
+    );
   }
 }
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { dateOf } from '../sim/calendar';
 import type { CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { BuildingsView } from './buildings-view';
@@ -104,7 +105,12 @@ export class World {
     let changed = false;
     if (this.sinceSync >= 0.2) {
       this.sinceSync = 0;
+      // The year turns: the ground, the roofs and the trees take the month's colours.
+      const month = dateOf(this.city.calendar).month;
+      this.houses.setMonth(month);
+      this.trees.setMonth(month);
       const results = [
+        this.terrain.setMonth(month),
         this.roads.sync(),
         this.houses.sync(),
         this.trees.sync(),

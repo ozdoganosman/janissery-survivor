@@ -130,10 +130,47 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
   en çok evlerin, çarşının ve caminin çevresinde dolaşırlar. Çarşıda müşteriler, cami
   kapısında cemaat, kapılarda yolcular ve askerler, ocakta taş taşıyan işçiler, tarlada
   mevsiminde çiftçiler görünür. Figürler yalnızca görüntüdür; oyun durunca onlar da durur.
+- **Mevsimler (6. aşama):** yıl sahnede döner. Baharda bozkır yeşerir, meyve ağaçları
+  pembe-beyaz çiçek açar; yazın ova samana döner; güzde kavaklar altın, meyve ağaçları
+  pas rengi olur; kışın zemine ve düz damlara kar yağar, çiçekler kaybolur, kavaklar ve
+  meyve ağaçları çıplak kalır. Karı en çok tepeler tutar; çay kıyısı ve şehrin çiğnenmiş
+  toprağı daha az tutar. Tarlalar zaten mevsimle döner.
 - **Parşömen:** kâğıt lifi dokusu ve kenarlara doğru eskimiş ton; ekranın çevresinde
   tezhip çerçeve (altın hat, noktalı lacivert bant, kırmızı iç hat).
 - **Palet:** kerpiç okrası, tuğla kırmızısı, Selçuklu firuzesi, kobalt, kurşun mavisi,
   bozkır hakisi, altın; konturlar için mürekkep kahvesi.
+
+## Ses (6. aşama)
+
+Hiç ses dosyası yok; her ses WebAudio ile o anda üretilir.
+
+- **Ortam:** kamera sokaklara indikçe şehrin uğultusu artar (nüfusla da büyür); baharda
+  ve yazın kuşlar öter; kışın ve yukarıdan bakınca surların üstünde rüzgâr eser; inşaat
+  sürerken iskelelerden çekiç sesi gelir. Oyun durunca uğultu kısılır.
+- **İşaretler:** kurma (tahta vuruşu), yıkma (düşen taş), yükseltme (ud tınısı),
+  tamamlanma (küçük çan), ay başı akçe (sikke), şehir düzeyi (yükselen çanlar), kötü haber
+  (davul).
+- **Müzik:** Hicaz makamında, dügâh ve nevâ dem sesi üstünde doğaçlama bir ney taksimi;
+  cümleler dügâh ya da nevâda durur. Menüden kapatılır.
+- Tarayıcılar sesi ancak oyuncu bir şeye dokununca başlatır; ses ilk tıkta açılır.
+
+## Kayıt ve yükleme (6. aşama)
+
+- Kayıt yalnızca oyunun değiştirdiklerini tutar: tarih, akçe, ürün, nüfus, vergi, yapılar
+  (seviye ve süren işleriyle) ve hangi tarlaların kaldığı. Arazi, surlar, sokaklar ve
+  arsalar şehrin tohumundan yeniden üretilir; kayıt küçük kalır (birkaç KB).
+- **Menü:** Kaydet, Kaydı yükle, Otomatik kaydı yükle, Dosyaya indir, Dosyadan yükle,
+  Müzik, Yeni oyun (iki tıkla).
+- Oyun her ay başında kendini otomatik kaydeder ve açılışta kaldığı yerden devam eder.
+- Başka şehrin, başka sürümün ya da bozuk bir kaydın yüklenmesi reddedilir ve nedeni
+  söylenir.
+
+## Telefon (6. aşama)
+
+- Dokunmatikte ilk dokunuş yapının yerini ve fiyatını gösterir, aynı yere ikinci dokunuş
+  kurar; yıkmak da böyledir. Parmak her şeyi kapattığı için ipucu sabit bir yerde durur.
+- Dar ekranda saat ve menü üst satırda, defter onun altında iki sütun; inşa kartları
+  araçların üstünde yana kayan tek sıra; bilgi paneli ekran genişliğinde.
 
 ## Teknik kararlar
 
@@ -151,14 +188,19 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
 
 ## Aşamalar
 
-İlk beş aşamada ayrıntılı bir yol denendi (yol ve imar, tarla ve ambar, esnaf ve üretim
-zincirleri, hizmet menzilleri ve bütçe, olaylar ve savunma). Oyun daha sade bir çekirdeğe
-çevrildi; görüntü, şehir ve halk o yoldan kaldı.
+Numaralar oyunun baştan beri süren sırasıdır. 1–5 arası ayrıntılı bir yol denendi; oyun
+sonra daha sade bir çekirdeğe çevrildi, görüntü, şehir ve halk o yoldan kaldı. O yolun
+kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 
 | #   | Aşama                                                                                              | Durum |
 | --- | -------------------------------------------------------------------------------------------------- | ----- |
-| 1   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi | ✅    |
-| 2   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış            |       |
-| 3   | **Savunma:** kışladan garnizon, sur bakımı, kuşatmaya hazırlık                                     |       |
-| 4   | **Cila:** mevsim görünümleri, ses, kayıt/yükleme, telefon                                          |       |
-| 5   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                   |       |
+| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                   | ✅    |
+| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                            | ↺     |
+| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                              | ↺     |
+| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                       | ↺     |
+| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                     | ↺     |
+| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi | ✅    |
+| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                 | ✅    |
+| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış            |       |
+| 8   | **Savunma:** kışladan garnizon, sur bakımı, kuşatmaya hazırlık                                     |       |
+| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                   |       |

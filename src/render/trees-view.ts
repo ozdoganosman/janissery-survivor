@@ -4,6 +4,7 @@ import { WALL_NONE, type CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
+import { SEASON_COLORS, SEASON_LOOK, type Leaves } from './seasons';
 
 type Kind = 'kavak' | 'servi' | 'fruit';
 
@@ -27,6 +28,7 @@ export class TreesView {
   private revision = '';
   private readonly crowns: Record<Kind, THREE.BufferGeometry>;
   private readonly trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.42, 5).translate(0, 0.21, 0);
+  private leaves: Leaves = 'green';
 
   constructor(private readonly city: CityState) {
     setInkClass(this.group, INK_CLASS.tree);
@@ -48,9 +50,14 @@ export class TreesView {
     this.sync();
   }
 
+  /** Poplars and fruit trees follow the year: blossom, green, gold, bare. Cypresses stay. */
+  setMonth(month: number): void {
+    this.leaves = SEASON_LOOK[month].leaves;
+  }
+
   sync(): boolean {
     const { revision } = this.city;
-    const rev = `${revision.roads}:${revision.houses}:${revision.fields}:${revision.buildings}`;
+    const rev = `${revision.roads}:${revision.houses}:${revision.fields}:${revision.buildings}:${this.leaves}`;
     if (rev === this.revision) return false;
     this.revision = rev;
     for (const child of this.group.children.slice()) {
@@ -62,7 +69,9 @@ export class TreesView {
     const standing = this.trees.filter(
       (t) => road[t.tile] === 0 && house[t.tile] === 0 && field[t.tile] < 0 && building[t.tile] < 0,
     );
-    const tint = { kavak: PAL.kavak, servi: PAL.servi, fruit: PAL.fruit };
+    const tint = crownColors(this.leaves);
+    // Bare crowns are drawn thin: a haze of twigs round the trunk.
+    const bare = this.leaves === 'bare';
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
     const color = new THREE.Color();
@@ -82,10 +91,11 @@ export class TreesView {
       if (list.length === 0) continue;
       const mesh = new THREE.InstancedMesh(this.crowns[kind], miniMaterial(), list.length);
       list.forEach((t, k) => {
+        const thin = bare && kind !== 'servi' ? 0.55 : 1;
         const m = new THREE.Matrix4().compose(
           new THREE.Vector3(t.x, sampleHeight(this.city.terrain, t.x, t.z) - 0.04, t.z),
           q.setFromAxisAngle(up, t.scale * 17),
-          new THREE.Vector3(t.scale, t.scale, t.scale),
+          new THREE.Vector3(t.scale * thin, t.scale * (bare && kind !== 'servi' ? 0.85 : 1), t.scale * thin),
         );
         mesh.setMatrixAt(k, m);
         // Each tree a shade apart, as a painter would vary them.
@@ -169,4 +179,18 @@ function placeTrees(city: CityState): Tree[] {
     }
   }
   return out;
+}
+
+/** Crown colours for the leaves of the month; the poplars turn gold, the fruit trees rust. */
+function crownColors(leaves: Leaves): Record<Kind, string> {
+  switch (leaves) {
+    case 'bare':
+      return { kavak: SEASON_COLORS.bare, fruit: SEASON_COLORS.bare, servi: PAL.servi };
+    case 'blossom':
+      return { kavak: '#a8c95c', fruit: SEASON_COLORS.blossom, servi: PAL.servi };
+    case 'gold':
+      return { kavak: SEASON_COLORS.gold, fruit: SEASON_COLORS.rust, servi: PAL.servi };
+    case 'green':
+      return { kavak: PAL.kavak, fruit: PAL.fruit, servi: PAL.servi };
+  }
 }

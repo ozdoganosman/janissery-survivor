@@ -5,6 +5,7 @@ import { DIRS4 } from '../sim/grid';
 import { sampleHeight } from '../sim/terrain';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
+import { SEASON_COLORS, SEASON_LOOK } from './seasons';
 
 const STOREY = 0.36;
 
@@ -18,6 +19,8 @@ const STOREY = 0.36;
 export class HousesView {
   readonly group = new THREE.Group();
   private revision = -1;
+  /** Share of the roofs under snow this month. */
+  private snow = 0;
   private readonly unit = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
 
   constructor(private readonly city: CityState) {
@@ -27,8 +30,14 @@ export class HousesView {
 
   /** Rebuilds when houses changed, or when roads changed (houses turn to face them). */
   /** Colour for each house while an information layer is shown, or null for its own. */
+  /** Snow settles on the flat roofs in winter; each roof whitens at its own point in the thaw. */
+  setMonth(month: number): void {
+    this.snow = SEASON_LOOK[month].snow;
+  }
+
   sync(): boolean {
-    const rev = this.city.revision.houses * 100003 + this.city.revision.roads;
+    const rev =
+      (this.city.revision.houses * 100003 + this.city.revision.roads) * 11 + Math.round(this.snow * 10);
     if (rev === this.revision) return false;
     this.revision = rev;
     for (const child of this.group.children.slice()) {
@@ -83,7 +92,10 @@ export class HousesView {
       }
       const wallH = storeys * STOREY + 0.06;
       const color = PAL.houses[Math.floor(hash2(tx, tz, 4) * PAL.houses.length)];
-      const roof = PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
+      const roof =
+        hash2(tx, tz, 9) < this.snow
+          ? SEASON_COLORS.roofSnow
+          : PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
       const frame = new Frame(x, base, z, rot);
       bodies.push(frame.part(0, -0.3, 0, w, wallH + 0.3, d, color));
       roofs.push(frame.part(0, wallH, 0, w + (konak ? 0.16 : 0.06), 0.05, d + (konak ? 0.16 : 0.06), roof));

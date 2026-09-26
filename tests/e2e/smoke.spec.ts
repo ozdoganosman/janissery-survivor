@@ -128,5 +128,48 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await clickCentre(page);
   await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(2);
 
+  // The menu keeps the city and brings it back.
+  await page.getByRole('button', { name: 'Menü' }).click();
+  await page.locator('.menu [data-action="kaydet"]').click();
+  const kept = await page.evaluate(() => ({
+    akce: window.__game!.city.treasury,
+    buildings: window.__game!.city.buildings.size,
+  }));
+  await page.evaluate(() => {
+    window.__game!.city.treasury = 1;
+  });
+  await page.locator('.menu [data-action="yukle"]').click();
+  await expect.poll(() => page.evaluate(() => window.__game!.city.treasury)).toBe(kept.akce);
+  expect(await page.evaluate(() => window.__game!.city.buildings.size)).toBe(kept.buildings);
+  // The first click started the sound.
+  expect(await page.evaluate(() => window.__game!.sound.running)).toBe(true);
+
   expect(problems).toEqual([]);
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+
+  test('a first tap shows the building and its price, a second tap builds it', async ({ page }) => {
+    const problems: string[] = [];
+    page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+    page.on('console', (m) => {
+      if (m.type() === 'error' || m.text().includes('GL_INVALID')) problems.push(`${m.type()}: ${m.text()}`);
+    });
+    await page.goto('/');
+    await page.waitForFunction(() => (window.__game?.frames ?? 0) > 5, null, { timeout: 90_000 });
+    await page.evaluate(() => window.__game!.setSpeed(0));
+    await page.locator('.toolbar button[data-tool="insa"]').tap();
+    await page.locator('.buildbar button[data-kind="hamam"]').tap();
+    await lookAtSite(page, [6, 12]);
+    const box = (await page.locator('#view').boundingBox())!;
+    const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await page.touchscreen.tap(centre.x, centre.y);
+    await expect(page.locator('.tip')).toContainText('Hamam');
+    expect(await page.evaluate(() => window.__game!.city.buildings.size)).toBe(2);
+    await page.touchscreen.tap(centre.x, centre.y);
+    await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(3);
+    await expect(page.locator('.info.pinned h3')).toHaveText('Hamam');
+    expect(problems).toEqual([]);
+  });
 });

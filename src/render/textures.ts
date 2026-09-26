@@ -48,9 +48,10 @@ export const GROUND_TEXTURE_UNITS = 7;
 
 /**
  * Ground motifs: sparse grass tufts and little flowers, drawn on white so the terrain's
- * vertex colour tints them. Motifs, not noise, are what make a miniature meadow.
+ * vertex colour tints them. Motifs, not noise, are what make a miniature meadow. Under
+ * snow the flowers are gone and only the tips of the tufts show.
  */
-export function groundTexture(): THREE.CanvasTexture {
+export function groundTexture(winter = false): THREE.CanvasTexture {
   const rng = createRng(77);
   return canvasTexture(512, (g, s) => {
     g.fillStyle = '#ffffff';
@@ -62,16 +63,19 @@ export function groundTexture(): THREE.CanvasTexture {
         stroke(
           g,
           [
-            [x + k * 4, y + 6],
+            [x + k * 4, y + (winter ? 1 : 6)],
             [x + k * 6, y - 6],
           ],
-          'rgba(95,110,40,0.7)',
-          2.4,
+          winter ? 'rgba(120,110,90,0.45)' : 'rgba(95,110,40,0.7)',
+          winter ? 1.8 : 2.4,
         );
       }
     }
     for (let i = 0; i < 18; i++) {
-      flower(g, rng.next() * s, rng.next() * s, 3.4, rng.chance(0.6) ? '#d25a4a' : '#8fb0d8');
+      const x = rng.next() * s;
+      const y = rng.next() * s;
+      const red = rng.chance(0.6);
+      if (!winter) flower(g, x, y, 3.4, red ? '#d25a4a' : '#8fb0d8');
     }
   });
 }

@@ -103,10 +103,13 @@ export interface CityStats {
 }
 
 export type NoticeKind = 'info' | 'good' | 'bad';
+/** What a notice is about, for whoever wants to answer it (the sound, for one). */
+export type NoticeTopic = 'works' | 'rank' | 'order';
 export interface Notice {
   text: string;
   kind: NoticeKind;
   day: number;
+  topic?: NoticeTopic;
 }
 
 const DEG = Math.PI / 180;

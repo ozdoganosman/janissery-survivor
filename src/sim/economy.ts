@@ -126,15 +126,16 @@ function announce(city: CityState): void {
   const told = city.announced;
   const level = city.stats.level;
   const levels = city.balance.levels;
-  if (level > told.level) notify(city, `${city.def.name} artık bir ${levels[level].name}!`, 'good');
+  if (level > told.level) notify(city, `${city.def.name} artık bir ${levels[level].name}!`, 'good', 'rank');
   else if (level < told.level)
-    notify(city, `${city.def.name} ${levels[level].name} düzeyine geriledi.`, 'bad');
+    notify(city, `${city.def.name} ${levels[level].name} düzeyine geriledi.`, 'bad', 'rank');
   const order = orderState(city);
   if (order !== told.order) {
-    if (order === 'isyan') notify(city, 'Şehirde isyan var: gelir düştü, halk göçüyor.', 'bad');
-    else if (order === 'huzursuz') notify(city, 'Halk huzursuz: nüfus artmıyor, gelir düştü.', 'bad');
-    else if (order === 'huzurlu') notify(city, 'Şehir huzurlu; nüfus hızla artıyor.', 'good');
-    else notify(city, 'Şehir yatıştı.');
+    if (order === 'isyan') notify(city, 'Şehirde isyan var: gelir düştü, halk göçüyor.', 'bad', 'order');
+    else if (order === 'huzursuz')
+      notify(city, 'Halk huzursuz: nüfus artmıyor, gelir düştü.', 'bad', 'order');
+    else if (order === 'huzurlu') notify(city, 'Şehir huzurlu; nüfus hızla artıyor.', 'good', 'order');
+    else notify(city, 'Şehir yatıştı.', 'info', 'order');
   }
   city.announced = { level, order };
 }

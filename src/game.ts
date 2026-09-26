@@ -9,13 +9,16 @@ import {
   upgradeBuilding,
   type BuildingProposal,
 } from './sim/buildings';
-import { dateOf, formatDate, type Speed } from './sim/calendar';
-import type { CityState } from './sim/city';
+import { Sound, type Cue } from './audio/sound';
+import { dateOf, DAYS_PER_MONTH, formatDate, type Speed } from './sim/calendar';
+import { createCity, type CityState, type Notice } from './sim/city';
 import { sellProduct, stepTime, updateStats } from './sim/economy';
 import { inspectTile, priceText } from './sim/inspect';
+import { replaceCity, restoreGame, saveGame, SaveError, type SaveGame } from './sim/save';
 import type { PreviewTile } from './render/cursor-view';
 import { World } from './render/world';
-import { Hud, type Tool } from './ui/hud';
+import { readJson, removeKey, writeJson } from './storage';
+import { Hud, type SaveSlot, type SlotLabels, type Tool } from './ui/hud';
 
 type TilePos = { x: number; z: number };
 
@@ -27,6 +30,19 @@ type Drag =
 const CLICK_SLOP = 6;
 
 const PREVIEW = { ok: '#a9c76a', costly: '#e6b872', blocked: '#c8312a' } as const;
+
+/** A save as it sits in the browser: the game date it was made on, and the save itself. */
+interface StoredSave {
+  label: string;
+  data: SaveGame;
+}
+
+interface Settings {
+  sound: boolean;
+  music: boolean;
+}
+
+const SETTINGS_KEY = 'darulmulk.ayar';
 
 /**
  * Wires the city, the world view and the HUD together and turns input into actions.
@@ -51,6 +67,12 @@ export class Game {
   private sinceInfo = 0;
   private elapsed = 0;
   private last = performance.now();
+  /** Months since the calendar began, to notice a month turning. */
+  private month = -1;
+  /** On a touch screen the first tap shows what would happen; a second tap there does it. */
+  private pendingTap: { x: number; z: number; tool: Tool } | null = null;
+  private settings: Settings;
+  readonly sound: Sound;
   frames = 0;
 
   constructor(
@@ -64,6 +86,9 @@ export class Game {
       powerPreference: 'high-performance',
     });
     this.world = new World(renderer, city);
+    const stored = readJson(SETTINGS_KEY) as Partial<Settings> | null;
+    this.settings = { sound: stored?.sound ?? true, music: stored?.music ?? true };
+    this.sound = new Sound(this.settings.sound, this.settings.music);
     this.hud = new Hud(uiRoot, city, {
       onTool: (t) => this.setTool(t),
       onSpeed: (s) => this.setSpeed(s),
@@ -73,7 +98,16 @@ export class Game {
       onUpgrade: (id) => this.upgrade(id),
       onDemolish: (id) => this.demolish(id),
       onCloseInfo: () => this.select(null),
+      onSave: () => this.save('kayit'),
+      onLoad: (slot) => this.load(slot),
+      onNewGame: () => this.newGame(),
+      onExport: () => this.exportSave(),
+      onImport: (file) => void this.importSave(file),
+      onSound: (on) => this.setAudio({ ...this.settings, sound: on }),
+      onMusic: (on) => this.setAudio({ ...this.settings, music: on }),
     });
+    this.hud.setAudio(this.settings.sound, this.settings.music);
+    this.hud.setSlots(this.slotLabels());
     this.hud.setTool(this.tool);
     this.hud.setBuildKind(this.buildKind);
     this.hud.setSpeed(city.calendar.speed);
@@ -98,6 +132,15 @@ export class Game {
     this.elapsed += dt;
     this.applyKeys(dt);
     const days = stepTime(this.city, dt);
+    const month = Math.floor(this.city.calendar.day / DAYS_PER_MONTH);
+    if (month !== this.month) {
+      // A month has closed: the treasury rings, and the game keeps its own save.
+      if (this.month >= 0) {
+        if (this.city.stats.last.income > 0) this.sound.play('coin');
+        this.save('oto', true);
+      }
+      this.month = month;
+    }
     const date = dateOf(this.city.calendar);
     const text = `${formatDate(date)} · ${date.season}`;
     if (text !== this.lastDateText) {
@@ -105,7 +148,17 @@ export class Game {
       this.hud.setDate(text);
     }
     this.hud.setStats();
-    for (const n of this.city.notices.splice(0)) this.hud.notify(n);
+    for (const n of this.city.notices.splice(0)) {
+      this.hud.notify(n);
+      this.sound.play(cueFor(n));
+    }
+    this.sound.update({
+      closeness: this.world.rig.closeness,
+      season: date.season,
+      paused: this.city.calendar.speed === 0,
+      bustle: Math.min(1, this.city.population / 15000),
+      works: this.city.stats.works,
+    });
     // The open panel follows its building as the work moves on.
     this.sinceInfo += dt;
     if (days > 0 && this.sinceInfo > 0.5) {
@@ -119,6 +172,7 @@ export class Game {
   setTool(tool: Tool): void {
     this.tool = tool;
     this.drag = null;
+    this.pendingTap = null;
     this.world.cursor.setPreview([]);
     this.hud.hideTip();
     this.hud.setTool(tool);
@@ -128,6 +182,7 @@ export class Game {
 
   setBuildKind(kind: BuildingKind): void {
     this.buildKind = kind;
+    this.pendingTap = null;
     this.hud.setBuildKind(kind);
     this.world.cursor.setPreview([]);
     this.world.showSites(this.tool === 'insa' && kind === 'ocak');
@@ -140,26 +195,142 @@ export class Game {
 
   setTax(rate: TaxRate): void {
     this.city.policy.tax = rate;
+    this.sound.play('click');
     this.changed();
   }
 
   sell(): boolean {
     const ok = sellProduct(this.city);
+    if (ok) this.sound.play('coin');
     this.changed();
     return ok;
   }
 
   upgrade(id: number): boolean {
     const ok = upgradeBuilding(this.city, id);
+    if (ok) this.sound.play('upgrade');
     this.changed();
     return ok;
   }
 
   demolish(id: number): boolean {
     const ok = demolishBuilding(this.city, id) >= 0;
-    if (ok) this.select(null);
+    if (ok) {
+      this.select(null);
+      this.sound.play('demolish');
+    }
     this.changed();
     return ok;
+  }
+
+  // ---------------------------------------------------------------- saves and settings
+
+  private slotKey(slot: SaveSlot): string {
+    return `darulmulk.${this.city.def.id}.${slot}`;
+  }
+
+  private stored(slot: SaveSlot): StoredSave | null {
+    const s = readJson(this.slotKey(slot)) as StoredSave | null;
+    return s !== null && typeof s === 'object' && typeof s.label === 'string' ? s : null;
+  }
+
+  private slotLabels(): SlotLabels {
+    return { kayit: this.stored('kayit')?.label ?? null, oto: this.stored('oto')?.label ?? null };
+  }
+
+  /** Keeps the city in a slot. The monthly save is made quietly. */
+  save(slot: SaveSlot, quiet = false): boolean {
+    const label = formatDate(dateOf(this.city.calendar));
+    const ok = writeJson(this.slotKey(slot), { label, data: saveGame(this.city) } satisfies StoredSave);
+    this.hud.setSlots(this.slotLabels());
+    if (!quiet) {
+      this.say(ok ? `Kaydedildi: ${label}` : 'Kaydedilemedi: tarayıcı kayıt tutmuyor.', ok ? 'good' : 'bad');
+      if (ok) this.sound.play('click');
+    }
+    return ok;
+  }
+
+  load(slot: SaveSlot): boolean {
+    const s = this.stored(slot);
+    if (s === null) return false;
+    return this.adopt(s.data, 'Kayıt yüklendi');
+  }
+
+  /** Carries on from the monthly save, if the browser has one. */
+  resume(): boolean {
+    const s = this.stored('oto');
+    return s !== null && this.adopt(s.data, 'Kaldığın yerden devam', true);
+  }
+
+  newGame(): void {
+    removeKey(this.slotKey('oto'));
+    this.install(createCity(this.city.def, this.city.balance));
+    this.hud.setSlots(this.slotLabels());
+    this.say(`${this.city.def.name} yeniden emrinde.`, 'good');
+  }
+
+  /** Offers the save as a file to keep. */
+  exportSave(): void {
+    const date = dateOf(this.city.calendar);
+    const blob = new Blob([JSON.stringify(saveGame(this.city))], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `darulmulk-${this.city.def.id}-${date.year}-${date.month + 1}-${date.day}.json`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  async importSave(file: File): Promise<boolean> {
+    let data: unknown;
+    try {
+      data = JSON.parse(await file.text()) as unknown;
+    } catch {
+      this.say('Dosya okunamadı.', 'bad');
+      return false;
+    }
+    return this.adopt(data, 'Dosyadan yüklendi');
+  }
+
+  /** Loads a save into the running game and says so with its date, or says why it cannot. */
+  private adopt(data: unknown, message: string, quiet = false): boolean {
+    let next: CityState;
+    try {
+      next = restoreGame(this.city.def, this.city.balance, data);
+    } catch (err) {
+      if (!quiet) this.say(err instanceof SaveError ? err.message : 'Kayıt yüklenemedi.', 'bad');
+      return false;
+    }
+    this.install(next);
+    this.say(`${message}: ${formatDate(dateOf(this.city.calendar))}`, 'good');
+    return true;
+  }
+
+  /** Puts another city in the running game's place. */
+  private install(next: CityState): void {
+    replaceCity(this.city, next);
+    this.month = Math.floor(this.city.calendar.day / DAYS_PER_MONTH);
+    this.selected = null;
+    this.hoverTile = null;
+    this.lastDateText = '';
+    this.setTool('incele');
+    this.hud.closeMenu();
+    this.hud.refresh();
+    this.hud.setSpeed(this.city.calendar.speed);
+    this.hud.showInfo(null);
+    this.world.cursor.setHover(null);
+  }
+
+  private setAudio(settings: Settings): void {
+    this.settings = settings;
+    writeJson(SETTINGS_KEY, settings);
+    this.sound.unlock();
+    this.sound.setSound(settings.sound);
+    this.sound.setMusic(settings.music);
+    this.hud.setAudio(settings.sound, settings.music);
+  }
+
+  private say(text: string, kind: Notice['kind']): void {
+    this.hud.notify({ text, kind, day: this.city.calendar.day });
   }
 
   /** Recomputes the month's figures after an order, so the ledger answers at once. */
@@ -235,6 +406,7 @@ export class Game {
     const plan = proposeBuilding(this.city, this.buildKind, tile.x, tile.z);
     const b = buildBuilding(this.city, plan);
     if (b === null) return false;
+    this.sound.play('build');
     this.world.cursor.setPreview([]);
     this.hud.hideTip();
     this.setTool('incele');
@@ -253,8 +425,9 @@ export class Game {
     c.addEventListener('pointermove', (e) => this.onPointerMove(e));
     c.addEventListener('pointerup', (e) => this.onPointerUp(e));
     c.addEventListener('pointercancel', (e) => this.onPointerUp(e, true));
-    c.addEventListener('pointerleave', () => {
-      if (this.drag !== null) return;
+    c.addEventListener('pointerleave', (e) => {
+      // A finger leaves the screen after every tap; only a mouse leaving means "away".
+      if (this.drag !== null || e.pointerType !== 'mouse') return;
       this.setHover(null);
       this.world.cursor.setPreview([]);
       this.hud.hideTip();
@@ -268,6 +441,8 @@ export class Game {
       },
       { passive: false },
     );
+    // Sound may only start from something the player did.
+    window.addEventListener('pointerdown', () => this.sound.unlock());
     window.addEventListener('keydown', (e) => this.onKey(e, true));
     window.addEventListener('keyup', (e) => this.onKey(e, false));
     window.addEventListener('blur', () => this.keys.clear());
@@ -343,6 +518,18 @@ export class Game {
     if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) return;
     const tile = this.tileAt(e.clientX, e.clientY);
     if (tile === null) return;
+    // A tap on a touch screen first shows the footprint and the price; a second tap on the
+    // same tile builds or pulls down.
+    if (e.pointerType !== 'mouse' && this.tool !== 'incele') {
+      const p = this.pendingTap;
+      if (p === null || p.x !== tile.x || p.z !== tile.z || p.tool !== this.tool) {
+        this.pendingTap = { ...tile, tool: this.tool };
+        if (this.tool === 'insa') this.previewPlacement(tile, e.clientX, e.clientY);
+        else this.previewDemolish(tile, e.clientX, e.clientY);
+        return;
+      }
+      this.pendingTap = null;
+    }
     if (this.tool === 'insa') {
       if (!this.place(tile)) this.previewPlacement(tile, e.clientX, e.clientY);
     } else if (this.tool === 'yik') {
@@ -401,6 +588,7 @@ export class Game {
 
   private onKey(e: KeyboardEvent, down: boolean): void {
     if (e.target instanceof HTMLInputElement) return;
+    if (down) this.sound.unlock();
     const k = e.key.toLowerCase();
     if (down) this.keys.add(k);
     else this.keys.delete(k);
@@ -443,4 +631,11 @@ export class Game {
     if (this.keys.has('z') || this.keys.has('+') || this.keys.has('=')) rig.zoomBy(Math.exp(-1.8 * dt));
     if (this.keys.has('x') || this.keys.has('-')) rig.zoomBy(Math.exp(1.8 * dt));
   }
+}
+
+/** The sound a notice makes. */
+function cueFor(n: Notice): Cue {
+  if (n.topic === 'rank') return n.kind === 'good' ? 'rank' : 'bad';
+  if (n.topic === 'works') return 'complete';
+  return n.kind === 'bad' ? 'bad' : 'complete';
 }

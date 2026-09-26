@@ -17,7 +17,20 @@ export interface HudCallbacks {
   onUpgrade(buildingId: number): void;
   onDemolish(buildingId: number): void;
   onCloseInfo(): void;
+  onSave(): void;
+  onLoad(slot: SaveSlot): void;
+  onNewGame(): void;
+  onExport(): void;
+  onImport(file: File): void;
+  onSound(on: boolean): void;
+  onMusic(on: boolean): void;
 }
+
+/** The player's own save, and the one the game keeps each month. */
+export type SaveSlot = 'kayit' | 'oto';
+
+/** What the menu says about each save slot: the game date it holds, or nothing. */
+export type SlotLabels = Record<SaveSlot, string | null>;
 
 const ICONS = {
   incele: '<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 20 20"/>',
@@ -27,6 +40,10 @@ const ICONS = {
   play1: '<path d="M4 2l9 6-9 6z"/>',
   play2: '<path d="M1 2l7 6-7 6zM8 2l7 6-7 6z"/>',
   play3: '<path d="M0 2l5.5 6L0 14zM5 2l5.5 6L5 14zM10 2l5.5 6L10 14z"/>',
+  sound:
+    '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6 6 0 0 1 0 9"/>',
+  muted: '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="m11 6 4 4M15 6l-4 4"/>',
+  menu: '<path class="s" d="M2 4h12M2 8h12M2 12h12"/>',
 } as const;
 
 const svg = (body: string, viewBox = '0 0 24 24'): string =>
@@ -69,6 +86,11 @@ export class Hud {
   private readonly notices: HTMLElement;
   private readonly toolButtons = new Map<Tool, HTMLButtonElement>();
   private readonly speedButtons: HTMLButtonElement[] = [];
+  private readonly soundButton: HTMLButtonElement;
+  private readonly menu: HTMLElement;
+  private readonly slotButtons = new Map<SaveSlot, HTMLButtonElement>();
+  private readonly musicButton: HTMLButtonElement;
+  private newGameArmed = false;
   private statsKey = '';
   private affordKey = '';
 
@@ -164,7 +186,72 @@ export class Hud {
       this.speedButtons.push(b);
       speed.appendChild(b);
     });
+    speed.appendChild(el('span', 'sep'));
+    this.soundButton = el('button', 'btn', svg(ICONS.sound, '0 0 16 16'));
+    this.soundButton.title = 'Ses';
+    this.soundButton.setAttribute('aria-label', 'Ses');
+    this.soundButton.addEventListener('click', () => cb.onSound(this.soundButton.dataset.on !== '1'));
+    const menuButton = el('button', 'btn', svg(ICONS.menu, '0 0 16 16'));
+    menuButton.title = 'Menü: kayıt, yükleme, müzik';
+    menuButton.setAttribute('aria-label', 'Menü');
+    speed.append(this.soundButton, menuButton);
     ui.appendChild(speed);
+
+    // The menu: saves, a new game, music.
+    this.menu = el('div', 'menu panel');
+    this.menu.hidden = true;
+    menuButton.addEventListener('click', () => {
+      this.menu.hidden = !this.menu.hidden;
+      menuButton.classList.toggle('on', !this.menu.hidden);
+      this.newGameArmed = false;
+      this.renderNewGame();
+    });
+    const save = el('button', 'btn', '<b>Kaydet</b>');
+    save.dataset.action = 'kaydet';
+    save.addEventListener('click', () => cb.onSave());
+    this.menu.appendChild(save);
+    for (const [slot, label] of [
+      ['kayit', 'Kaydı yükle'],
+      ['oto', 'Otomatik kaydı yükle'],
+    ] as const) {
+      const b = el('button', 'btn', `<b>${label}</b><small></small>`);
+      b.dataset.action = slot === 'kayit' ? 'yukle' : 'oto';
+      b.addEventListener('click', () => cb.onLoad(slot));
+      this.slotButtons.set(slot, b);
+      this.menu.appendChild(b);
+    }
+    const exportButton = el('button', 'btn', 'Dosyaya indir');
+    exportButton.addEventListener('click', () => cb.onExport());
+    const importInput = el('input', '');
+    importInput.type = 'file';
+    importInput.accept = 'application/json,.json';
+    importInput.hidden = true;
+    importInput.addEventListener('change', () => {
+      const file = importInput.files?.[0];
+      if (file !== undefined) cb.onImport(file);
+      importInput.value = '';
+    });
+    const importButton = el('button', 'btn', 'Dosyadan yükle');
+    importButton.addEventListener('click', () => importInput.click());
+    const files = el('div', 'pair');
+    files.append(exportButton, importButton, importInput);
+    this.menu.appendChild(files);
+    this.musicButton = el('button', 'btn', 'Müzik');
+    this.musicButton.addEventListener('click', () => cb.onMusic(this.musicButton.dataset.on !== '1'));
+    this.menu.appendChild(this.musicButton);
+    const newGame = el('button', 'btn new-game', 'Yeni oyun');
+    newGame.addEventListener('click', () => {
+      // A new game throws the city away, so it takes a second click to be sure.
+      if (this.newGameArmed) {
+        this.newGameArmed = false;
+        cb.onNewGame();
+      } else {
+        this.newGameArmed = true;
+      }
+      this.renderNewGame();
+    });
+    this.menu.appendChild(newGame);
+    ui.appendChild(this.menu);
 
     // The build bar: one card per building, with its price, time and first-level gift.
     this.buildBar = el('div', 'cropbar buildbar panel');
@@ -309,8 +396,45 @@ export class Hud {
     }
   }
 
+  /** What each save slot holds, for the menu. */
+  setSlots(labels: SlotLabels): void {
+    for (const [slot, b] of this.slotButtons) {
+      const label = labels[slot];
+      b.disabled = label === null;
+      const small = b.querySelector('small');
+      if (small !== null) small.textContent = label ?? 'boş';
+    }
+  }
+
+  setAudio(sound: boolean, music: boolean): void {
+    this.soundButton.dataset.on = sound ? '1' : '0';
+    this.soundButton.innerHTML = svg(sound ? ICONS.sound : ICONS.muted, '0 0 16 16');
+    this.soundButton.title = sound ? 'Sesi kapat' : 'Sesi aç';
+    this.musicButton.dataset.on = music ? '1' : '0';
+    this.musicButton.textContent = music ? 'Müzik: açık' : 'Müzik: kapalı';
+    this.musicButton.classList.toggle('on', music);
+  }
+
+  closeMenu(): void {
+    this.menu.hidden = true;
+    this.newGameArmed = false;
+  }
+
+  private renderNewGame(): void {
+    const b = this.menu.querySelector<HTMLButtonElement>('.new-game');
+    if (b === null) return;
+    b.textContent = this.newGameArmed ? 'Emin misin? Şehir baştan kurulur' : 'Yeni oyun';
+    b.classList.toggle('armed', this.newGameArmed);
+  }
+
+  /** Forgets what the ledger last showed, so it redraws for a city just loaded. */
+  refresh(): void {
+    this.statsKey = '';
+    this.affordKey = '';
+  }
+
   setSpeed(speed: Speed): void {
-    this.speedButtons.forEach((b, s) => b.classList.toggle('on', s === speed));
+    this.speedButtons.forEach((b, k) => b.classList.toggle('on', k === speed));
   }
 
   setTool(tool: Tool): void {

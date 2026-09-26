@@ -4,6 +4,7 @@ import { fbm } from '../core/noise';
 import type { CityState } from '../sim/city';
 import { miniMaterial, markOverlay, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
+import { SEASON_COLORS, SEASON_LOOK } from './seasons';
 import { groundTexture, GROUND_TEXTURE_UNITS, siteTexture, waterTexture } from './textures';
 
 /** The ground mesh, the fertility layer that can be laid over it, and the stream. */
@@ -13,6 +14,14 @@ export class TerrainView {
   private readonly overlayMat: THREE.MeshBasicMaterial;
   private readonly siteTex: THREE.Texture;
   private readonly waterTex: THREE.Texture;
+  /** The ground's own colours, and how much each corner takes of each season. */
+  private readonly base: Float32Array;
+  private readonly colors: THREE.BufferAttribute;
+  private readonly weights: { snow: Float32Array; green: Float32Array; dry: Float32Array };
+  private month = -1;
+  private readonly groundMat: THREE.MeshLambertMaterial;
+  private readonly summerTex: THREE.Texture;
+  private readonly winterTex: THREE.Texture;
 
   constructor(city: CityState) {
     const { terrain, def } = city;
@@ -22,6 +31,9 @@ export class TerrainView {
     const pos = geom.getAttribute('position') as THREE.BufferAttribute;
     const uv = geom.getAttribute('uv') as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
+    const snowW = new Float32Array(pos.count);
+    const greenW = new Float32Array(pos.count);
+    const dryW = new Float32Array(pos.count);
     const c = new THREE.Color();
     const col = {
       plainAlt: new THREE.Color(PAL.plainAlt),
@@ -80,10 +92,23 @@ export class TerrainView {
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
+      // Snow lies thickest on the hills and thins where the stream and the town warm it;
+      // the plain greens and dries the most, the town's beaten earth hardly at all.
+      const bank = 1 - smoothstep(0.9, 3, ds);
+      const town = 1 - smoothstep(def.walls.radius - 1, def.walls.radius + 1.5, r);
+      snowW[i] = Math.max(0, 0.85 + 0.15 * hillT - 0.45 * bank - 0.2 * town);
+      greenW[i] = (1 - 0.7 * town) * (1 - 0.5 * hillT);
+      dryW[i] = (1 - 0.7 * town) * (1 - 0.6 * (1 - smoothstep(2, 10, ds)));
     }
-    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.base = colors.slice();
+    this.weights = { snow: snowW, green: greenW, dry: dryW };
+    this.colors = new THREE.BufferAttribute(colors, 3);
+    geom.setAttribute('color', this.colors);
     geom.computeVertexNormals();
-    const ground = new THREE.Mesh(geom, miniMaterial({ map: groundTexture(), vertexColors: true }));
+    this.summerTex = groundTexture();
+    this.winterTex = groundTexture(true);
+    this.groundMat = miniMaterial({ map: this.summerTex, vertexColors: true });
+    const ground = new THREE.Mesh(geom, this.groundMat);
     ground.receiveShadow = true;
     setInkClass(ground, INK_CLASS.ground);
     this.group.add(ground);
@@ -138,6 +163,39 @@ export class TerrainView {
 
   get sitesVisible(): boolean {
     return this.overlay.visible && this.overlayMat.map === this.siteTex;
+  }
+
+  /** Colours the ground for a month of the year: spring green, summer straw, autumn ochre, snow. */
+  setMonth(month: number): boolean {
+    if (month === this.month) return false;
+    this.month = month;
+    const look = SEASON_LOOK[month];
+    const target = {
+      spring: new THREE.Color(SEASON_COLORS.spring),
+      dry: new THREE.Color(SEASON_COLORS.dry),
+      autumn: new THREE.Color(SEASON_COLORS.autumn),
+      snow: new THREE.Color(SEASON_COLORS.snow),
+    };
+    const out = this.colors.array as Float32Array;
+    const c = new THREE.Color();
+    const { snow, green, dry } = this.weights;
+    for (let i = 0; i < snow.length; i++) {
+      c.setRGB(this.base[i * 3], this.base[i * 3 + 1], this.base[i * 3 + 2]);
+      if (look.spring > 0) c.lerp(target.spring, look.spring * green[i]);
+      if (look.dry > 0) c.lerp(target.dry, look.dry * dry[i]);
+      if (look.autumn > 0) c.lerp(target.autumn, look.autumn * dry[i]);
+      if (look.snow > 0) c.lerp(target.snow, Math.min(1, look.snow * snow[i]));
+      out[i * 3] = c.r;
+      out[i * 3 + 1] = c.g;
+      out[i * 3 + 2] = c.b;
+    }
+    this.colors.needsUpdate = true;
+    const tex = look.snow > 0.5 ? this.winterTex : this.summerTex;
+    if (this.groundMat.map !== tex) {
+      this.groundMat.map = tex;
+      this.groundMat.needsUpdate = true;
+    }
+    return true;
   }
 
   /** Slow drift of the water motifs. */

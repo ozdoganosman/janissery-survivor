@@ -6,27 +6,30 @@ atadığı emir olarak onu büyütür.
 
 Tasarım, kurallar, sanat yönü ve yol haritası: [docs/TASARIM.md](docs/TASARIM.md).
 
-> Durum: **sade çekirdek.** Şehir her ay vergiden **akçe**, Sille ocaklarından **taş**
-> üretir. Yapıları şehrin istediğin yerine koy: çarşı, taş ocağı, kervansaray, cami, hamam,
-> ambar, darüşşifa, medrese, kışla. Her yapı birkaç ayda iskele içinde yükselir ve üç
-> seviyeye kadar büyütülür. Vergi oranı, nüfus ve huzur dengesini gözet; şehir büyüdükçe
-> Büyük Şehir ve Payitaht olur, evler kendiliğinden sur dışına taşar.
+> Durum: **6. aşama — cila.** Şehir her ay vergiden **akçe**, Sille ocaklarından **taş**
+> üretir; yapıları şehrin istediğin yerine koyar, üç seviyeye kadar büyütürsün. Yıl sahnede
+> döner (bahar çiçekleri, yaz bozkırı, güz yaprakları, kış karı); şehrin sesi, kuşlar,
+> rüzgâr ve Hicaz makamında bir ney eşlik eder. Oyun her ay kendini kaydeder; menüden
+> kaydedip yükleyebilir, kaydı dosyaya alabilirsin. Telefonda da oynanır.
 
 ## Oynanış
 
-| Ne        | Nasıl                                                                             |
-| --------- | --------------------------------------------------------------------------------- |
-| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                          |
-| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                      |
-| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                            |
-| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık |
-| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla              |
-| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur  |
-| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                         |
-| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür         |
-| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                         |
-| Hesap     | Defterde **Hesap**: gelirin, taşın ve huzurun dökümü                              |
-| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir     |
+| Ne        | Nasıl                                                                               |
+| --------- | ----------------------------------------------------------------------------------- |
+| Kaydır    | Sürükle (her araçta), orta tuş, WASD / oklar, iki parmak                            |
+| Döndür    | Sağ tuşla sürükle, Q / E, iki parmakla çevir                                        |
+| Yakınlaş  | Tekerlek, Z / X, iki parmakla sıkıştır                                              |
+| İncele    | Bir yere tıkla: bilgi paneli sabitlenir; yapının panelinden **yükselt** ya da yık   |
+| İnşa      | **Y** ya da araç çubuğu; çubuktan yapıyı seç, şehirde bir yere tıkla                |
+| Taş ocağı | İnşa çubuğunda seçince taş yatakları zeminde turuncu görünür; ocak oraya kurulur    |
+| Yık       | **B**; bir yapıya tıkla, bedelinin dörtte biri geri gelir                           |
+| Vergi     | Defterde Hafif / Orta / Ağır: ağır vergi çok akçe getirir, huzuru düşürür           |
+| Sat       | Defterde taşın yanında: artan taşı çarşıda akçeye çevirir                           |
+| Hesap     | Defterde **Hesap**: gelirin, taşın ve huzurun dökümü                                |
+| Zaman     | Boşluk: duraklat · 1 / 2 / 3: hız. Her ay başında gelir, taş ve nüfus işlenir       |
+| Ses       | Saatin yanındaki hoparlör: sesi açar ya da kapar. İlk tıkta başlar                  |
+| Menü      | ☰: kaydet, yükle, otomatik kayıt, dosyaya indir / dosyadan yükle, müzik, yeni oyun |
+| Telefon   | İlk dokunuş yapının yerini ve fiyatını gösterir, ikinci dokunuş kurar ya da yıkar   |
 
 Yakınlaştıkça sahne minyatürden ışıklı bir makete döner; gölgeler belirir. Sokaklarda
 halk dolaşır: çarşıda alışveriş eden, cami önünde toplanan, ocakta taş taşıyan, iskelede
@@ -52,7 +55,8 @@ data/balance.json    denge sayıları: vergi, huzur, büyüme, şehir düzeyleri
 src/core/            rastgelelik, gürültü, geometri
 src/sim/             oyun mantığı — three.js'ten bağımsız, Node'da test edilir
 src/render/          minyatür çizim hattı, kamera, sahne görünümleri
-src/ui/              tezhip çerçeve, HUD, araç çubuğu
+src/ui/              tezhip çerçeve, HUD, araç çubuğu, menü
+src/audio/           WebAudio ile üretilen sesler ve ney
 src/game.ts          mantık, görüntü ve girdiyi birbirine bağlar
 tests/               birim testleri ve tarayıcı duman testi
 ```

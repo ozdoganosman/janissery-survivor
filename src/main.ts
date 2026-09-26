@@ -33,6 +33,7 @@ try {
   const city = createCity(konya as unknown as CityDef, balance as unknown as Balance);
   const game = new Game(canvas, ui, city);
   window.__game = game;
+  game.resume();
   game.start();
   requestAnimationFrame(() => {
     if (boot !== null) boot.hidden = true;
