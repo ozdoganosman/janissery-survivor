@@ -57,17 +57,22 @@ export class TreesView {
 
   sync(): boolean {
     const { revision } = this.city;
-    const rev = `${revision.roads}:${revision.houses}:${revision.fields}:${revision.buildings}:${this.leaves}`;
+    const rev = `${revision.roads}:${revision.houses}:${revision.fields}:${revision.buildings}:${revision.walls}:${this.leaves}`;
     if (rev === this.revision) return false;
     this.revision = rev;
     for (const child of this.group.children.slice()) {
       this.group.remove(child);
       if (child instanceof THREE.InstancedMesh) child.dispose();
     }
-    const { road, house, field, building } = this.city;
-    // A tree gives way to anything built or ploughed on its tile.
+    const { road, house, field, building, wall } = this.city;
+    // A tree gives way to anything built or ploughed on its tile, a new wall among them.
     const standing = this.trees.filter(
-      (t) => road[t.tile] === 0 && house[t.tile] === 0 && field[t.tile] < 0 && building[t.tile] < 0,
+      (t) =>
+        road[t.tile] === 0 &&
+        house[t.tile] === 0 &&
+        field[t.tile] < 0 &&
+        building[t.tile] < 0 &&
+        wall[t.tile] === WALL_NONE,
     );
     const tint = crownColors(this.leaves);
     // Bare crowns are drawn thin: a haze of twigs round the trunk.

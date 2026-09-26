@@ -1,8 +1,9 @@
 import { hash2 } from '../core/rng';
-import { outerRadius, type CityState } from './city';
+import type { CityState } from './city';
 import { WALL_NONE } from './constants';
 import { removeField } from './countryside';
 import { roadDistance } from './distance';
+import { insideWalls, wallReach } from './walls';
 
 /**
  * Houses are not built by the player: they follow the population. Every lot along the
@@ -17,7 +18,6 @@ const SUBURB_REACH = 40;
 
 export function layLots(city: CityState): void {
   const { grid, def, terrain } = city;
-  const R = outerRadius(city);
   const depth = roadDistance(city, 3);
   const scored: Array<[number, number]> = [];
   for (let z = 0; z < grid.size; z++) {
@@ -28,6 +28,7 @@ export function layLots(city: CityState): void {
       if (city.wall[i] !== WALL_NONE || city.structure[i] >= 0 || terrain.water[i] === 1) continue;
       if (terrain.slope[i] > city.balance.maxSlope) continue;
       const r = Math.hypot(grid.centre(x) - def.tepe.x, grid.centre(z) - def.tepe.z);
+      const R = wallReach(city, grid.centre(x), grid.centre(z));
       // The walled town builds two lots deep from its streets; the suburbs, on open
       // ground, three deep along their roads.
       const inside = r >= def.housing.innerRadius && r <= R - 1.2 && d <= 2;
@@ -58,7 +59,6 @@ export function syncHouses(city: CityState): void {
   const want = housesWanted(city);
   const rank = city.stats.level;
   const twoStorey = city.def.housing.twoStorey + 0.12 * rank;
-  const R = outerRadius(city);
   let placed = 0;
   for (const i of city.lots) {
     if (placed >= want) break;
@@ -67,7 +67,7 @@ export function syncHouses(city: CityState): void {
     const x = i % grid.size;
     const z = Math.floor(i / grid.size);
     const h = hash2(x, z, 4);
-    const inside = Math.hypot(grid.centre(x) - city.def.tepe.x, grid.centre(z) - city.def.tepe.z) < R;
+    const inside = insideWalls(city, grid.centre(x), grid.centre(z));
     // A great city has konaks in the old town; the suburbs stay low.
     next[i] = inside && h < 0.035 * rank ? 3 : h < (inside ? twoStorey : twoStorey * 0.5) ? 2 : 1;
     placed++;

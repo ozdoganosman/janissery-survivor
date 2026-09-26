@@ -3,8 +3,17 @@ import { proposeBuilding, slots } from '../src/sim/buildings';
 import { DAYS_PER_MONTH } from '../src/sim/calendar';
 import { WALL, WALL_GATE, type CityState } from '../src/sim/city';
 import { simulateDays, updateStats } from '../src/sim/economy';
-import { expansionOffer, growStreets, outerRadius, startExpansion, streetPlan } from '../src/sim/growth';
+import {
+  expansionOffer,
+  finishStreets,
+  growStreets,
+  outerRadius,
+  raiseRing,
+  startExpansion,
+  streetPlan,
+} from '../src/sim/growth';
 import { restoreGame, saveGame } from '../src/sim/save';
+import { ringBand, runDistance } from '../src/sim/walls';
 import { balance, def, newCity } from './helpers';
 
 const count = (a: ArrayLike<number>, v: number): number => {
@@ -78,7 +87,7 @@ describe('new walls', () => {
     expect(c.rings).toHaveLength(2);
     expect(outerRadius(c)).toBe(first.radius);
     expect(count(c.wall, WALL)).toBeGreaterThan(200);
-    const outer = c.gates.filter((g) => g.radius === first.radius);
+    const outer = c.gates.filter((g) => g.ring === 1);
     expect(outer.length).toBeGreaterThanOrEqual(def.gates.length);
     expect(outer.some((g) => g.name.includes('Dış'))).toBe(true);
     for (const g of outer) for (const i of g.tiles) expect(c.wall[i]).toBe(WALL_GATE);
@@ -90,6 +99,56 @@ describe('new walls', () => {
     const inside = proposeBuilding(c, 'kervansaray', c.grid.tileOf(28), c.grid.tileOf(0));
     expect(inside.problem === 'Sur dışına kurulur' || inside.tiles.some((t) => !t.ok)).toBe(true);
     expect(expansionOffer(c)?.stage).toBe(1);
+  });
+
+  it('keeps to the town side of the stream, following its bank', () => {
+    const c = greatCity();
+    raiseRing(c, 0);
+    c.expansion.built = 1;
+    finishStreets(c);
+    const ring = c.rings[1];
+    // Somewhere the stream comes inside the planned circle and turns the wall aside.
+    expect(Math.min(...ring.bound)).toBeLessThan(ring.radius - 2);
+    const { grid, terrain } = c;
+    const { tepe } = def;
+    const band = ringBand(grid, ring, 0.8);
+    let across = 0;
+    let walls = 0;
+    for (let i = 0; i < grid.count; i++) {
+      if (band[i] === 0 || c.wall[i] !== WALL) continue;
+      walls++;
+      const x = grid.centre(i % grid.size);
+      const z = grid.centre(Math.floor(i / grid.size));
+      const d = Math.hypot(x - tepe.x, z - tepe.z);
+      for (let t = 0; t < d; t += 0.25) {
+        const tx = grid.tileOf(tepe.x + ((x - tepe.x) * t) / d);
+        const tz = grid.tileOf(tepe.z + ((z - tepe.z) * t) / d);
+        if (terrain.water[grid.index(tx, tz)] === 1) {
+          across++;
+          break;
+        }
+      }
+    }
+    expect(walls).toBeGreaterThan(200);
+    // No piece of the new wall stands on the far side of the water.
+    expect(across).toBe(0);
+  });
+
+  it('ends a ring where the stream leaves no room, turning in to meet the ring inside', () => {
+    const c = greatCity();
+    for (let stage = 0; stage < 2; stage++) {
+      raiseRing(c, stage);
+      c.expansion.built = stage + 1;
+    }
+    finishStreets(c);
+    const [, middle, outer] = c.rings;
+    expect(outer.walled.includes(0)).toBe(true);
+    const spurs = outer.runs.filter((r) => r.spur);
+    expect(spurs.length).toBeGreaterThanOrEqual(2);
+    for (const spur of spurs) {
+      const [x, z] = spur.points[0];
+      expect(Math.min(...middle.runs.map((r) => runDistance(r, x, z)))).toBeLessThan(0.5);
+    }
   });
 
   it('comes back the same from a save', () => {

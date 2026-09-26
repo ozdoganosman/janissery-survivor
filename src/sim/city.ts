@@ -11,6 +11,7 @@ import type { Grid } from './grid';
 import { DIRS4 } from './grid';
 import { layLots, syncHouses } from './housing';
 import { generateTerrain, type Terrain } from './terrain';
+import { circleRing, type WallRing } from './walls';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
 
@@ -35,16 +36,14 @@ export interface Gate {
   angle: number;
   /** Tiles of the passage through the wall. */
   tiles: number[];
-  /** Radius of the ring of walls the gate is in. */
+  /** Distance of the gate from the tepe. */
   radius: number;
+  /** Index into `rings` of the ring of walls the gate is in. */
+  ring: number;
 }
 
 /** A ring of walls round the tepe: the first one the city was given, then any it has raised. */
-export interface WallRing {
-  name: string;
-  radius: number;
-  height: number;
-}
+export type { WallRing };
 
 /**
  * The whole mutable state of one city. Plain data in typed arrays so it can be saved,
@@ -138,7 +137,10 @@ export interface Notice {
   topic?: NoticeTopic;
 }
 
-/** Radius of the outermost ring of walls standing: inside it is the town, outside the suburbs. */
+/**
+ * Planned radius of the outermost ring of walls standing. Where the stream turns a ring
+ * aside the town ends sooner; `wallReach` and `insideWalls` answer for a given point.
+ */
 export function outerRadius(city: CityState): number {
   return city.rings[city.rings.length - 1].radius;
 }
@@ -169,7 +171,7 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     fields: new Map(),
     landmarks: [],
     gates: [],
-    rings: [{ name: 'Sur', radius: def.walls.radius, height: def.walls.height }],
+    rings: [circleRing('Sur', def.tepe.x, def.tepe.z, def.walls.radius, def.walls.height)],
     expansion: { built: 0, work: null },
     streetsLaid: 0,
     balance,
@@ -272,7 +274,7 @@ function buildWalls(city: CityState, locked: Uint8Array): void {
       city.road[i] = 1;
       locked[i] = 1;
     }
-    city.gates.push({ name: g.name, angle: a, tiles, radius: R });
+    city.gates.push({ name: g.name, angle: a, tiles, radius: R, ring: 0 });
   }
 }
 

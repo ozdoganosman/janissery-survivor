@@ -1,11 +1,11 @@
 import type { BuildingDef, BuildingKind, LevelDef } from './balance';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
-import { outerRadius } from './city';
 import { WALL_NONE } from './constants';
 import { removeField } from './countryside';
 import { syncHouses } from './housing';
 import { notify } from './notices';
+import { insideWalls } from './walls';
 
 /**
  * The buildings the player puts up: anywhere in the city that is free, each with three
@@ -192,7 +192,6 @@ export function proposeBuilding(
   let onSite = 0;
   let inside = 0;
   let clears = 0;
-  const R = outerRadius(city);
   for (let z = z0; z < z0 + d; z++) {
     for (let x = x0; x < x0 + w; x++) {
       const reason = tileReason(city, x, z);
@@ -202,7 +201,7 @@ export function proposeBuilding(
       const i = grid.index(x, z);
       if (terrain.site[i] > 0) onSite++;
       if (city.house[i] > 0) clears++;
-      if (Math.hypot(grid.centre(x) - city.def.tepe.x, grid.centre(z) - city.def.tepe.z) < R + 1) inside++;
+      if (insideWalls(city, grid.centre(x), grid.centre(z), 1)) inside++;
     }
   }
   const p: BuildingProposal = {

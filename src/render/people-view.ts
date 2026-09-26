@@ -585,7 +585,7 @@ export class PeopleView {
     const towers: number[] = [];
     for (let k = 0; k < count; k++) {
       const a = (k / count) * Math.PI * 2;
-      const first = c.gates.filter((g) => g.radius === R);
+      const first = c.gates.filter((g) => g.ring === 0);
       if (first.some((g) => Math.abs(angleStep(a, g.angle)) < gateHalf + 2.2 / R)) continue;
       towers.push(a);
     }

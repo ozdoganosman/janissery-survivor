@@ -1,7 +1,8 @@
 import type { LevelDef } from './balance';
 import { demolishRefund, kindName, upgradeOffer, type Building, type UpgradeOffer } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
-import { outerRadius, type CityState } from './city';
+import type { CityState } from './city';
+import { insideWalls } from './walls';
 import { WALL, WALL_GATE } from './constants';
 
 /** What the info panel says about a tile, and what it may do there. */
@@ -182,7 +183,7 @@ export function inspectTile(city: CityState, x: number, z: number): TileInfo | n
   if (terrain.water[i] === 1) {
     return { title: city.road[i] === 1 ? 'Köprü' : def.stream.name, rows: [] };
   }
-  const inside = Math.hypot(grid.centre(x) - def.tepe.x, grid.centre(z) - def.tepe.z) < outerRadius(city);
+  const inside = insideWalls(city, grid.centre(x), grid.centre(z));
   if (city.house[i] > 0) {
     const h = city.house[i];
     return {

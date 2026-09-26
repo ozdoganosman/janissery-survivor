@@ -126,9 +126,15 @@ Yıkılan yapı, son seviyesinin akçe bedelinin dörtte birini geri verir. Kesi
 - **Yeni sur halkası.** Şehir gereken düzeye varınca eski surun dışına yeni bir halka
   örülebilir. Duvar aylarca, gözle görülür biçimde, halkanın çevresinde dolanarak yükselir.
   Bitince halka her sokağın geçtiği yerde bir kapı açar ve kapılar eski kapıların adını
-  alır (Larende Dış Kapısı, Varoş Kapısı…). Çay halkayı keser, sur suyun iki yanında biter.
-  Halkanın içinde bir çevre yolu ve ondan ayrılan sokaklar, eski şehre bağlanan yollar
-  açılır; yeni mahalleler bunların boyunca dolar.
+  alır (Larende Dış Kapısı, Varoş Kapısı…). Halkanın içinde bir çevre yolu ve ondan ayrılan
+  sokaklar, eski şehre bağlanan yollar açılır; yeni mahalleler bunların boyunca dolar.
+- **Sur çayın bu yakasında kalır.** Halka daire olarak çizilir. Meram Çayı dairenin içine
+  giriyorsa duvar suyu aşmaz, şehir tarafındaki kıyıyı izler ve çay hendek olur. Çay
+  eski sura o kadar yakınsa ki araya yeni sur sığmıyorsa (4,5 karodan az), orada duvar
+  örülmez; yeni sur kıyıda bir kuleyle biter ve içeri dönüp içteki sura bağlanır, kıyı
+  boyunca açık yol kalmaz. Surun altında kalan bir sokak surdan geçiyorsa kapı olur, surla
+  yan yana uzanıyorsa kesilir; kıyıdaki ağaçlar surun yolundan çekilir. "Sur içi" her
+  yönde surun gerçekten çevirdiği yere kadardır; çayın ötesindeki evler varoştur.
 
   | Halka      | Yarıçap | Gerekli düzey | Bedel       | Süre  | Kazanç                  |
   | ---------- | ------- | ------------- | ----------- | ----- | ----------------------- |

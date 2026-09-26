@@ -5,8 +5,8 @@ import {
   DEG,
   landmarkReserve,
   polar,
+  pruneRoadFragments,
   rasterizePath,
-  ringPath,
   thinRoads,
   WALL,
   WALL_GATE,
@@ -18,8 +18,19 @@ import {
 export { outerRadius } from './city';
 import type { ExpansionDef } from './city-def';
 import { removeField } from './countryside';
+import { DIRS4 } from './grid';
 import { layLots, syncHouses } from './housing';
 import { notify } from './notices';
+import {
+  boundAt,
+  insideRing,
+  planRing,
+  ringBand,
+  runDistance,
+  stepOf,
+  wallDepth,
+  type WallRing,
+} from './walls';
 
 /**
  * The city outgrowing itself. As the people spill out, streets open outside the walls:
@@ -91,68 +102,149 @@ export function wallGifts(city: CityState): { slots: number; order: number } {
 }
 
 /**
- * Lays one ring of walls: a wall on every tile of the ring that is free, a gate wherever a
- * street crosses it, and inside it a ring street with lanes off it and roads out to the
- * older town between its gates. Water, landmarks and the player's buildings are left alone,
- * so a stream runs through the ring and a building stands in a gap of it.
+ * Lays one ring of walls: a wall on every tile along its lines that is free, a gate
+ * wherever a street crosses it, and inside it a ring street with lanes off it and roads out
+ * to the older town between its gates. The ring keeps to the town's side of the stream;
+ * landmarks and the player's buildings are left alone, so a building stands in a gap of it.
+ * A street that only runs alongside the new wall is cut rather than given a long gate.
  */
 export function raiseRing(city: CityState, stage: number): void {
   const def = city.def.expansions[stage];
+  const ring = planRing(city, stage);
   const { grid, terrain } = city;
   const { tepe } = city.def;
-  const R = def.radius;
-  for (let z = 0; z < grid.size; z++) {
-    for (let x = 0; x < grid.size; x++) {
-      if (Math.abs(Math.hypot(grid.centre(x) - tepe.x, grid.centre(z) - tepe.z) - R) >= 0.8) continue;
-      const i = grid.index(x, z);
-      if (terrain.water[i] === 1 || city.structure[i] >= 0 || city.building[i] >= 0) continue;
-      if (city.wall[i] !== WALL_NONE) continue;
-      city.wall[i] = city.road[i] === 1 ? WALL_GATE : WALL;
-      city.house[i] = 0;
-      if (city.field[i] >= 0) removeField(city, city.field[i]);
+  const band = ringBand(grid, ring, 0.8);
+  const underRoad = new Uint8Array(grid.count);
+  for (let i = 0; i < grid.count; i++) {
+    if (band[i] === 0 || city.wall[i] !== WALL_NONE) continue;
+    if (terrain.water[i] === 1 || city.structure[i] >= 0 || city.building[i] >= 0) continue;
+    if (city.road[i] === 1) {
+      underRoad[i] = 1;
+      continue;
     }
+    city.wall[i] = WALL;
+    city.house[i] = 0;
+    if (city.field[i] >= 0) removeField(city, city.field[i]);
   }
-  city.rings.push({ name: def.name, radius: R, height: city.def.walls.height * 1.1 });
-  const inner = city.rings[city.rings.length - 2].radius;
+  gateCrossings(city, ring, underRoad);
+  const inner = city.rings[stage];
+  city.rings.push(ring);
+
   const reserved = landmarkReserve(city, 1);
-  const street = R - 2.2;
-  layStreet(city, ringPath(tepe.x, tepe.z, street, 0.5, (city.def.seed % 83) + stage * 7), reserved);
-  // Roads out from the old walls to the new ring street, between the gate roads.
+  const salt = (city.def.seed % 83) + stage * 7;
+  const at = (a: number, r: number): Vec2 => polar(tepe.x, tepe.z, a, r);
+  const walledAt = (a: number): boolean => ring.walled[stepOf(a)] === 1;
+  const street = (a: number): number =>
+    boundAt(ring, a) - 2.2 + (valueNoise(a * 2.2 + salt, salt) - 0.5) * 0.8;
+  // The ring street, inside each stretch of wall; it stops short of the ends.
+  for (const run of ring.runs) {
+    if (run.spur) continue;
+    const angles = run.points.map(([x, z]) => Math.atan2(z - tepe.z, x - tepe.x));
+    const trim = run.closed ? 0 : 6;
+    const path: Vec2[] = [];
+    for (let j = trim; j < angles.length - trim; j += 3) path.push(at(angles[j], street(angles[j])));
+    if (run.closed) path.push(path[0]);
+    if (path.length > 1) layStreet(city, path, reserved);
+  }
+  // Roads out from the older walls to the new ring street, between the gate roads.
   const gates = city.def.gates.map((g) => g.angle * DEG).sort((a, b) => a - b);
   gates.forEach((a, k) => {
     const next = gates[(k + 1) % gates.length] + (k + 1 === gates.length ? Math.PI * 2 : 0);
     const mid = (a + next) / 2;
-    layStreet(city, [polar(tepe.x, tepe.z, mid, inner + 2), polar(tepe.x, tepe.z, mid, street)], reserved);
+    if (!walledAt(mid)) return;
+    layStreet(city, [at(mid, boundAt(inner, mid) + 2), at(mid, street(mid))], reserved);
   });
   // Lanes off the ring street into the new quarters.
   for (let k = 0; k < def.alleys; k++) {
     const a = (k / def.alleys) * Math.PI * 2 + stage * 0.37 + valueNoise(k * 1.7, stage) * 0.2;
-    const end = Math.max(inner + 3, street - 3 - valueNoise(k, stage + 5) * 3);
-    layStreet(
-      city,
-      [polar(tepe.x, tepe.z, a, street), polar(tepe.x, tepe.z, a + (valueNoise(k, 9) - 0.5) * 0.08, end)],
-      reserved,
-    );
+    if (!walledAt(a)) continue;
+    const from = street(a);
+    const end = Math.max(boundAt(inner, a) + 3, from - 3 - valueNoise(k, stage + 5) * 3);
+    if (end >= from - 1) continue;
+    layStreet(city, [at(a, from), at(a + (valueNoise(k, 9) - 0.5) * 0.08, end)], reserved);
   }
   city.revision.walls++;
 }
 
 /**
+ * Decides, for each street the new wall has come down on, whether it passes through (a
+ * gate) or only ran along where the wall now stands (the street gives way to the wall).
+ */
+function gateCrossings(city: CityState, ring: WallRing, underRoad: Uint8Array): void {
+  const { grid } = city;
+  const seen = new Uint8Array(grid.count);
+  const side = (i: number): boolean =>
+    insideRing(city, ring, grid.centre(i % grid.size), grid.centre(Math.floor(i / grid.size)));
+  for (let start = 0; start < grid.count; start++) {
+    if (underRoad[start] === 0 || seen[start] === 1) continue;
+    const group: number[] = [];
+    const stack = [start];
+    seen[start] = 1;
+    let inside = false;
+    let outside = false;
+    while (stack.length > 0) {
+      const i = stack.pop() as number;
+      group.push(i);
+      const x = i % grid.size;
+      const z = Math.floor(i / grid.size);
+      for (const [dx, dz] of DIRS4) {
+        if (!grid.inBounds(x + dx, z + dz)) continue;
+        const j = grid.index(x + dx, z + dz);
+        if (underRoad[j] === 1) {
+          if (seen[j] === 0) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        } else if (city.road[j] === 1 && city.wall[j] === WALL_NONE) {
+          if (side(j)) inside = true;
+          else outside = true;
+        }
+      }
+    }
+    const through = inside && outside;
+    for (const i of group) {
+      city.wall[i] = through ? WALL_GATE : WALL;
+      if (through) continue;
+      city.road[i] = 0;
+      city.house[i] = 0;
+      if (city.field[i] >= 0) removeField(city, city.field[i]);
+    }
+  }
+}
+
+/**
  * Paints a street along a path. It goes round water, landmarks, the city's quarry and the
- * player's buildings; through a wall it makes a gate; houses and fields in its way make room.
+ * player's buildings; houses and fields in its way make room. Where it crosses a wall it
+ * makes a gate; where it would only run along one, it stops short of it.
  */
 function layStreet(city: CityState, path: readonly Vec2[], reserved: Uint8Array): void {
   const { grid, terrain } = city;
-  for (const [x, z] of rasterizePath(grid, path)) {
-    if (!grid.inBounds(x, z)) continue;
+  const tiles = rasterizePath(grid, path).filter(([x, z]) => grid.inBounds(x, z));
+  const depth = (t: [number, number]): number => wallDepth(city, grid.centre(t[0]), grid.centre(t[1]));
+  const through = new Uint8Array(tiles.length);
+  for (let k = 0; k < tiles.length;) {
+    if (city.wall[grid.index(...tiles[k])] === WALL_NONE) {
+      k++;
+      continue;
+    }
+    let end = k;
+    while (end < tiles.length && city.wall[grid.index(...tiles[end])] !== WALL_NONE) end++;
+    const crosses = k > 0 && end < tiles.length && depth(tiles[k - 1]) !== depth(tiles[end]);
+    if (crosses) through.fill(1, k, end);
+    k = end;
+  }
+  tiles.forEach(([x, z], k) => {
     const i = grid.index(x, z);
-    if (terrain.water[i] === 1 || terrain.site[i] > 0) continue;
-    if (city.structure[i] >= 0 || reserved[i] === 1 || city.building[i] >= 0) continue;
-    if (city.wall[i] === WALL) city.wall[i] = WALL_GATE;
+    if (terrain.water[i] === 1 || terrain.site[i] > 0) return;
+    if (city.structure[i] >= 0 || reserved[i] === 1 || city.building[i] >= 0) return;
+    if (city.wall[i] !== WALL_NONE) {
+      if (through[k] === 0) return;
+      city.wall[i] = WALL_GATE;
+    }
     city.road[i] = 1;
     city.house[i] = 0;
     if (city.field[i] >= 0) removeField(city, city.field[i]);
-  }
+  });
 }
 
 /** After streets are laid: gates named, thick crossings thinned, lots and houses laid anew. */
@@ -161,6 +253,7 @@ export function finishStreets(city: CityState): void {
   const locked = new Uint8Array(city.grid.count);
   for (let i = 0; i < locked.length; i++) if (city.wall[i] === WALL_GATE) locked[i] = 1;
   thinRoads(city, locked);
+  pruneRoadFragments(city, locked, 4);
   layLots(city);
   syncHouses(city);
   city.revision.roads++;
@@ -171,47 +264,66 @@ export function finishStreets(city: CityState): void {
 export function refreshGates(city: CityState): void {
   const { grid } = city;
   const { tepe } = city.def;
-  const first = city.gates.filter((g) => g.radius === city.rings[0].radius);
+  const first = city.gates.filter((g) => g.ring === 0);
   const gates: Gate[] = [...first];
+  const old = new Set(first.flatMap((g) => g.tiles));
   const suffix = ['', 'Dış', 'Varoş', 'Yeni'];
-  city.rings.slice(1).forEach((ring, k) => {
-    const hits: Array<{ i: number; a: number }> = [];
-    for (let i = 0; i < grid.count; i++) {
-      if (city.wall[i] !== WALL_GATE) continue;
-      const x = grid.centre(i % grid.size) - tepe.x;
-      const z = grid.centre(Math.floor(i / grid.size)) - tepe.z;
-      if (Math.abs(Math.hypot(x, z) - ring.radius) > 1.3) continue;
-      hits.push({ i, a: (Math.atan2(z, x) + Math.PI * 2) % (Math.PI * 2) });
-    }
+  // Each gate tile belongs to the ring whose wall runs nearest it.
+  const hitsByRing: Array<Array<{ i: number; a: number; r: number }>> = city.rings.map(() => []);
+  for (let i = 0; i < grid.count; i++) {
+    if (city.wall[i] !== WALL_GATE || old.has(i)) continue;
+    const x = grid.centre(i % grid.size);
+    const z = grid.centre(Math.floor(i / grid.size));
+    let best = 1.3;
+    let owner = -1;
+    city.rings.forEach((ring, k) => {
+      if (k === 0) return;
+      for (const run of ring.runs) {
+        const d = runDistance(run, x, z);
+        if (d < best) {
+          best = d;
+          owner = k;
+        }
+      }
+    });
+    if (owner < 0) continue;
+    const a = (Math.atan2(z - tepe.z, x - tepe.x) + Math.PI * 2) % (Math.PI * 2);
+    hitsByRing[owner].push({ i, a, r: Math.hypot(x - tepe.x, z - tepe.z) });
+  }
+  hitsByRing.forEach((hits, k) => {
+    if (k === 0 || hits.length === 0) return;
+    const ring = city.rings[k];
+    const near = 2 / ring.radius;
     hits.sort((p, q) => p.a - q.a);
     const clusters: Array<typeof hits> = [];
     for (const h of hits) {
       const last = clusters[clusters.length - 1];
-      if (last !== undefined && h.a - last[last.length - 1].a < 2 / ring.radius) last.push(h);
+      if (last !== undefined && h.a - last[last.length - 1].a < near) last.push(h);
       else clusters.push([h]);
     }
     // A cluster straddling angle zero is one gate.
     if (clusters.length > 1) {
       const head = clusters[0][0].a;
       const tail = clusters[clusters.length - 1];
-      if (head + Math.PI * 2 - tail[tail.length - 1].a < 2 / ring.radius) {
+      if (head + Math.PI * 2 - tail[tail.length - 1].a < near) {
         clusters[0] = [...tail.map((h) => ({ ...h, a: h.a - Math.PI * 2 })), ...clusters[0]];
         clusters.pop();
       }
     }
     for (const c of clusters) {
       const angle = c.reduce((s, h) => s + h.a, 0) / c.length;
-      const near = city.def.gates.find((g) => {
+      const road = city.def.gates.find((g) => {
         const d = Math.abs(((g.angle * DEG - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
         return d < 0.3;
       });
-      const tag = suffix[Math.min(k + 1, suffix.length - 1)];
+      const tag = suffix[Math.min(k, suffix.length - 1)];
       gates.push({
         name:
-          near !== undefined ? `${near.name.replace(/ Kapısı$/, '')} ${tag} Kapısı` : `${ring.name} Kapısı`,
+          road !== undefined ? `${road.name.replace(/ Kapısı$/, '')} ${tag} Kapısı` : `${ring.name} Kapısı`,
         angle,
         tiles: c.map((h) => h.i),
-        radius: ring.radius,
+        radius: c.reduce((s, h) => s + h.r, 0) / c.length,
+        ring: k,
       });
     }
   });
