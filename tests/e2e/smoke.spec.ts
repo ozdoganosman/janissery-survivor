@@ -52,7 +52,7 @@ async function drag(page: Page, from: [number, number], to: [number, number]): P
   await page.mouse.up();
 }
 
-test('the city draws, grows on zoned land, takes new fields and a bazaar', async ({ page }) => {
+test('the city draws, grows on zoned land, takes fields, a bazaar, layers and a budget', async ({ page }) => {
   const problems: string[] = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
@@ -141,8 +141,17 @@ test('the city draws, grows on zoned land, takes new fields and a bazaar', async
   await expect(page.locator('.ledger')).toContainText('Refah');
   await page.getByRole('button', { name: /Mallar/ }).click();
   await expect(page.locator('.ledger .goods')).toContainText('Un');
+  await page.getByRole('button', { name: /Katman/ }).click();
   await page.getByRole('button', { name: /Verimlilik/ }).click();
   expect(await page.evaluate(() => window.__game!.world.terrain.fertilityVisible)).toBe(true);
+  // A service layer replaces it, and the budget opens with the tax switch.
+  await page.getByRole('button', { name: /^Su$/ }).click();
+  expect(await page.evaluate(() => window.__game!.world.activeLayer)).toBe('su');
+  expect(await page.evaluate(() => window.__game!.world.terrain.fertilityVisible)).toBe(false);
+  await page.getByRole('button', { name: /Bütçe/ }).click();
+  await expect(page.locator('.ledger .budget')).toContainText('Sultan payı');
+  await page.getByRole('button', { name: /^Ağır$/ }).click();
+  expect(await page.evaluate(() => window.__game!.city.policy.tax)).toBe('agir');
 
   expect(problems).toEqual([]);
 });

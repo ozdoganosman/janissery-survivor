@@ -10,7 +10,27 @@ export type FieldChoice = Crop | 'mera';
 export type Good = 'un' | 'ekmek' | 'yun' | 'iplik' | 'kumas' | 'cevher' | 'demir' | 'alet';
 /** Anything a recipe can take or give: a good, or grain from the granary. */
 export type Stock = Good | 'zahire';
-export type BuildingKind = 'degirmen' | 'boyahane' | 'maden' | 'dokumhane' | 'arasta';
+export type BuildingKind =
+  | 'degirmen'
+  | 'boyahane'
+  | 'maden'
+  | 'dokumhane'
+  | 'arasta'
+  | 'cesme'
+  | 'mescit'
+  | 'hamam'
+  | 'medrese'
+  | 'darussifa'
+  | 'zaviye'
+  | 'dolap';
+/** Where a building sits in the build menu. */
+export type BuildingCategory = 'imalat' | 'carsi' | 'hizmet' | 'tarim';
+/**
+ * What a public building spreads over its radius. The first five are what houses need;
+ * `esnaf` makes bazaars more productive and `sulama` waters fields.
+ */
+export type Service = 'su' | 'ibadet' | 'temizlik' | 'egitim' | 'saglik' | 'esnaf' | 'sulama';
+export type TaxRate = 'hafif' | 'orta' | 'agir';
 /** The crafts that fill bazaar shops. */
 export type Trade = 'firinci' | 'dokumaci' | 'demirci';
 
@@ -22,6 +42,12 @@ export interface Recipe {
 
 export interface WorkDef extends Recipe {
   name: string;
+  category: BuildingCategory;
+  /** Dirhems a month, paid by the treasury unless a vakıf keeps it. */
+  upkeep: number;
+  /** For a public building: what it provides, and how far. */
+  service?: Service;
+  radius?: number;
   /** Footprint in tiles, [w, d], before turning. */
   size: number[];
   cost: number;
@@ -58,7 +84,46 @@ export interface Balance {
     landmarkJobs: Partial<Record<LandmarkKind, number>>;
   };
   food: { perPersonPerMonth: number; startGranary: number };
-  tax: { perHouseholdPerMonth: number };
+  tax: {
+    /** Dirhems a household pays each month at each rate. */
+    rates: Record<TaxRate, number>;
+    /** Housing demand added (or taken) by each rate. */
+    demand: Record<TaxRate, number>;
+    start: TaxRate;
+    /** A konak household pays this much more. */
+    konakFactor: number;
+    /** Share of the month's income sent to the sultan. */
+    tributeShare: number;
+  };
+  housing: {
+    /** Prosperity a konak needs, on top of its services. */
+    konakProsperity: number;
+    /** Monthly chance that a house its services no longer support loses a floor. */
+    downgradeChancePerMonth: number;
+  };
+  /** Services the authored landmarks give, with their radius. */
+  landmarkServices: Partial<Record<LandmarkKind, Partial<Record<Service, number>>>>;
+  narh: {
+    /** How much the price ceiling takes off bread and cloth. */
+    priceCut: number;
+    prosperityBonus: number;
+    /** Shops of unmet demand a craft needs before a new shop opens under narh. */
+    openGap: number;
+  };
+  vakif: {
+    /** Share of the building's cost the vakıf takes from the treasury every month, forever. */
+    share: number;
+    peoplePerFounder: number;
+    konaksPerFounder: number;
+    founders: string[];
+  };
+  serviceEffects: {
+    /** Extra output an ahi lodge's bazaars get from the same input. */
+    esnafOutputBonus: number;
+    irrigationYieldBonus: number;
+    /** Staffing below which a public building gives no service. */
+    minStaffing: number;
+  };
   zoning: { maxSlope: number; roadReach: number };
   fields: {
     costPerTile: number;
@@ -154,5 +219,16 @@ export const BUILDING_KINDS: readonly BuildingKind[] = [
   'maden',
   'dokumhane',
   'arasta',
+  'zaviye',
+  'cesme',
+  'mescit',
+  'hamam',
+  'medrese',
+  'darussifa',
+  'dolap',
 ];
+/** Services houses need, in the order they are asked for. */
+export const HOUSE_SERVICES: readonly Service[] = ['su', 'ibadet', 'temizlik', 'egitim', 'saglik'];
+export const SERVICES: readonly Service[] = [...HOUSE_SERVICES, 'esnaf', 'sulama'];
+export const TAX_RATES: readonly TaxRate[] = ['hafif', 'orta', 'agir'];
 export const TRADES: readonly Trade[] = ['firinci', 'dokumaci', 'demirci'];

@@ -39,8 +39,13 @@ export interface DepositDef {
 export interface StartWorkDef {
   kind: BuildingKind;
   name: string;
-  /** World position to build at, or as close to it as the rules allow. */
-  near: Vec2;
+  /**
+   * Where to build, or as close to it as the rules allow: a world position, or a polar
+   * one around the tepe as for landmarks.
+   */
+  near?: Vec2;
+  angle?: number;
+  radius?: number;
   /** Crafts already working in a bazaar's shops. */
   shops?: Trade[];
 }
@@ -92,6 +97,11 @@ export function validateCityDef(def: CityDef): CityDef {
     if (l.w < 1 || l.d < 1) problems.push(`landmark "${l.name}" has an empty footprint`);
   }
   for (const d of def.deposits) if (d.radius <= 0) problems.push(`deposit "${d.name}" has no size`);
+  for (const w of def.works) {
+    if (w.near === undefined && (w.angle === undefined || w.radius === undefined)) {
+      problems.push(`start building "${w.name}" has no position`);
+    }
+  }
   if (problems.length > 0) throw new Error(`Invalid city "${def.id}": ${problems.join('; ')}`);
   return def;
 }

@@ -1,6 +1,8 @@
+import type { Vec2 } from '../core/geom';
 import type { BuildingKind, Trade } from './balance';
 import type { CityState } from './city';
 import { WALL_NONE } from './constants';
+import { vakifFounders } from './services';
 
 /**
  * State workshops and bazaars: rectangles of tiles the player places whole, each with a
@@ -13,9 +15,10 @@ import { WALL_NONE } from './constants';
  * - `iscisiz`   no free hands in the city;
  * - `girdisiz`  waiting for its input;
  * - `dolu`      the depot is full of what it makes;
- * - `bos`       an empty shop.
+ * - `bos`       an empty shop;
+ * - `maassiz`   the treasury is in debt and cannot pay its staff.
  */
-export type BuildingStatus = 'calisiyor' | 'yolsuz' | 'iscisiz' | 'girdisiz' | 'dolu' | 'bos';
+export type BuildingStatus = 'calisiyor' | 'yolsuz' | 'iscisiz' | 'girdisiz' | 'dolu' | 'bos' | 'maassiz';
 
 export interface Shop {
   trade: Trade | null;
@@ -46,6 +49,8 @@ export interface Building {
   madeLastMonth: number;
   /** Bazaar shops; empty for a workshop. */
   shops: Shop[];
+  /** The notable whose vakıf built and keeps it, if it was not paid from the treasury. */
+  vakif?: string;
 }
 
 export interface BuildingProposal {
@@ -56,7 +61,10 @@ export interface BuildingProposal {
   d: number;
   tiles: Array<{ x: number; z: number; ok: boolean; reason?: string }>;
   facing: number;
+  /** What the treasury pays: nothing for a vakıf. */
   cost: number;
+  /** Built as a vakıf: only public buildings, and only while a notable is ready. */
+  vakif: boolean;
   problem?: string;
 }
 
@@ -117,8 +125,10 @@ function proposeAt(
   z0: number,
   w: number,
   d: number,
+  asVakif: boolean,
 ): BuildingProposal {
   const def = city.balance.works[kind];
+  const vakif = asVakif && def.service !== undefined;
   const tiles: BuildingProposal['tiles'] = [];
   let problem: string | undefined;
   let ore = 0;
@@ -148,8 +158,9 @@ function proposeAt(
   if (problem === undefined && def.site === 'ore' && ore * 2 < w * d)
     problem = 'Demir damarı üstüne kurulmalı';
   if (problem === undefined && contacts[facing] === 0) problem = 'Yola bitişik olmalı';
-  if (problem === undefined && def.cost > city.treasury) problem = 'Hazine yetersiz';
-  const p: BuildingProposal = { kind, x0, z0, w, d, tiles, facing, cost: def.cost };
+  if (problem === undefined && vakif && vakifFounders(city) <= 0) problem = 'Vakıf yaptıracak eşraf yok';
+  if (problem === undefined && !vakif && def.cost > city.treasury) problem = 'Hazine yetersiz';
+  const p: BuildingProposal = { kind, x0, z0, w, d, tiles, facing, cost: vakif ? 0 : def.cost, vakif };
   if (problem !== undefined) p.problem = problem;
   return p;
 }
@@ -163,6 +174,7 @@ export function proposeBuilding(
   kind: BuildingKind,
   cx: number,
   cz: number,
+  opts: { vakif?: boolean } = {},
 ): BuildingProposal {
   const [a, b] = city.balance.works[kind].size;
   const shapes: Array<[number, number]> =
@@ -175,7 +187,15 @@ export function proposeBuilding(
   const usable = (p: BuildingProposal): boolean => p.problem === undefined || p.problem === 'Hazine yetersiz';
   let best: BuildingProposal | null = null;
   for (const [w, d] of shapes) {
-    const p = proposeAt(city, kind, cx - Math.floor((w - 1) / 2), cz - Math.floor((d - 1) / 2), w, d);
+    const p = proposeAt(
+      city,
+      kind,
+      cx - Math.floor((w - 1) / 2),
+      cz - Math.floor((d - 1) / 2),
+      w,
+      d,
+      opts.vakif === true,
+    );
     if (best === null) {
       best = p;
       continue;
@@ -196,7 +216,7 @@ export function buildBuilding(
   p: BuildingProposal,
   opts: { free?: boolean; name?: string } = {},
 ): Building | null {
-  const fresh = proposeAt(city, p.kind, p.x0, p.z0, p.w, p.d);
+  const fresh = proposeAt(city, p.kind, p.x0, p.z0, p.w, p.d, p.vakif);
   if (fresh.problem !== undefined && !(opts.free === true && fresh.problem === 'Hazine yetersiz'))
     return null;
   const def = city.balance.works[p.kind];
@@ -213,7 +233,7 @@ export function buildBuilding(
     tiles,
     facing: fresh.facing,
     roadAccess: true,
-    status: p.kind === 'arasta' ? 'calisiyor' : 'iscisiz',
+    status: 'calisiyor',
     made: 0,
     madeLastMonth: 0,
     shops: Array.from({ length: def.shops ?? 0 }, () => emptyShop()),
@@ -227,7 +247,15 @@ export function buildBuilding(
     }
   }
   city.buildings.set(id, b);
-  if (opts.free !== true) city.treasury -= fresh.cost;
+  if (fresh.vakif) {
+    // Founders come forward in the order the city's book lists them.
+    let n = 0;
+    for (const other of city.buildings.values()) if (other.vakif !== undefined) n++;
+    const founders = city.balance.vakif.founders;
+    b.vakif = founders[n % founders.length];
+  } else if (opts.free !== true) {
+    city.treasury -= fresh.cost;
+  }
   city.revision.buildings++;
   if (unzoned) city.revision.zones++;
   return b;
@@ -273,6 +301,13 @@ export function smokeMap(city: CityState): Uint8Array {
   return map;
 }
 
+function startPosition(city: CityState, near?: Vec2, angle?: number, radius?: number): Vec2 {
+  if (near !== undefined) return near;
+  const a = ((angle ?? 0) * Math.PI) / 180;
+  const { tepe } = city.def;
+  return [tepe.x + Math.cos(a) * (radius ?? 0), tepe.z + Math.sin(a) * (radius ?? 0)];
+}
+
 /**
  * The workshops and bazaars the city starts with. Each goes at the nearest spot to its
  * authored position where the ordinary building rules allow it.
@@ -280,8 +315,9 @@ export function smokeMap(city: CityState): Uint8Array {
 export function placeStartBuildings(city: CityState): void {
   const { grid } = city;
   for (const w of city.def.works) {
-    const cx = grid.tileOf(w.near[0]);
-    const cz = grid.tileOf(w.near[1]);
+    const [nx, nz] = startPosition(city, w.near, w.angle, w.radius);
+    const cx = grid.tileOf(nx);
+    const cz = grid.tileOf(nz);
     let built: Building | null = null;
     for (let r = 0; r <= 12 && built === null; r++) {
       for (let dz = -r; dz <= r && built === null; dz++) {
@@ -294,7 +330,7 @@ export function placeStartBuildings(city: CityState): void {
         }
       }
     }
-    if (built === null) throw new Error(`No room for "${w.name}" near ${w.near.join(', ')}`);
+    if (built === null) throw new Error(`No room for "${w.name}" near ${nx.toFixed(1)}, ${nz.toFixed(1)}`);
     (w.shops ?? []).forEach((trade, k) => {
       const shop = built?.shops[k];
       if (shop !== undefined) {

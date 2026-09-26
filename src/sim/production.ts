@@ -5,6 +5,7 @@ import { emptyShop } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
 import { notify } from './notices';
+import { coveredAt, serves } from './services';
 
 /**
  * Workshops, bazaars and what people buy there.
@@ -71,6 +72,7 @@ function runRecipe(
   r: Recipe,
   staffing: number,
   sell: boolean,
+  yieldFactor = 1,
 ): { made: number; status: BuildingStatus } {
   if (staffing <= 0) return { made: 0, status: 'iscisiz' };
   const goods = city.balance.goods;
@@ -98,9 +100,10 @@ function runRecipe(
   let made = 0;
   const main = mainOutput(r);
   for (const [g, amount] of entries(r.out)) {
-    city.goods[g] += amount * share;
-    city.flows.current.made[g] += amount * share;
-    if (g === main) made = amount * share;
+    const out = amount * share * yieldFactor;
+    city.goods[g] += out;
+    city.flows.current.made[g] += out;
+    if (g === main) made = out;
   }
   return { made, status: short ? 'girdisiz' : 'calisiyor' };
 }
@@ -108,10 +111,15 @@ function runRecipe(
 /** Workshops first, so what the mill grinds today the bakers can bake today. */
 export function produceDay(city: CityState): void {
   const staffing = city.stats.industryStaffing;
+  const ahi = 1 + city.balance.serviceEffects.esnafOutputBonus;
   for (const b of city.buildings.values()) {
     if (b.kind === 'arasta') continue;
     if (!b.roadAccess) {
       b.status = 'yolsuz';
+      continue;
+    }
+    if (city.balance.works[b.kind].service !== undefined) {
+      b.status = serves(city, b) ? 'calisiyor' : b.vakif === undefined && city.unpaid ? 'maassiz' : 'iscisiz';
       continue;
     }
     const r = runRecipe(city, city.balance.works[b.kind], staffing, false);
@@ -120,6 +128,8 @@ export function produceDay(city: CityState): void {
   }
   for (const b of city.buildings.values()) {
     if (b.kind !== 'arasta') continue;
+    // An ahi lodge nearby keeps the craftsmen to their guild's standard.
+    const skill = coveredAt(city, 'esnaf', b) ? ahi : 1;
     for (const shop of b.shops) {
       if (shop.trade === null) {
         shop.status = 'bos';
@@ -129,7 +139,7 @@ export function produceDay(city: CityState): void {
         shop.status = 'yolsuz';
         continue;
       }
-      const r = runRecipe(city, city.balance.trades[shop.trade], staffing, true);
+      const r = runRecipe(city, city.balance.trades[shop.trade], staffing, true, skill);
       shop.status = r.status;
       shop.made += r.made;
       if (r.status === 'girdisiz') shop.shortDays++;
@@ -195,7 +205,9 @@ export function consumeDay(city: CityState): boolean {
   g.alet -= tools;
   flows.used.alet += tools;
 
-  const market = ((bread + moreBread) * b.goods.ekmek.price + cloth * b.goods.kumas.price) * tax;
+  // Under narh the muhtesib holds prices down, and the bazaar's takings with them.
+  const cut = city.policy.narh ? 1 - b.narh.priceCut : 1;
+  const market = ((bread + moreBread) * b.goods.ekmek.price + cloth * b.goods.kumas.price) * cut * tax;
   city.treasury += market;
   flows.market += market;
 
@@ -211,7 +223,8 @@ export function consumeDay(city: CityState): boolean {
 /** Prosperity, 0..1: how well bread and cloth needs are met. */
 export function prosperity(city: CityState): number {
   const w = city.balance.needs.weights;
-  return (w.ekmek * city.needs.ekmek + w.kumas * city.needs.kumas) / (w.ekmek + w.kumas);
+  const met = (w.ekmek * city.needs.ekmek + w.kumas * city.needs.kumas) / (w.ekmek + w.kumas);
+  return Math.min(1, met + (city.policy.narh ? city.balance.narh.prosperityBonus : 0));
 }
 
 /** A first guess at how well needs are met, so a new city does not start from nothing. */
@@ -289,7 +302,8 @@ export function esnafMonth(city: CityState): void {
     const empty = b.shops.find((s) => s.trade === null);
     if (empty === undefined) continue;
     let best: Trade | null = null;
-    let bestGap = 0.5;
+    // Fixed prices thin the margins: under narh a craft waits for a clearer gap.
+    let bestGap = city.policy.narh ? city.balance.narh.openGap : 0.5;
     for (const t of TRADES) {
       const per = perShop(city, t);
       if (per <= 0) continue;

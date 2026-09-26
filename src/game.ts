@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BuildingKind, FieldChoice, FieldPlan } from './sim/balance';
+import type { BuildingKind, FieldChoice, FieldPlan, TaxRate } from './sim/balance';
 import { buildBuilding, proposeBuilding, type BuildingProposal } from './sim/buildings';
 import { dateOf, formatDate, type Speed } from './sim/calendar';
 import type { CityState } from './sim/city';
@@ -9,6 +9,7 @@ import { inspectTile } from './sim/inspect';
 import { buildRoad, planRoad, type RoadPlan } from './sim/roads';
 import { applyZone, clearArea, proposeZone, surveyClear, type ZoneProposal } from './sim/zoning';
 import type { PreviewTile } from './render/cursor-view';
+import { SERVICE_TINT, type Layer } from './render/layers';
 import { World } from './render/world';
 import { Hud, type Tool } from './ui/hud';
 
@@ -50,6 +51,8 @@ export class Game {
   private selected: TilePos | null = null;
   private crop: FieldChoice = 'bugday';
   private buildKind: BuildingKind = 'arasta';
+  /** Whether a public building is to be endowed as a vakıf rather than paid for. */
+  private vakif = false;
   private lastDateText = '';
   private sinceInfo = 0;
   private elapsed = 0;
@@ -70,7 +73,10 @@ export class Game {
     this.hud = new Hud(uiRoot, city.def.title, city.balance, {
       onTool: (t) => this.setTool(t),
       onSpeed: (s) => this.setSpeed(s),
-      onFertility: (on) => this.setFertility(on),
+      onLayer: (layer) => this.setLayer(layer),
+      onVakif: (on) => this.setVakif(on),
+      onTax: (rate) => this.setTax(rate),
+      onNarh: (on) => this.setNarh(on),
       onCrop: (c) => this.setCrop(c),
       onBuildKind: (k) => this.setBuildKind(k),
       onFieldPlan: (id, plan) => this.setFieldPlan(id, plan),
@@ -170,8 +176,25 @@ export class Game {
   }
 
   setFertility(on: boolean): void {
-    this.world.terrain.setFertilityVisible(on);
-    this.hud.setFertility(on);
+    this.setLayer(on ? 'verim' : null);
+  }
+
+  setLayer(layer: Layer | null): void {
+    this.world.setLayer(layer);
+    this.hud.setLayer(layer);
+  }
+
+  setVakif(on: boolean): void {
+    this.vakif = on;
+    this.hud.setVakif(on);
+  }
+
+  setTax(rate: TaxRate): void {
+    this.city.policy.tax = rate;
+  }
+
+  setNarh(on: boolean): void {
+    this.city.policy.narh = on;
   }
 
   resize(): void {
@@ -335,7 +358,11 @@ export class Game {
       applyZone(this.city, drag.plan);
     } else if (drag.kind === 'place' && drag.plan !== null && drag.plan.problem === undefined) {
       const b = buildBuilding(this.city, drag.plan);
-      if (b !== null) this.select({ x: b.x0 + Math.floor(b.w / 2), z: b.z0 + Math.floor(b.d / 2) });
+      if (b !== null) {
+        this.select({ x: b.x0 + Math.floor(b.w / 2), z: b.z0 + Math.floor(b.d / 2) });
+        // A notable endows one building; the next is paid for unless asked again.
+        if (b.vakif !== undefined) this.setVakif(false);
+      }
     } else if (drag.kind === 'field' && drag.plan !== null && drag.plan.problem === undefined) {
       const field = buildField(this.city, drag.plan, this.crop);
       if (field !== null) {
@@ -466,28 +493,30 @@ export class Game {
   /** Shows where the chosen building would stand and what it would cost; returns the plan. */
   private previewPlacement(tile: TilePos, cx: number, cy: number): BuildingProposal {
     const { city } = this;
-    const plan = proposeBuilding(city, this.buildKind, tile.x, tile.z);
+    const plan = proposeBuilding(city, this.buildKind, tile.x, tile.z, { vakif: this.vakif });
     const preview: PreviewTile[] = plan.tiles.map((t) => ({
       x: t.x,
       z: t.z,
       color: t.ok && plan.problem === undefined ? '#a9c76a' : t.ok ? '#e6b872' : '#c8312a',
     }));
-    // A foundry shows how far its smoke will carry.
-    const smoke = city.balance.works[this.buildKind].smoke ?? 0;
-    if (smoke > 0) {
+    // A foundry shows how far its smoke will carry; a public building, how far it serves.
+    const w = city.balance.works[this.buildKind];
+    const reach = w.smoke ?? w.radius ?? 0;
+    const tint = w.smoke !== undefined ? '#b9b0a2' : w.service !== undefined ? SERVICE_TINT[w.service] : '';
+    if (reach > 0) {
       const mx = plan.x0 + (plan.w - 1) / 2;
       const mz = plan.z0 + (plan.d - 1) / 2;
-      for (let z = Math.floor(mz - smoke); z <= Math.ceil(mz + smoke); z++) {
-        for (let x = Math.floor(mx - smoke); x <= Math.ceil(mx + smoke); x++) {
+      for (let z = Math.floor(mz - reach); z <= Math.ceil(mz + reach); z++) {
+        for (let x = Math.floor(mx - reach); x <= Math.ceil(mx + reach); x++) {
           const inside = x >= plan.x0 && x < plan.x0 + plan.w && z >= plan.z0 && z < plan.z0 + plan.d;
-          if (!inside && Math.hypot(x - mx, z - mz) <= smoke) preview.push({ x, z, color: '#b9b0a2' });
+          if (!inside && Math.hypot(x - mx, z - mz) <= reach) preview.push({ x, z, color: tint });
         }
       }
     }
     this.world.cursor.setPreview(preview);
-    const w = city.balance.works[this.buildKind];
+    const price = plan.vakif ? 'vakıf yaptırır' : `${w.cost.toLocaleString('tr-TR')} dirhem`;
     this.hud.showTip(
-      plan.problem ?? `${w.name} · ${w.cost.toLocaleString('tr-TR')} dirhem`,
+      plan.problem ?? `${w.name} · ${price} · bakım ${plan.vakif ? 'vakıftan' : `${w.upkeep}/ay`}`,
       cx,
       cy,
       plan.problem !== undefined,

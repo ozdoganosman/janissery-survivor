@@ -16,7 +16,19 @@
     "startGranary": 22000
   },
   "tax": {
-    "perHouseholdPerMonth": 2
+    "rates": {
+      "hafif": 1.5,
+      "orta": 2,
+      "agir": 3
+    },
+    "demand": {
+      "hafif": 0.08,
+      "orta": 0,
+      "agir": -0.15
+    },
+    "start": "orta",
+    "konakFactor": 1.5,
+    "tributeShare": 0.15
   },
   "zoning": {
     "maxSlope": 0.5,
@@ -138,7 +150,9 @@
       "site": "water",
       "waterReach": 1,
       "maxSlope": 0.5,
-      "hint": "Suya bitişik; zahireyi una çevirir"
+      "hint": "Suya bitişik; zahireyi una çevirir",
+      "category": "imalat",
+      "upkeep": 15
     },
     "boyahane": {
       "name": "Boyahane",
@@ -154,7 +168,9 @@
       "site": "water",
       "waterReach": 2,
       "maxSlope": 0.5,
-      "hint": "Suya yakın; yünü ipliğe çevirir"
+      "hint": "Suya yakın; yünü ipliğe çevirir",
+      "category": "imalat",
+      "upkeep": 12
     },
     "maden": {
       "name": "Maden",
@@ -167,7 +183,9 @@
       },
       "site": "ore",
       "maxSlope": 1.3,
-      "hint": "Demir damarı üstünde; cevher çıkarır"
+      "hint": "Demir damarı üstünde; cevher çıkarır",
+      "category": "imalat",
+      "upkeep": 20
     },
     "dokumhane": {
       "name": "Dökümhane",
@@ -182,7 +200,9 @@
       },
       "smoke": 6,
       "maxSlope": 0.5,
-      "hint": "Cevheri demire çevirir; duman yayar"
+      "hint": "Cevheri demire çevirir; duman yayar",
+      "category": "imalat",
+      "upkeep": 25
     },
     "arasta": {
       "name": "Arasta",
@@ -193,7 +213,109 @@
       "out": {},
       "shops": 4,
       "maxSlope": 0.5,
-      "hint": "Dört dükkânlı çarşı; esnaf doldurur"
+      "hint": "Dört dükkânlı çarşı; esnaf doldurur",
+      "category": "carsi",
+      "upkeep": 8
+    },
+    "cesme": {
+      "name": "Çeşme",
+      "category": "hizmet",
+      "size": [1, 1],
+      "cost": 150,
+      "upkeep": 2,
+      "workers": 0,
+      "in": {},
+      "out": {},
+      "service": "su",
+      "radius": 6,
+      "maxSlope": 0.6,
+      "hint": "Su; evlerin iki kat olması için"
+    },
+    "mescit": {
+      "name": "Mescit",
+      "category": "hizmet",
+      "size": [3, 3],
+      "cost": 900,
+      "upkeep": 10,
+      "workers": 2,
+      "in": {},
+      "out": {},
+      "service": "ibadet",
+      "radius": 11,
+      "maxSlope": 0.5,
+      "hint": "İbadet; evlerin iki kat olması için"
+    },
+    "hamam": {
+      "name": "Hamam",
+      "category": "hizmet",
+      "size": [4, 3],
+      "cost": 1800,
+      "upkeep": 20,
+      "workers": 6,
+      "in": {},
+      "out": {},
+      "service": "temizlik",
+      "radius": 13,
+      "maxSlope": 0.5,
+      "hint": "Temizlik; konak için"
+    },
+    "medrese": {
+      "name": "Medrese",
+      "category": "hizmet",
+      "size": [3, 3],
+      "cost": 3000,
+      "upkeep": 35,
+      "workers": 8,
+      "in": {},
+      "out": {},
+      "service": "egitim",
+      "radius": 18,
+      "maxSlope": 0.5,
+      "hint": "Eğitim; konak için"
+    },
+    "darussifa": {
+      "name": "Darüşşifa",
+      "category": "hizmet",
+      "size": [3, 3],
+      "cost": 3500,
+      "upkeep": 40,
+      "workers": 10,
+      "in": {},
+      "out": {},
+      "service": "saglik",
+      "radius": 18,
+      "maxSlope": 0.5,
+      "hint": "Sağlık; konak için"
+    },
+    "zaviye": {
+      "name": "Ahi Zaviyesi",
+      "category": "carsi",
+      "size": [2, 2],
+      "cost": 800,
+      "upkeep": 6,
+      "workers": 2,
+      "in": {},
+      "out": {},
+      "service": "esnaf",
+      "radius": 12,
+      "maxSlope": 0.5,
+      "hint": "Yakındaki arastalar daha çok üretir"
+    },
+    "dolap": {
+      "name": "Su Dolabı",
+      "category": "tarim",
+      "size": [2, 2],
+      "cost": 700,
+      "upkeep": 6,
+      "workers": 2,
+      "in": {},
+      "out": {},
+      "service": "sulama",
+      "radius": 9,
+      "site": "water",
+      "waterReach": 1,
+      "maxSlope": 0.5,
+      "hint": "Suya bitişik; yakın tarlaları sular"
     }
   },
   "trades": {
@@ -257,5 +379,47 @@
     "openMinInputMonths": 0.5,
     "openStockMonths": 4,
     "starvedDays": 18
+  },
+  "housing": {
+    "konakProsperity": 0.5,
+    "downgradeChancePerMonth": 0.08
+  },
+  "landmarkServices": {
+    "cami": {
+      "ibadet": 30
+    },
+    "mescit": {
+      "ibadet": 11
+    },
+    "hamam": {
+      "temizlik": 13
+    }
+  },
+  "narh": {
+    "priceCut": 0.2,
+    "prosperityBonus": 0.08,
+    "openGap": 1.5
+  },
+  "vakif": {
+    "share": 0.03,
+    "peoplePerFounder": 3000,
+    "konaksPerFounder": 12,
+    "founders": [
+      "Emir Kemaleddin",
+      "Hoca Mes'ud",
+      "Tâceddin Bey",
+      "Seyyide Hatun",
+      "Ahi Ahmed",
+      "Şemseddin Altunaba",
+      "Mübarizeddin",
+      "Esma Hatun",
+      "Bedreddin Gühertaş",
+      "Emineddin Mikail"
+    ]
+  },
+  "serviceEffects": {
+    "esnafOutputBonus": 0.2,
+    "irrigationYieldBonus": 0.3,
+    "minStaffing": 0.5
   }
 }

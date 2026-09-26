@@ -75,22 +75,29 @@ describe('starting economy', () => {
     expect(a.rngState).toBe(b.rngState);
   });
 
-  it('collects household taxes at the start of each month', () => {
+  it('closes the budget at the start of each month', () => {
     const c = newCity();
     simulateDays(c, 29); // the last day of Mart
-    let households = 0;
-    for (let i = 0; i < c.house.length; i++) households += c.house[i];
+    let taxable = 0;
+    for (let i = 0; i < c.house.length; i++) {
+      taxable += c.house[i] === 3 ? 3 * balance.tax.konakFactor : c.house[i];
+    }
+    let upkeep = 0;
+    for (const b of c.buildings.values()) upkeep += balance.works[b.kind].upkeep;
     const before = c.treasury;
     const sold = c.flows.current.sales + c.flows.current.market;
     simulateDays(c, 1); // 1 Nisan
     expect(dateOf(c.calendar).day).toBe(1);
-    const { income } = c.stats;
-    expect(income.tax).toBe(households * balance.tax.perHouseholdPerMonth);
+    const { income, expenses } = c.stats;
+    expect(income.tax).toBeCloseTo(taxable * balance.tax.rates.orta, 6);
     // Last month's bazaar takings are reported with the tax; today's go straight in.
     expect(income.sales + income.market).toBeCloseTo(sold, 6);
     expect(c.stats.incomeLastMonth).toBeCloseTo(income.tax + income.sales + income.market, 6);
+    expect(expenses.upkeep).toBe(upkeep);
+    expect(expenses.tribute).toBeCloseTo(c.stats.incomeLastMonth * balance.tax.tributeShare, 6);
     const today = c.flows.current.sales + c.flows.current.market;
-    expect(c.treasury).toBeCloseTo(before + income.tax + today, 6);
+    expect(c.treasury).toBeCloseTo(before + income.tax - upkeep - expenses.tribute + today, 6);
+    expect(c.stats.netLastMonth).toBeGreaterThan(0);
   });
 });
 

@@ -6,6 +6,7 @@ import { FACING_DIRS, type Building } from '../sim/buildings';
 import type { CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { arch, box, cone, cylinder, dome, PartBatch, type Frame } from './builder';
+import { drawHamam, drawMescit, minaret, tackapi } from './buildings-view';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
 
@@ -123,6 +124,27 @@ export class WorksView {
       case 'arasta':
         bazaar(f, front, depth, b);
         break;
+      case 'cesme':
+        fountain(f);
+        break;
+      case 'mescit':
+        drawMescit(f, front, depth);
+        break;
+      case 'hamam':
+        drawHamam(f, front, depth);
+        break;
+      case 'medrese':
+        medrese(f, front, depth);
+        break;
+      case 'darussifa':
+        hospital(f, front, depth, b.id);
+        break;
+      case 'zaviye':
+        lodge(f, front, depth);
+        break;
+      case 'dolap':
+        this.noria(b, f, front, depth, base, rot);
+        break;
     }
   }
 
@@ -137,7 +159,22 @@ export class WorksView {
     f.part(arch(0.38, 0.62, 0.03), PAL.door, 0, 0, d / 2 - 0.04);
     f.part(box(0.2, 0.2, 0.03), PAL.door, w * 0.3, 0.55, d / 2 - 0.04);
 
-    // The wheel hangs over the water on whichever side the stream runs.
+    this.wheel(b, w, d, base, rot, 1, 0.22);
+  }
+
+  /**
+   * A paddle wheel over the water on whichever side the stream runs, turning with the
+   * current. Returns the wheel's side in the building's local frame.
+   */
+  private wheel(
+    b: Building,
+    w: number,
+    d: number,
+    base: number,
+    rot: number,
+    scale: number,
+    gap: number,
+  ): [number, number] {
     const side = this.waterSide(b);
     const rel = (side - b.facing + 4) % 4;
     const out: Array<[number, number]> = [
@@ -147,14 +184,15 @@ export class WorksView {
       [-1, 0],
     ];
     const [ox, oz] = out[rel];
-    const reach = (rel % 2 === 0 ? d : w) / 2 + 0.22;
+    const reach = (rel % 2 === 0 ? d : w) / 2 + gap;
     const local = new THREE.Vector3(ox * reach, 0, oz * reach);
     const world = local.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rot);
-    const wheelY = Math.max(this.city.terrain.waterLevel + 0.52, base + 0.3);
+    const wheelY = Math.max(this.city.terrain.waterLevel + 0.52 * scale, base + 0.3 * scale);
     const mesh = new THREE.Mesh(this.wheelGeom, miniMaterial({ color: PAL.timber }));
     const cx = this.city.grid.centre(b.x0) + (b.w - 1) / 2;
     const cz = this.city.grid.centre(b.z0) + (b.d - 1) / 2;
     mesh.position.set(cx + world.x, wheelY, cz + world.z);
+    mesh.scale.setScalar(scale);
     // The wheel's axle is its local z; point it out of the wall.
     const axleWorld = new THREE.Vector3(ox, 0, oz).applyAxisAngle(new THREE.Vector3(0, 1, 0), rot);
     const baseQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), axleWorld);
@@ -162,6 +200,37 @@ export class WorksView {
     mesh.receiveShadow = true;
     this.group.add(mesh);
     this.wheels.push({ mesh, axis: new THREE.Vector3(0, 0, 1), base: baseQ });
+    return [ox, oz];
+  }
+
+  /**
+   * A noria: a tall wheel lifting water from the stream into a raised trough that runs
+   * inland to a stone basin, where the field channels begin.
+   */
+  private noria(b: Building, f: Frame, front: number, depth: number, base: number, rot: number): void {
+    const w = front - 0.6;
+    const d = depth - 0.6;
+    const [ox, oz] = this.wheel(b, w, d, base, rot, 1.55, 0.05);
+    // The trough runs from the wheel's top towards the far side of the plot.
+    const len = (ox !== 0 ? w : d) + 0.4;
+    const trough = ox !== 0 ? box(len, 0.1, 0.16) : box(0.16, 0.1, len);
+    f.part(trough, PAL.timber, -ox * 0.1, 1.45, -oz * 0.1);
+    for (const t of [-0.35, 0.35]) {
+      f.part(box(0.08, 1.45, 0.08), PAL.timberDark, ox !== 0 ? t * len : 0, 0, oz !== 0 ? t * len : 0);
+    }
+    const bx = -ox * (len / 2 - 0.05);
+    const bz = -oz * (len / 2 - 0.05);
+    f.part(box(0.55, 0.3, 0.55), PAL.stone, bx, 0, bz);
+    f.part(box(0.44, 0.02, 0.44), PAL.water, bx, 0.3, bz);
+    // The first yards of the channel that carries the water off to the fields.
+    const run = 0.9;
+    f.part(
+      ox !== 0 ? box(run, 0.02, 0.12) : box(0.12, 0.02, run),
+      PAL.water,
+      bx - ox * run * 0.6,
+      0.02,
+      bz - oz * run * 0.6,
+    );
   }
 
   /** The side (in `facing` numbering) with the most water next to it. */
@@ -377,4 +446,81 @@ function wheelGeometry(): THREE.BufferGeometry {
   for (const g of parts) g.dispose();
   if (merged === null) throw new Error('wheel geometry did not merge');
   return merged;
+}
+
+/** A street fountain: a marble block with a niche over a trough, facing the road. */
+function fountain(f: Frame): void {
+  f.part(box(0.58, 0.74 + 0.3, 0.3), PAL.stoneLight, 0, -0.3, -0.12);
+  f.part(box(0.66, 0.08, 0.38), PAL.stoneDark, 0, 0.74, -0.12);
+  f.part(arch(0.3, 0.5, 0.02), PAL.lead, 0, 0.1, 0.03);
+  f.part(box(0.44, 0.05, 0.02), PAL.turquoise, 0, 0.64, 0.035);
+  f.part(box(0.54, 0.14, 0.22), PAL.stone, 0, 0, 0.16);
+  f.part(box(0.44, 0.02, 0.14), PAL.water, 0, 0.13, 0.16);
+}
+
+/**
+ * A Seljuk medrese: four ranges of cells round an open court with a pool, a domed hall at
+ * the back, a tall portal on the front and a minaret at one corner.
+ */
+function medrese(f: Frame, front: number, depth: number): void {
+  const w = front - 0.3;
+  const d = depth - 0.3;
+  const t = 0.5;
+  const h = 1.15;
+  f.part(box(w, h + 0.5, t), PAL.stone, 0, -0.5, -d / 2 + t / 2);
+  f.part(box(w, h + 0.5, t), PAL.stone, 0, -0.5, d / 2 - t / 2);
+  f.part(box(t, h + 0.5, d - 2 * t), PAL.stone, -w / 2 + t / 2, -0.5, 0);
+  f.part(box(t, h + 0.5, d - 2 * t), PAL.stone, w / 2 - t / 2, -0.5, 0);
+  for (const z of [-d / 2 + t / 2, d / 2 - t / 2])
+    f.part(box(w + 0.08, 0.08, t + 0.08), PAL.stoneDark, 0, h, z);
+  for (const x of [-w / 2 + t / 2, w / 2 - t / 2])
+    f.part(box(t + 0.08, 0.08, d - 2 * t), PAL.stoneDark, x, h, 0);
+  f.part(box(w - 2 * t, 0.03, d - 2 * t), PAL.stoneLight, 0, 0, 0);
+  f.part(box(0.42, 0.05, 0.42), PAL.water, 0, 0.02, 0);
+  // The domed lecture hall behind the court, and small domes on the cells at the corners.
+  f.part(cylinder(0.62, 0.62, 0.22, 8), PAL.stoneDark, 0, h, -d / 2 + 0.5);
+  f.part(dome(0.56), PAL.lead, 0, h + 0.22, -d / 2 + 0.5);
+  for (const x of [-w / 2 + t / 2, w / 2 - t / 2])
+    f.part(dome(0.2, 10), PAL.lead, x, h + 0.08, -d / 2 + t / 2);
+  tackapi(f.sub(0, 0, d / 2 + 0.05), 1.05, 2.0);
+  minaret(f, w / 2 - 0.25, d / 2 - 0.25, 3.1, 0.15);
+}
+
+/** A darüşşifa: a domed hall on a turquoise drum, two side wards, and a walled garden before it. */
+function hospital(f: Frame, front: number, depth: number, id: number): void {
+  const w = front - 0.3;
+  const d = depth - 0.3;
+  const hall = d * 0.66;
+  const z0 = -d / 2 + hall / 2;
+  f.part(box(w, 1.1 + 0.5, hall), PAL.plaster, 0, -0.5, z0);
+  f.part(box(w + 0.08, 0.08, hall + 0.08), PAL.stoneDark, 0, 1.1, z0);
+  f.part(cylinder(0.68, 0.68, 0.32, 12), PAL.turquoise, 0, 1.1, z0);
+  f.part(dome(0.62, 16), PAL.lead, 0, 1.42, z0);
+  for (const x of [-w * 0.34, w * 0.34]) f.part(dome(0.34, 12), PAL.plaster, x, 1.1, z0);
+  tackapi(f.sub(0, 0, z0 + hall / 2 + 0.05), 0.95, 1.8);
+  // Garden wall with a gap for the path, and cypresses for the sick to look at.
+  const gz = d / 2 - 0.04;
+  f.part(box(w / 2 - 0.35, 0.32, 0.07), PAL.stone, -w / 4 - 0.17, 0, gz);
+  f.part(box(w / 2 - 0.35, 0.32, 0.07), PAL.stone, w / 4 + 0.17, 0, gz);
+  for (const x of [-w * 0.34, w * 0.34]) {
+    const h = 0.7 + hash2(id, x > 0 ? 1 : 2, 71) * 0.2;
+    f.part(cylinder(0.03, 0.03, 0.12, 5), PAL.trunk, x, 0, gz - 0.35);
+    f.part(cone(0.13, h, 7), PAL.servi, x, 0.1, gz - 0.35);
+  }
+}
+
+/** An ahi lodge: a domed hall for the brotherhood's gatherings, a guest room and a walled yard. */
+function lodge(f: Frame, front: number, depth: number): void {
+  const w = front - 0.3;
+  const d = depth - 0.3;
+  f.part(box(1.0, 1.0 + 0.5, 1.0), PAL.stone, -w / 2 + 0.55, -0.5, -d / 2 + 0.55);
+  f.part(cylinder(0.46, 0.46, 0.14, 8), PAL.stoneDark, -w / 2 + 0.55, 1.0, -d / 2 + 0.55);
+  f.part(dome(0.42), PAL.lead, -w / 2 + 0.55, 1.14, -d / 2 + 0.55);
+  f.part(arch(0.3, 0.5, 0.03), PAL.door, -w / 2 + 0.55, 0, -d / 2 + 1.06);
+  f.part(box(0.7, 0.7 + 0.5, 0.8), PAL.plaster, w / 2 - 0.4, -0.5, -d / 2 + 0.45);
+  f.part(box(0.76, 0.05, 0.86), PAL.roofs[3], w / 2 - 0.4, 0.7, -d / 2 + 0.45);
+  f.part(box(w, 0.3, 0.07), PAL.stone, 0, 0, d / 2 - 0.04);
+  f.part(arch(0.36, 0.55, 0.08), PAL.stoneLight, 0, 0, d / 2 - 0.08);
+  f.part(cylinder(0.04, 0.05, 0.3, 5), PAL.trunk, w / 2 - 0.35, 0, d / 2 - 0.45);
+  f.part(dome(0.26, 10), PAL.fruit, w / 2 - 0.35, 0.3, d / 2 - 0.45);
 }

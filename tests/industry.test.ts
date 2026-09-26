@@ -1,70 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import balanceJson from '../data/balance.json';
-import konya from '../data/konya.json';
-import type { Balance, BuildingKind } from '../src/sim/balance';
 import { buildBuilding, proposeBuilding, smokeMap, type BuildingProposal } from '../src/sim/buildings';
 import { dateOf } from '../src/sim/calendar';
-import { createCity, type CityState } from '../src/sim/city';
-import type { CityDef } from '../src/sim/city-def';
 import { simulateDays } from '../src/sim/economy';
 import { buildField, proposeField } from '../src/sim/fields';
 import { inspectTile } from '../src/sim/inspect';
 import { buildRoad, planRoad } from '../src/sim/roads';
 import { clearArea } from '../src/sim/zoning';
-
-const def = konya as unknown as CityDef;
-const balance = balanceJson as unknown as Balance;
-const newCity = (): CityState => createCity(def, balance);
-
-const usable = (p: BuildingProposal): boolean => p.problem === undefined;
-
-/** The first spot on the map, scanning from `from` outwards row by row, where `kind` may stand. */
-function siteFor(
-  c: CityState,
-  kind: BuildingKind,
-  near: [number, number] = [0, 0],
-  reach = 99,
-): BuildingProposal {
-  const { grid } = c;
-  const cx = grid.tileOf(near[0]);
-  const cz = grid.tileOf(near[1]);
-  for (let r = 0; r <= reach; r++) {
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || !grid.inBounds(cx + dx, cz + dz)) continue;
-        const p = proposeBuilding(c, kind, cx + dx, cz + dz);
-        if (usable(p)) return p;
-      }
-    }
-  }
-  throw new Error(`no site for ${kind}`);
-}
-
-/** A straight road on open ground east of the walls; returns its first tile. */
-function openRoad(c: CityState, length = 10): { x: number; z: number } {
-  const { grid } = c;
-  for (let wz = -30; wz < 20; wz++) {
-    for (let wx = 30; wx < 70; wx++) {
-      const x = grid.tileOf(wx);
-      const z = grid.tileOf(wz);
-      let clear = true;
-      for (let dz = -4; dz <= 4 && clear; dz++) {
-        for (let dx = -1; dx <= length && clear; dx++) {
-          const i = grid.index(x + dx, z + dz);
-          clear = c.road[i] === 0 && c.field[i] < 0 && c.building[i] < 0 && c.terrain.slope[i] < 0.4;
-        }
-      }
-      if (clear && buildRoad(c, planRoad(c, x, z, x + length - 1, z))) return { x, z };
-    }
-  }
-  throw new Error('no open ground for a road');
-}
+import { balance, def, newCity, openRoad, siteFor, usable } from './helpers';
 
 describe('the city on day one', () => {
   it('has a mill on the stream and a bazaar with bakers, both on roads', () => {
     const c = newCity();
-    const kinds = [...c.buildings.values()].map((b) => b.kind).sort();
-    expect(kinds).toEqual(['arasta', 'degirmen']);
+    const kinds = [...c.buildings.values()].map((b) => b.kind).filter((k) => k !== 'cesme');
+    expect(kinds.sort()).toEqual(['arasta', 'degirmen']);
     for (const b of c.buildings.values()) {
       expect(b.roadAccess).toBe(true);
       for (const i of b.tiles) expect(c.building[i]).toBe(b.id);

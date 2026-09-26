@@ -221,12 +221,80 @@ body {
   display: none;
 }
 
+.ledger .toggles {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+}
+
 .ledger .goods-toggle {
-  justify-self: end;
   font-size: 12px;
   padding: 1px 6px;
-  margin-top: 2px;
   border-color: var(--gold);
+}
+
+.ledger .budget {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--gold);
+  padding-top: 4px;
+  font-size: 12.5px;
+}
+
+.ledger .budget[hidden] {
+  display: none;
+}
+
+.ledger .budget .lines {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger .budget .n {
+  text-align: right;
+}
+
+.ledger .budget .head {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.ledger .budget .total {
+  font-weight: 700;
+  border-top: 1px solid var(--gold);
+  padding-top: 1px;
+}
+
+.ledger .budget .wide {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+}
+
+.ledger .budget .up {
+  color: #2f5a1c;
+}
+
+.ledger .budget .down {
+  color: var(--red);
+}
+
+.ledger .policy {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ledger .policy .label {
+  width: 3.4em;
+}
+
+.ledger .policy .btn {
+  padding: 1px 8px;
+  border-color: var(--gold);
+  font-size: 12px;
 }
 
 .ledger .goods {
@@ -337,8 +405,75 @@ body {
 
 .buildbar {
   max-width: calc(100vw - 60px);
+  flex-direction: column;
+  align-items: center;
+}
+
+.buildbar .tabs,
+.buildbar .items {
+  display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  gap: 4px;
+}
+
+.buildbar .tabs {
+  border-bottom: 1px solid var(--gold);
+  padding-bottom: 3px;
+  width: 100%;
+}
+
+.buildbar .tab {
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
+.buildbar .items .btn[hidden] {
+  display: none;
+}
+
+.buildbar .vakif {
+  padding: 2px 10px;
+  font-size: 12.5px;
+  border-color: var(--gold);
+}
+
+.buildbar .vakif[hidden] {
+  display: none;
+}
+
+.buildbar .vakif:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.layerbar {
+  position: absolute;
+  right: 12px;
+  bottom: 84px;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 5px;
+}
+
+.layerbar[hidden] {
+  display: none;
+}
+
+.layerbar .btn {
+  padding: 3px 12px;
+  font-size: 13px;
+  justify-content: flex-start;
+}
+
+.toolbar .btn.open {
+  border-color: var(--gold);
+}
+
+.good {
+  color: #2f5a1c;
+  font-weight: 600;
 }
 
 .buildbar .btn {
@@ -586,12 +721,20 @@ body {
   .cropbar {
     bottom: 136px;
   }
-  .buildbar .btn {
+  .buildbar .items .btn {
     max-width: 112px;
     padding: 3px 6px;
   }
-  .buildbar .btn small:last-child {
+  .buildbar .items .btn small:last-child {
     display: none;
+  }
+  .layerbar {
+    right: 8px;
+    bottom: 140px;
+  }
+  .layerbar .btn {
+    padding: 2px 8px;
+    font-size: 12px;
   }
   .ledger .goods-toggle {
     font-size: 11px;

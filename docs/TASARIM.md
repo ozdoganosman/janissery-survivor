@@ -85,7 +85,7 @@ Konut arsası ─► ev ─► nüfus ─► işgücü ─► tarlalar (önce), 
 - **Başlangıç:** şehir yol boylarında hazır tarlalarla ve bir yıla yakın zahireyle gelir.
   Hiçbir şey yapılmazsa topraklar yorulur ve üçüncü yıl ambar boşalmaya başlar; oyuncu
   nadas düzeni kurmalı ve yeni tarla açmalıdır.
-- **Arklar** bu aşamada yok; su yolu ile birlikte 4. aşamaya kaldı.
+- **Sulama** 4. aşamada su dolabıyla geldi: dolabın çevresindeki tarlalar daha çok verir.
 
 ### İmalathaneler
 
@@ -157,6 +157,51 @@ kalıcı olarak vakfa gider).
 - Gelir: ev vergisi, çarşı vergisi, devlet ürününün esnafa satışı, kervansaray gümrüğü.
 - Gider: bakım, garnizon, sultana pay; 1243'ten sonra İlhanlı vergisi.
 
+### Hizmetler ve bütçe (4. aşamada kurulan)
+
+Sayılar `data/balance.json` dosyasında.
+
+- **Kamu yapıları** Yapı aracının Hizmet sekmesinden kurulur. Her birinin bir **etki
+  alanı** (yarıçap) ve aylık **bakım gideri** var; çalışmaları için yola bağlı olmaları ve
+  işçi bulmaları gerekir.
+
+  | Yapı         | Hizmet   | Ne işe yarar                                             |
+  | ------------ | -------- | -------------------------------------------------------- |
+  | Çeşme        | Su       | Evin iki kat olabilmesi için gerekir                     |
+  | Mescit       | İbadet   | Evin iki kat olabilmesi için gerekir                     |
+  | Hamam        | Temizlik | Konak için gerekir                                       |
+  | Medrese      | Eğitim   | Konak için gerekir (ya da darüşşifa)                     |
+  | Darüşşifa    | Sağlık   | Konak için gerekir (ya da medrese)                       |
+  | Ahi zaviyesi | —        | Çevresindeki arastaların esnafı aynı girdiden çok üretir |
+  | Su dolabı    | Sulama   | Suya bitişik kurulur; çevresindeki tarlalar sulanır      |
+
+- Şehrin anıt yapıları da hizmet verir: Alaeddin Camii bütün sur içine, mescitler kendi
+  mahallesine ibadet; Çifte Hamam çevresine temizlik. Konya sur içinde çeşmelerle başlar.
+- **Konut düzeyleri:** ev (1 hane), iki katlı ev (2 hane), konak (3 hane, daha çok vergi
+  öder).
+  - İki kat için su ve ibadet gerekir.
+  - Konak için bunlara ek olarak temizlik, eğitim ya da sağlık, yüksek refah ve dumansız
+    hava gerekir.
+  - Hizmeti ve refahı yeten evler zamanla bir kat çıkar; yetmeyen evler bir kat
+    kaybeder, hanesi göç eder.
+- **Bütçe** her ayın başında kapanır:
+  - Gelir: hane vergisi, esnafa satış, çarşı vergisi.
+  - Gider: yapıların bakımı, vakıf payları, sultana pay (gelirin bir payı).
+- **Vergi oranı:** Hafif, orta ya da ağır. Ağır vergi hazineyi doldurur ama konut
+  talebini düşürür; hafif vergi göçmen çeker.
+- **Narh:** Muhtesib ekmek ve kumaşa fiyat tavanı koyar. Halkın refahı artar; çarşı
+  vergisi düşer, esnaf yeni dükkân açmakta daha isteksiz olur.
+- **Borç:** Hazine eksiye düşerse kamu yapılarının görevlileri maaş alamaz, hizmet durur.
+  Yeni yapı kurulamaz.
+- **Vakıf:** Bir kamu yapısı, hazır bir eşrafa vakıf olarak yaptırılabilir. Hazineden
+  para çıkmaz; bakımını vakıf öder ve hazine borçta olsa da çalışır. Karşılığında vakıf,
+  yapının değerinin bir payını her ay kalıcı olarak alır. Şehirde vakıf yaptıracak eşraf
+  sayısı nüfusla ve konaklarla artar.
+- **Bilgi katmanları:** Verimlilik, her hizmetin kapsamı, sulama, duman ve konut düzeyi.
+  Konut katmanı, hizmeti yetmediği için küçülecek evleri kırmızıyla gösterir.
+- **Sonraya kalanlar:** İmaret ve subaşı karakolu (5. aşamada kıtlık ve yangınla
+  birlikte), garnizon gideri.
+
 ### Olaylar
 
 Yangın (ahşapta yayılır, çeşme yakınında az zarar), salgın, kıtlık, deprem, Mevlana'nın
@@ -215,6 +260,6 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
 | 1   | **Zemin:** arazi, verimlilik haritası, Konya'nın mevcut çekirdeği, yollar, kamera, zaman, minyatür görüntü | ✅    |
 | 2   | **Konut ve tarım:** konut imarı, nüfus, tarla çizme, hasat, ambar — ilk oynanabilir döngü                  | ✅    |
 | 3   | **Üretim ve çarşı:** imalathaneler, çarşılar, esnaf, üretim zincirleri                                     | ✅    |
-| 4   | **Hizmetler ve bütçe:** kamu yapıları, etki alanları, bilgi katmanları, vergi, vakıf                       |       |
+| 4   | **Hizmetler ve bütçe:** kamu yapıları, etki alanları, bilgi katmanları, vergi, vakıf                       | ✅    |
 | 5   | **Olaylar ve savunma:** yangın, salgın, kıtlık, Moğol elçileri, sur, garnizon                              |       |
 | 6   | **Cila:** mevsim görünümleri, ses, kayıt/yükleme, telefon                                                  |       |

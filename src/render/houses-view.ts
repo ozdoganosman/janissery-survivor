@@ -26,6 +26,14 @@ export class HousesView {
   }
 
   /** Rebuilds when houses changed, or when roads changed (houses turn to face them). */
+  /** Colour for each house while an information layer is shown, or null for its own. */
+  private tint: ((i: number) => string | null) | null = null;
+
+  setTint(tint: ((i: number) => string | null) | null): void {
+    this.tint = tint;
+    this.sync(true);
+  }
+
   sync(force = false): boolean {
     const rev = this.city.revision.houses * 100003 + this.city.revision.roads;
     if (!force && rev === this.revision) return false;
@@ -44,15 +52,18 @@ export class HousesView {
     const roofs: Part[] = [];
     const openings: Part[] = [];
     for (let i = 0; i < house.length; i++) {
-      const storeys = house[i];
-      if (storeys === 0) continue;
+      const level = house[i];
+      if (level === 0) continue;
+      // A konak is two storeys, broader, with a timber bay over the street.
+      const konak = level === 3;
+      const storeys = konak ? 2 : level;
       const tx = i % grid.size;
       const tz = Math.floor(i / grid.size);
       const h0 = hash2(tx, tz, 1);
       const h1 = hash2(tx, tz, 2);
       const h2 = hash2(tx, tz, 3);
-      const w = 0.62 + 0.22 * h0;
-      const d = 0.6 + 0.22 * h1;
+      const w = konak ? 0.84 + 0.08 * h0 : 0.62 + 0.22 * h0;
+      const d = konak ? 0.8 + 0.1 * h1 : 0.6 + 0.22 * h1;
       const x = grid.centre(tx) + (h2 - 0.5) * (1 - w) * 0.8;
       const z = grid.centre(tz) + (h1 - 0.5) * (1 - d) * 0.8;
 
@@ -78,11 +89,19 @@ export class HousesView {
         base = Math.min(base, sampleHeight(terrain, cx, cz));
       }
       const wallH = storeys * STOREY + 0.06;
-      const color = PAL.houses[Math.floor(hash2(tx, tz, 4) * PAL.houses.length)];
-      const roof = PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
+      const tinted = this.tint?.(i) ?? null;
+      const color = tinted ?? PAL.houses[Math.floor(hash2(tx, tz, 4) * PAL.houses.length)];
+      const roof = tinted ?? PAL.roofs[Math.floor(hash2(tx, tz, 5) * PAL.roofs.length)];
       const frame = new Frame(x, base, z, rot);
       bodies.push(frame.part(0, -0.3, 0, w, wallH + 0.3, d, color));
-      roofs.push(frame.part(0, wallH, 0, w + 0.06, 0.05, d + 0.06, roof));
+      roofs.push(frame.part(0, wallH, 0, w + (konak ? 0.16 : 0.06), 0.05, d + (konak ? 0.16 : 0.06), roof));
+      if (konak) {
+        const bayW = w * 0.55;
+        bodies.push(frame.part(0, STOREY + 0.04, d / 2 + 0.07, bayW, STOREY * 0.86, 0.14, PAL.timber));
+        for (const k of [-1, 0, 1]) {
+          openings.push(frame.part(k * bayW * 0.3, STOREY + 0.15, d / 2 + 0.145, 0.08, 0.12, 0.02, PAL.door));
+        }
+      }
       if (hash2(tx, tz, 6) < 0.22) {
         // A small room on the roof, reached by an outside stair: a common Konya silhouette.
         const rw = w * 0.45;

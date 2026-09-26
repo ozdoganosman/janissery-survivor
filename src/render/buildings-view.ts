@@ -174,7 +174,7 @@ function faceNearestRoad(city: CityState, l: Landmark): number {
  * A Seljuk portal: a tall block standing proud of the façade, a pale framing arch, a dark
  * niche and two turquoise bands. Faces +z of the frame.
  */
-function tackapi(f: Frame, w: number, h: number): void {
+export function tackapi(f: Frame, w: number, h: number): void {
   f.part(box(w, h + 0.4, 0.4), PAL.stoneLight, 0, -0.4, 0);
   f.part(box(w + 0.1, 0.12, 0.46), PAL.stoneDark, 0, h - 0.06, 0);
   f.part(arch(w * 0.74, h * 0.84, 0.03), PAL.stone, 0, 0, 0.2);
@@ -182,7 +182,7 @@ function tackapi(f: Frame, w: number, h: number): void {
   for (const s of [-1, 1]) f.part(box(0.08, h * 0.9, 0.03), PAL.turquoise, s * w * 0.43, 0, 0.21);
 }
 
-function minaret(f: Frame, x: number, z: number, h: number, r: number): void {
+export function minaret(f: Frame, x: number, z: number, h: number, r: number): void {
   f.part(box(r * 2.6, h * 0.3 + 0.4, r * 2.6), PAL.brick, x, -0.4, z);
   f.part(cylinder(r, r * 1.12, h * 0.7), PAL.brick, x, h * 0.3, z);
   for (const t of [0.55, 0.78]) f.part(cylinder(r * 1.18, r * 1.18, 0.12), PAL.turquoise, x, h * t, z);
@@ -243,28 +243,37 @@ function buildLandmark(city: CityState, l: Landmark, batch: PartBatch): void {
       for (const x of [-0.45, 0.45]) f.part(arch(0.3, 0.6, 0.02), PAL.door, x, 2.05, 0.8);
       break;
     }
-    case 'mescit': {
-      const s = Math.min(l.w, l.d) - 0.6;
-      f.part(box(s, 1.45 + 0.5, s), PAL.stone, 0, -0.5, 0);
-      f.part(cylinder(s * 0.55, s * 0.55, 0.25, 8), PAL.stoneDark, 0, 1.45, 0);
-      f.part(dome(s * 0.46), PAL.lead, 0, 1.7, 0);
-      tackapi(f.sub(0, 0, s / 2 + 0.05), 0.95, 1.7);
-      minaret(f, s / 2 - 0.2, -s / 2 + 0.2, 3.3, 0.17);
+    case 'mescit':
+      drawMescit(f, l.w, l.d);
       break;
-    }
-    case 'hamam': {
-      const w = l.w - 0.5;
-      const d = l.d - 0.5;
-      f.part(box(w, 1.15 + 0.5, d), PAL.plaster, 0, -0.5, 0);
-      for (const [x, r] of [
-        [-w * 0.3, 0.55],
-        [0, 0.7],
-        [w * 0.3, 0.55],
-      ] as const) {
-        f.part(dome(r), PAL.plaster, x, 1.15, -0.1);
-      }
-      f.part(arch(0.45, 0.8, 0.03), PAL.door, 0, 0, d / 2);
+    case 'hamam':
+      drawHamam(f, l.w, l.d);
       break;
-    }
   }
+}
+
+/** A neighbourhood mescit: a domed cube, a portal on the front (+z) and a small minaret. */
+export function drawMescit(f: Frame, w: number, d: number): void {
+  const s = Math.min(w, d) - 0.6;
+  f.part(box(s, 1.45 + 0.5, s), PAL.stone, 0, -0.5, 0);
+  // The dome sits on an octagonal drum set in from the walls.
+  f.part(cylinder(s * 0.44, s * 0.46, 0.25, 8), PAL.stoneDark, 0, 1.45, 0);
+  f.part(dome(s * 0.39), PAL.lead, 0, 1.7, 0);
+  tackapi(f.sub(0, 0, s / 2 + 0.05), 0.95, 1.7);
+  minaret(f, s / 2 - 0.2, -s / 2 + 0.2, 3.3, 0.17);
+}
+
+/** A bath house: a long plastered block under a row of domes, the door on the front. */
+export function drawHamam(f: Frame, w0: number, d0: number): void {
+  const w = w0 - 0.5;
+  const d = d0 - 0.5;
+  f.part(box(w, 1.15 + 0.5, d), PAL.plaster, 0, -0.5, 0);
+  for (const [x, r] of [
+    [-w * 0.3, 0.55],
+    [0, 0.7],
+    [w * 0.3, 0.55],
+  ] as const) {
+    f.part(dome(r), PAL.plaster, x, 1.15, -0.1);
+  }
+  f.part(arch(0.45, 0.8, 0.03), PAL.door, 0, 0, d / 2);
 }

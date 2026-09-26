@@ -10,6 +10,8 @@ import { fertilityTexture, groundTexture, GROUND_TEXTURE_UNITS, waterTexture } f
 export class TerrainView {
   readonly group = new THREE.Group();
   private readonly overlay: THREE.Mesh;
+  private readonly overlayMat: THREE.MeshBasicMaterial;
+  private readonly fertilityTex: THREE.Texture;
   private readonly waterTex: THREE.Texture;
 
   constructor(city: CityState) {
@@ -86,9 +88,10 @@ export class TerrainView {
     setInkClass(ground, INK_CLASS.ground);
     this.group.add(ground);
 
-    // Fertility layer: same surface, lifted a hair, drawn only when asked for.
+    // Information layers: same surface, lifted a hair, drawn only when asked for.
+    this.fertilityTex = fertilityTexture(terrain);
     const overlayMat = new THREE.MeshBasicMaterial({
-      map: fertilityTexture(terrain),
+      map: this.fertilityTex,
       transparent: true,
       depthWrite: false,
       polygonOffset: true,
@@ -103,6 +106,7 @@ export class TerrainView {
       const cz = Math.floor(i / (n + 1));
       ouv.setXY(i, cx / n, cz / n);
     }
+    this.overlayMat = overlayMat;
     this.overlay = new THREE.Mesh(overlayGeom, overlayMat);
     this.overlay.visible = false;
     this.overlay.renderOrder = 2;
@@ -121,12 +125,18 @@ export class TerrainView {
     this.group.add(water);
   }
 
+  /** Lays a one-texel-per-tile layer over the ground, or takes it away. */
+  setOverlay(texture: THREE.Texture | null): void {
+    if (texture !== null) this.overlayMat.map = texture;
+    this.overlay.visible = texture !== null;
+  }
+
   setFertilityVisible(visible: boolean): void {
-    this.overlay.visible = visible;
+    this.setOverlay(visible ? this.fertilityTex : null);
   }
 
   get fertilityVisible(): boolean {
-    return this.overlay.visible;
+    return this.overlay.visible && this.overlayMat.map === this.fertilityTex;
   }
 
   /** Slow drift of the water motifs. */

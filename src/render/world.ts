@@ -6,6 +6,7 @@ import { CameraRig } from './camera-rig';
 import { CursorView } from './cursor-view';
 import { FieldsView } from './fields-view';
 import { HousesView } from './houses-view';
+import { houseTint, layerKey, layerTexture, paintLayer, type Layer } from './layers';
 import { shading } from './materials';
 import { MiniPipeline } from './pipeline';
 import { RoadsView } from './roads-view';
@@ -33,6 +34,9 @@ export class World {
   private readonly zones: ZonesView;
   private readonly works: WorksView;
   private readonly pipeline: MiniPipeline;
+  private layer: Layer | null = null;
+  private layerStamp = '';
+  private readonly layerTex: THREE.DataTexture;
   /** Seconds since the city layers were last compared with the simulation. */
   private sinceSync = Infinity;
   private readonly sun = new THREE.DirectionalLight('#ffffff', Math.PI);
@@ -61,6 +65,7 @@ export class World {
     this.zones = new ZonesView(city);
     this.works = new WorksView(city);
     this.cursor = new CursorView(city);
+    this.layerTex = layerTexture(city.grid.size);
     this.scene.add(
       this.terrain.group,
       this.fields.group,
@@ -80,6 +85,38 @@ export class World {
     this.scene.add(this.sun, this.sun.target);
 
     this.pipeline = new MiniPipeline(renderer, this.scene, this.rig.camera);
+  }
+
+  /** Shows one information layer over the ground, or none. */
+  setLayer(layer: Layer | null): void {
+    this.layer = layer;
+    this.layerStamp = '';
+    if (layer === null) {
+      this.terrain.setOverlay(null);
+      this.houses.setTint(null);
+    } else if (layer === 'verim') {
+      this.terrain.setFertilityVisible(true);
+      this.houses.setTint(null);
+    } else {
+      this.refreshLayer();
+    }
+  }
+
+  get activeLayer(): Layer | null {
+    return this.layer;
+  }
+
+  private refreshLayer(): void {
+    const layer = this.layer;
+    if (layer === null || layer === 'verim') return;
+    const stamp = `${layer}|${layerKey(this.city, layer)}`;
+    if (stamp === this.layerStamp) return;
+    this.layerStamp = stamp;
+    paintLayer(this.city, layer, this.layerTex.image.data as Uint8Array);
+    this.layerTex.needsUpdate = true;
+    this.terrain.setOverlay(this.layerTex);
+    this.houses.setTint(houseTint(this.city, layer));
+    this.shadowDirty = true;
   }
 
   resize(width: number, height: number, pixelRatio: number): void {
@@ -108,6 +145,7 @@ export class World {
         this.works.sync(),
       ];
       changed = results.some((r) => r);
+      this.refreshLayer();
     }
     this.terrain.update(elapsed);
     this.works.update(elapsed);

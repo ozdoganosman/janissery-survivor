@@ -1,7 +1,7 @@
 import { smoothPath, supercoverLine, type Vec2 } from '../core/geom';
 import { valueNoise } from '../core/noise';
 import { createRng, type Rng } from '../core/rng';
-import type { Balance, Good } from './balance';
+import type { Balance, Good, TaxRate } from './balance';
 import { placeStartBuildings, type Building } from './buildings';
 import { createCalendar, type Calendar } from './calendar';
 import { validateCityDef, type CityDef, type LandmarkDef, type LandmarkKind } from './city-def';
@@ -82,6 +82,10 @@ export interface CityState {
   needs: { ekmek: number; kumas: number; alet: number };
   /** Someone went without food today. */
   hungry: boolean;
+  /** The governor's standing orders. */
+  policy: { tax: TaxRate; narh: boolean };
+  /** The treasury closed last month in debt: public staff go unpaid. */
+  unpaid: boolean;
   calendar: Calendar;
   /** State of the simulation's own random stream, so a saved city resumes identically. */
   rngState: number;
@@ -115,8 +119,13 @@ export interface CityStats {
   /** Zoned lots where a house could go up right now. */
   freeLots: number;
   incomeLastMonth: number;
-  /** Where last month's income came from. */
+  /** Where last month's income came from, and where it went. */
   income: { tax: number; sales: number; market: number };
+  expenses: { upkeep: number; vakif: number; tribute: number };
+  /** Income less expenses, last month. */
+  netLastMonth: number;
+  /** Notables ready to endow a vakıf. */
+  founders: number;
   lastHarvest: number;
   lastShearing: number;
 }
@@ -163,6 +172,8 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     flows: { current: emptyFlows(), last: emptyFlows() },
     needs: { ekmek: 0, kumas: 0, alet: 0 },
     hungry: false,
+    policy: { tax: balance.tax.start, narh: false },
+    unpaid: false,
     calendar: createCalendar(def.start),
     rngState: (def.seed * 2654435761) >>> 0,
     stats: {
@@ -181,6 +192,9 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
       freeLots: 0,
       incomeLastMonth: 0,
       income: { tax: 0, sales: 0, market: 0 },
+      expenses: { upkeep: 0, vakif: 0, tribute: 0 },
+      netLastMonth: 0,
+      founders: 0,
       lastHarvest: 0,
       lastShearing: 0,
     },
@@ -196,8 +210,9 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
   layOutsideRoads(city);
   thinRoads(city);
   pruneRoadFragments(city, 4);
-  fillHouses(city, rng);
+  // Fountains and workshops take their places before the houses fill the lots around them.
   placeStartBuildings(city);
+  fillHouses(city, rng);
   seedStartingFields(city, rng);
   updateStats(city);
   estimateNeeds(city);
@@ -533,6 +548,7 @@ function fillHouses(city: CityState, rng: Rng): void {
       const r = distFromTepe(city, x, z);
       if (r < def.housing.innerRadius || r > R - 1.2) continue;
       if (city.road[i] === 1 || city.wall[i] !== WALL_NONE || city.structure[i] >= 0) continue;
+      if (city.building[i] >= 0) continue;
       if (city.terrain.water[i] === 1) continue;
       const d = depth[i];
       const fill = d === 1 ? def.housing.frontFill : d === 2 ? def.housing.backFill : 0;

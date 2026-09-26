@@ -8,6 +8,7 @@ import { distanceFactor, harvestAll, shearAll, sowAll, touchesRoad } from './fie
 import { DIRS4 } from './grid';
 import { notify } from './notices';
 import { closeBooks, consumeDay, esnafMonth, produceDay, prosperity } from './production';
+import { coverage, supportedLevel, vakifFounders } from './services';
 
 export { notify };
 
@@ -71,11 +72,14 @@ export function simulateDay(city: CityState): void {
 
   updateStats(city);
   const s = city.stats;
-  // Tools make the same hands go further in the fields.
+  // Tools make the same hands go further in the fields, and watered fields grow more.
   const tended = s.staffing * (1 + city.balance.tools.yieldBonus * city.needs.alet);
+  const watered = coverage(city).sulama;
+  const irrigation = city.balance.serviceEffects.irrigationYieldBonus;
   for (const f of city.fields.values()) {
     if (f.stage === 'ekili') {
-      f.careSum += f.roadAccess ? tended : 0;
+      const wet = watered[f.tiles[Math.floor(f.tiles.length / 2)]] === 1 ? irrigation * s.staffing : 0;
+      f.careSum += f.roadAccess ? tended + wet : 0;
       f.careDays++;
     } else if (f.kind === 'mera') {
       f.careSum += f.roadAccess ? s.staffing : 0;
@@ -93,35 +97,78 @@ export function simulateDay(city: CityState): void {
 }
 
 function monthStart(city: CityState): void {
-  const b = city.balance;
-  let households = 0;
-  for (let i = 0; i < city.house.length; i++) households += city.house[i];
-  const tax = households * b.tax.perHouseholdPerMonth;
-  city.treasury += tax;
-  const closed = closeBooks(city);
-  city.stats.income = { tax, sales: closed.sales, market: closed.market };
-  city.stats.incomeLastMonth = tax + closed.sales + closed.market;
+  closeBudget(city);
   esnafMonth(city);
-
-  // A prosperous town builds upward: while people still want to come, well-supplied
-  // households add a floor. Nobody builds higher under a foundry's smoke.
-  if (city.stats.demand > 0) {
-    const smoke = smokeMap(city);
-    const chance = b.growth.upgradeChancePerMonth * prosperity(city);
-    let upgraded = 0;
-    for (let i = 0; i < city.house.length; i++) {
-      if (city.house[i] === 1 && smoke[i] === 0 && nextRandom(city) < chance) {
-        city.house[i] = 2;
-        upgraded++;
-      }
-    }
-    if (upgraded > 0) city.revision.houses++;
-  }
-
+  settleHouses(city);
   if (city.granary > 0 && city.stats.foodMonths < 2) {
     const months = Math.max(1, Math.floor(city.stats.foodMonths));
     notify(city, `Ambarda yalnızca ${months} aylık zahire kaldı. Yeni tarlalar açın.`, 'bad');
   }
+}
+
+/**
+ * The month's accounts. Households pay their tax now; the bazaar's takings came in day by
+ * day. Out go upkeep, the vakıfs' shares and the sultan's due. A treasury left in debt
+ * cannot pay public staff next month.
+ */
+function closeBudget(city: CityState): void {
+  const b = city.balance;
+  let taxable = 0;
+  for (let i = 0; i < city.house.length; i++) {
+    const h = city.house[i];
+    taxable += h === 3 ? h * b.tax.konakFactor : h;
+  }
+  const tax = taxable * b.tax.rates[city.policy.tax];
+  let upkeep = 0;
+  let vakif = 0;
+  for (const w of city.buildings.values()) {
+    const def = b.works[w.kind];
+    if (w.vakif !== undefined) vakif += def.cost * b.vakif.share;
+    else upkeep += def.upkeep;
+  }
+  const closed = closeBooks(city);
+  const gross = tax + closed.sales + closed.market;
+  const tribute = gross * b.tax.tributeShare;
+  city.treasury += tax - upkeep - vakif - tribute;
+  city.stats.income = { tax, sales: closed.sales, market: closed.market };
+  city.stats.expenses = { upkeep, vakif, tribute };
+  city.stats.incomeLastMonth = gross;
+  city.stats.netLastMonth = gross - upkeep - vakif - tribute;
+
+  const wasUnpaid = city.unpaid;
+  city.unpaid = city.treasury < 0;
+  if (city.unpaid && !wasUnpaid) {
+    notify(city, 'Hazine borçta! Kamu yapılarının görevlileri maaş alamıyor, hizmet durdu.', 'bad');
+  } else if (!city.unpaid && wasUnpaid) {
+    notify(city, 'Hazine borçtan çıktı; kamu yapıları yeniden hizmette.', 'good');
+  }
+}
+
+/**
+ * Houses follow their services. While people still want to come, a house whose quarter
+ * supports a higher level gains a floor, more often in a prosperous city and never under
+ * a foundry's smoke. A house its services no longer support loses one.
+ */
+function settleHouses(city: CityState): void {
+  const b = city.balance;
+  const smoke = smokeMap(city);
+  const up = city.stats.demand > 0 ? b.growth.upgradeChancePerMonth * prosperity(city) : 0;
+  let changed = false;
+  for (let i = 0; i < city.house.length; i++) {
+    const h = city.house[i];
+    if (h === 0) continue;
+    const level = supportedLevel(city, i);
+    if (h > level) {
+      if (nextRandom(city) < b.housing.downgradeChancePerMonth) {
+        city.house[i] = h - 1;
+        changed = true;
+      }
+    } else if (h < level && smoke[i] === 0 && up > 0 && nextRandom(city) < up) {
+      city.house[i] = h + 1;
+      changed = true;
+    }
+  }
+  if (changed) city.revision.houses++;
 }
 
 interface Cache {
@@ -225,7 +272,13 @@ export function updateStats(city: CityState): void {
       : Math.max(-1, Math.min(1, (foodMonths - dm.comfortMonths) / dm.monthsSpan));
   const demand = Math.max(
     -1,
-    Math.min(1, dm.jobWeight * jobTerm + dm.foodWeight * foodTerm + b.needs.demandBonus * wellBeing),
+    Math.min(
+      1,
+      dm.jobWeight * jobTerm +
+        dm.foodWeight * foodTerm +
+        b.needs.demandBonus * wellBeing +
+        b.tax.demand[city.policy.tax],
+    ),
   );
 
   Object.assign(city.stats, {
@@ -243,6 +296,7 @@ export function updateStats(city: CityState): void {
     foodMonths,
     freeLots,
   });
+  city.stats.founders = vakifFounders(city);
 }
 
 /** Houses a lot can get: zoned, empty, dry, and within reach of a road. */
