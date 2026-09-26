@@ -29,6 +29,8 @@ export interface HudCallbacks {
   onRecruit(kind: UnitKind, count: number): void;
   /** Send home the last company of a kind raised. */
   onDisband(kind: UnitKind): void;
+  /** Make the companies of a kind in the barracks whole again. */
+  onReplenish(kind: UnitKind): void;
   onCloseInfo(): void;
   onSave(): void;
   onLoad(slot: SaveSlot): void;
@@ -671,6 +673,12 @@ export class Hud {
             : `${fmt(k.ready)} hazır · ${k.drilling} tabur talimde`;
       row.appendChild(el('small', k.drilling === 0 ? 'ok' : '', state));
       if (pinned) {
+        if (k.missing > 0) {
+          const fill = el('button', 'btn refill', `+ İkmal ${fmt(k.missing)}`);
+          fill.title = `Kışladaki eksik taburları tamamla: ${fmt(k.missing)} er, ${fmt(k.refill)} akçe`;
+          fill.addEventListener('click', () => this.cb.onReplenish(k.kind));
+          row.appendChild(fill);
+        }
         const home = el('button', 'btn disband', '− Terhis');
         home.title = 'Bir taburu dağıt (en son toplananı): askerler evlerine döner';
         home.addEventListener('click', () => this.cb.onDisband(k.kind));

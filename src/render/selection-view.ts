@@ -20,6 +20,8 @@ const BOUND = '#f8ecc4';
 const DRAWN = '#2f6fd0';
 /** The arrows on the frames of companies on the march. */
 const BOUND_FRONT = '#b8321f';
+/** Raiders the chosen companies are sent against. */
+const FOE = '#d0302a';
 
 /** A front being drawn: its middle, the way the army will face, and how wide it is. */
 export interface Lead {
@@ -44,6 +46,8 @@ export class SelectionView {
   private readonly chosenFront: THREE.Mesh;
   private readonly boundFront: THREE.Mesh;
   private readonly lead: THREE.Mesh;
+  private readonly marked: THREE.Mesh;
+  private readonly markedFront: THREE.Mesh;
   private width = 0.06;
 
   constructor(private readonly city: CityState) {
@@ -53,14 +57,31 @@ export class SelectionView {
     this.chosenFront = bands('#f2c14e', 0.95, VERTS_PER_MARK);
     this.boundFront = bands(BOUND_FRONT, 0.9, VERTS_PER_MARK);
     this.lead = bands(DRAWN, 0.85, VERTS_LEAD, 1);
-    this.group.add(this.chosen, this.bound, this.chosenFront, this.boundFront, this.lead);
+    this.marked = bands(FOE, 0.9, VERTS_PER_FRAME);
+    this.markedFront = bands(FOE, 0.9, VERTS_PER_MARK);
+    this.group.add(
+      this.chosen,
+      this.bound,
+      this.chosenFront,
+      this.boundFront,
+      this.lead,
+      this.marked,
+      this.markedFront,
+    );
   }
 
   /**
    * Draws a band round each footprint in `now`, and round each in `to`; `zoom` sets the
-   * width. With a `lead`, `to` is a front being drawn.
+   * width. With a `lead`, `to` is a front being drawn. `foes` are the raiders the chosen
+   * companies are sent against, framed in red.
    */
-  set(now: Footprint[], to: Footprint[], zoom: number, lead: Lead | null = null): void {
+  set(
+    now: Footprint[],
+    to: Footprint[],
+    zoom: number,
+    lead: Lead | null = null,
+    foes: Footprint[] = [],
+  ): void {
     this.width = 0.04 + zoom * 0.0045;
     const drawing = lead !== null;
     tint(this.bound, drawing ? DRAWN : BOUND, drawing ? 0.9 : 0.6);
@@ -69,6 +90,8 @@ export class SelectionView {
     this.fill(this.bound, to);
     this.mark(this.chosenFront, now);
     this.mark(this.boundFront, to);
+    this.fill(this.marked, foes);
+    this.mark(this.markedFront, foes);
     this.arrow(lead);
   }
 

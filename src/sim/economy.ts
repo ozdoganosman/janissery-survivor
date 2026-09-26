@@ -1,4 +1,5 @@
 import { armyCapacity, armyDay, armyMen, armyPay, disband } from './army';
+import { raidDay } from './war';
 import { buildDay, builders, levelEffects } from './buildings';
 import { expansionDay, growStreets, wallGifts } from './growth';
 import { DAYS_PER_MONTH, DAYS_PER_SECOND } from './calendar';
@@ -34,7 +35,9 @@ export const ORDER_NAMES: Record<OrderState, string> = {
 export function stepTime(city: CityState, realSeconds: number): number {
   const cal = city.calendar;
   if (!Number.isFinite(realSeconds) || realSeconds <= 0) return 0;
-  const total = cal.fraction + realSeconds * DAYS_PER_SECOND[cal.speed];
+  // While a battle is on, the city's days slow down to let it be fought.
+  const pace = city.war !== null ? city.balance.army.war.cityPace : 1;
+  const total = cal.fraction + realSeconds * DAYS_PER_SECOND[cal.speed] * pace;
   const whole = Math.floor(total);
   cal.fraction = total - whole;
   const days = Math.min(whole, MAX_DAYS_PER_STEP);
@@ -56,6 +59,7 @@ export function simulateDays(city: CityState, days: number): void {
 export function simulateDay(city: CityState): void {
   buildDay(city);
   armyDay(city);
+  raidDay(city);
   expansionDay(city);
   if (city.calendar.day % DAYS_PER_MONTH === 0) closeMonth(city);
   updateStats(city);

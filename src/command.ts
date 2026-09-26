@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import {
   ECHELON_LEVELS,
   FORMATION_KINDS,
+  TEST_RAIDS,
   UNIT_KINDS,
   type EchelonLevel,
   type FormationKind,
+  type TestRaid,
   type UnitKind,
 } from './sim/balance';
 import type { Unit } from './sim/army';
@@ -23,6 +25,16 @@ import {
 } from './sim/echelons';
 import { axes, faceOrder, formationOrder, haltOrder, marchOrder, planMarch, returnOrder } from './sim/field';
 import { sampleHeight } from './sim/terrain';
+import {
+  attackOrder,
+  dropAttack,
+  foeAt,
+  foeGroundOf,
+  moraleShare,
+  sendRaid,
+  type Fighter,
+  type FoeState,
+} from './sim/war';
 import type { Cue } from './audio/sound';
 import type { Footprint } from './render/army-view';
 import type { Lead } from './render/selection-view';
@@ -34,6 +46,7 @@ import type {
   FlagKey,
   OrdersPanel,
   OrdersView,
+  WarView,
 } from './ui/orders-panel';
 
 /** A right drag shorter than this (tiles) is a click; the front is redrawn this often (ms). */
@@ -57,6 +70,27 @@ const FLAG_EVERY = 200;
 type FlagLevel = 'tabur' | EchelonLevel;
 const FLAG_LEVELS: readonly FlagLevel[] = ['tabur', ...ECHELON_LEVELS];
 
+/** What a raider tabur is about, in words for its flag. */
+const FOE_DOING: Record<FoeState, string> = {
+  advance: 'ilerliyor',
+  engage: 'saldırıya geçiyor',
+  shoot: 'ok atıyor',
+  kite: 'geri çekilip ok atıyor',
+  fight: 'çarpışıyor',
+  pillage: 'yağmalıyor',
+  withdraw: 'yağmayla çekiliyor',
+  rout: 'bozgunda',
+};
+
+/** What one of our taburs is about in battle, in words for its flag. */
+const OUR_DOING: Record<Fighter['state'], string> = {
+  idle: 'bekliyor',
+  move: 'yürüyor',
+  shoot: 'ok atıyor',
+  fight: 'çarpışıyor',
+  rout: 'bozgunda',
+};
+
 /**
  * The commander: which taburs are chosen, and the orders given to them. Choosing is done
  * on the map (a click on a man picks his tabur, a second click his tugay, a box picks all
@@ -71,6 +105,7 @@ export class Commander {
   private lead: Lead | null = null;
   private previewAt = { time: 0, x: NaN, z: NaN };
   private flagLevel = 0;
+  private foeFlagLevel = 0;
   private flagAt = 0;
   private readonly v = new THREE.Vector3();
 
@@ -120,9 +155,10 @@ export class Commander {
     this.play('click');
   }
 
-  /** A flag on the map was clicked: its tabur, or its echelon. */
+  /** A flag on the map was clicked: its tabur, or its echelon; a raider's is attacked. */
   pickFlag(key: FlagKey, add: boolean): void {
-    if (key.echelon) this.selectEchelon(key.id, add);
+    if (key.foe) this.attack(key.id);
+    else if (key.echelon) this.selectEchelon(key.id, add);
     else this.pick(key.id, add);
   }
 
@@ -217,6 +253,10 @@ export class Commander {
       this.say('Önce tabur seç.', 'info');
       return false;
     }
+    // On a raider: go for it.
+    const foe = foeAt(this.city, x, z, 0.3 + this.world.rig.zoom * 0.012);
+    if (foe !== null) return this.attack(foe.id);
+    dropAttack(this.city, ids);
     const at = ids.map((id) => ({ id, p: this.world.army.anchor(id) }));
     let cx = 0;
     let cz = 0;
@@ -283,6 +323,7 @@ export class Commander {
     this.dropFront();
     const f = this.frontOf(a, b);
     if (f === null) return this.marchTo(a.x, a.z);
+    dropAttack(this.city, f.ids);
     const r = marchOrder(this.city, f.ids, f.x, f.z, f.heading, {
       width: f.width,
       groups: this.groups(f.ids),
@@ -322,7 +363,51 @@ export class Commander {
     return new Map(this.city.army.units.filter((u) => set.has(u.id)).map((u) => [u.id, u.tugay ?? -u.id]));
   }
 
+  /** Sends the chosen companies against a raider tabur. */
+  attack(foe: number): boolean {
+    const ids = this.chosen();
+    if (ids.length === 0) {
+      this.say('Önce tabur seç.', 'info');
+      return false;
+    }
+    const n = attackOrder(this.city, ids, foe);
+    if (n === 0) {
+      this.say('Bu taburlar saldıramaz.', 'info');
+      return false;
+    }
+    this.play('click');
+    return true;
+  }
+
+  /** Sends a raid to try the army against: small, middling or large. */
+  raid(size: TestRaid): void {
+    const kinds = this.city.balance.army.war.raids.kinds;
+    const kind = Math.floor(Math.random() * kinds.length);
+    const [lo, hi] = kinds[kind].from;
+    const r = sendRaid(this.city, this.city.balance.army.war.raids.tests[size], {
+      kind,
+      bearing: lo + (hi - lo) * Math.random(),
+      trial: true,
+    });
+    if (typeof r === 'string') this.say(r, 'info');
+    else this.play('click');
+  }
+
+  /** Brings the camera to the raiders. */
+  showRaid(): void {
+    const war = this.city.war;
+    if (war === null || war.foes.length === 0) return;
+    let x = 0;
+    let z = 0;
+    for (const f of war.foes) {
+      x += f.x;
+      z += f.z;
+    }
+    this.world.rig.setView(x / war.foes.length, z / war.foes.length, 26);
+  }
+
   home(): number {
+    dropAttack(this.city, this.chosen());
     const n = returnOrder(this.city, this.chosen());
     if (n > 0) this.play('click');
     return n;
@@ -330,6 +415,7 @@ export class Commander {
 
   /** Stops the chosen companies where they are now. */
   halt(): number {
+    dropAttack(this.city, this.chosen());
     const where = new Map<number, { x: number; z: number; heading: number }>();
     for (const id of this.chosen()) {
       if (this.world.army.destination(id) === null) continue;
@@ -386,6 +472,12 @@ export class Commander {
       case 'form':
         this.form(cmd.level);
         break;
+      case 'raid':
+        this.raid(cmd.size);
+        break;
+      case 'showRaid':
+        this.showRaid();
+        break;
       case 'clear':
         this.clear();
         break;
@@ -409,16 +501,109 @@ export class Commander {
       if (d !== null) to.push(d);
     }
     const drawing = this.preview.length > 0;
+    // The raiders the chosen are sent against, framed in red.
+    const war = this.city.war;
+    const marked: Footprint[] = [];
+    if (war !== null) {
+      const sent = new Set<number>();
+      for (const id of this.selection) {
+        const order = (war.fighters[id] as Fighter | undefined)?.order;
+        if (order !== null && order !== undefined) sent.add(order.foe);
+      }
+      for (const foe of war.foes) {
+        if (!sent.has(foe.id)) continue;
+        const g = foeGroundOf(this.city, foe);
+        marked.push({ x: g.x, z: g.z, heading: g.heading, w: g.w + 0.24, d: g.d + 0.24 });
+      }
+    }
     this.world.selection.set(
       now,
       drawing ? this.preview : to,
       this.world.rig.zoom,
       drawing ? this.lead : null,
+      marked,
     );
 
-    // Flags over the taburs out of the barracks, or on their way, or over their echelons.
-    this.panel.placeCompanies(this.flags(units), true);
+    // Flags over the taburs out of the barracks, or on their way, or over their echelons;
+    // and over the raiders.
+    this.panel.placeCompanies(unstack([...this.flags(units), ...this.foeFlags()]), true);
     this.panel.show(commanding ? this.view(touch) : null);
+    this.panel.showWar(this.warView());
+  }
+
+  /** The raid, as the banner over the map tells it. */
+  private warView(): WarView | null {
+    const war = this.city.war;
+    if (war === null) return null;
+    return {
+      name: war.name,
+      people: war.people,
+      gate: war.gate,
+      foes: war.foes.length,
+      men: war.foes.reduce((s, f) => s + f.men, 0),
+      killed: war.killed,
+      lost: war.lost,
+      pillaging: war.foes.some((f) => f.state === 'pillage'),
+      trial: war.trial,
+    };
+  }
+
+  /** A flag over each raider tabur, or one over the whole raid where they would crowd. */
+  private foeFlags(): CompanyPlace[] {
+    const war = this.city.war;
+    if (war === null || war.foes.length === 0) return [];
+    const defs = this.city.balance.army.war.enemies;
+    const each = (): CompanyPlace[] => {
+      const out: CompanyPlace[] = [];
+      for (const foe of war.foes) {
+        const p = this.screenAt(foe.x, foe.z, FLAG_HEIGHT);
+        if (p === null) continue;
+        const def = defs[foe.kind];
+        out.push({
+          key: { echelon: false, foe: true, id: foe.id },
+          x: p.x,
+          y: p.y,
+          kind: foe.kind,
+          level: 'tabur',
+          short: '',
+          label: `${foe.men}`,
+          title: `${def.name} · ${foe.men} er · ${FOE_DOING[foe.state]} (sağ tık ya da tıkla: seçili taburlarla saldır)`,
+          selected: 'none',
+          moving: foe.state === 'advance' || foe.state === 'withdraw' || foe.state === 'rout',
+          bar: moraleShare(this.city, foe.morale, def),
+        });
+      }
+      return out;
+    };
+    const places = each();
+    if (this.foeFlagLevel === 0 && crowded(places, 1)) this.foeFlagLevel = 1;
+    else if (this.foeFlagLevel === 1 && !crowded(places, 1.3)) this.foeFlagLevel = 0;
+    if (this.foeFlagLevel === 0) return places;
+    // One flag over the middle of the raid.
+    let x = 0;
+    let z = 0;
+    for (const f of war.foes) {
+      x += f.x;
+      z += f.z;
+    }
+    const p = this.screenAt(x / war.foes.length, z / war.foes.length, FLAG_HEIGHT * 1.8);
+    if (p === null) return [];
+    const men = war.foes.reduce((s, f) => s + f.men, 0);
+    const first = war.foes[0];
+    return [
+      {
+        key: { echelon: false, foe: true, id: first.id },
+        x: p.x,
+        y: p.y,
+        kind: first.kind,
+        level: 'ordu',
+        short: war.people,
+        label: fmt(men),
+        title: `${war.name} · ${war.foes.length} tabur, ${fmt(men)} er`,
+        selected: 'none',
+        moving: false,
+      },
+    ];
   }
 
   /**
@@ -445,7 +630,7 @@ export class Commander {
       while (level > 0 && !crowded(at(level - 1), 1.3)) level--;
       this.flagLevel = level;
     }
-    return unstack(at(this.flagLevel));
+    return at(this.flagLevel);
   }
 
   private flagsAt(
@@ -458,6 +643,7 @@ export class Commander {
       for (const { u, x, z, moving } of out) {
         const p = this.screenAt(x, z, FLAG_HEIGHT);
         if (p === null) continue;
+        const fighter = this.city.war?.fighters[u.id];
         places.push({
           key: { echelon: false, id: u.id },
           x: p.x,
@@ -466,9 +652,16 @@ export class Commander {
           level: 'tabur',
           short: '',
           label: `${u.men}`,
-          title: `${defs[u.kind].name} taburu · ${u.men} er${moving ? ' · yürüyüşte' : ''}`,
+          title:
+            `${defs[u.kind].name} taburu · ${u.men} er` +
+            (fighter !== undefined
+              ? ` · ${OUR_DOING[fighter.state]} · moral %${Math.round(moraleShare(this.city, fighter.morale, defs[u.kind]) * 100)}`
+              : moving
+                ? ' · yürüyüşte'
+                : ''),
           selected: this.selection.has(u.id) ? 'all' : 'none',
           moving,
+          ...(fighter !== undefined ? { bar: moraleShare(this.city, fighter.morale, defs[u.kind]) } : {}),
         });
       }
       return places;
@@ -549,6 +742,8 @@ export class Commander {
         return { level, name: d.name, hint: d.hint, problem: formProblem(this.city, level, ids) };
       }),
       tree: this.tree(),
+      raid: this.city.war !== null,
+      raids: TEST_RAIDS.map((size) => ({ size, taburs: this.city.balance.army.war.raids.tests[size] })),
       touch,
     };
   }

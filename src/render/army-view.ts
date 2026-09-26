@@ -3,6 +3,7 @@ import { smoothstep } from '../core/geom';
 import { hash2 } from '../core/rng';
 import { barracksOf, type Unit } from '../sim/army';
 import { UNIT_KINDS, type UnitDef } from '../sim/balance';
+import { BATTLE_PACE } from '../sim/war';
 import type { CityState } from '../sim/city';
 import { axes, companySize, fieldPoint, formationCols, slotOf } from '../sim/field';
 import { findPath } from '../sim/paths';
@@ -21,8 +22,9 @@ import { buildingFrame } from './works-view';
  * simulation; the march itself is scenery, and stops when the game is paused.
  */
 
-/** Walking pace of time at each game speed; paused, the drill holds still. */
-const PACE = [0, 1, 1.6, 2.2];
+/** Seconds the fallen lie on the field after a battle is over, and the most of them kept. */
+const CORPSES_STAY = 60;
+const MOST_CORPSES = 4000;
 
 /**
  * Seconds between redraws of the men at drill or on the march. Men standing at ease are
@@ -98,6 +100,10 @@ interface Company {
   /** Lane of its lap round the ground, for horsemen at drill. */
   lane: number | null;
   rest: Anim;
+  /** Men drawn for it; those beyond the men it has left have fallen. */
+  drawn: number;
+  /** It was fighting or shooting when last drawn. */
+  fighting: boolean;
 }
 
 export class ArmyView {
@@ -122,6 +128,16 @@ export class ArmyView {
   private lastScale = -1;
   private sinceLive = 0;
   private slice = 0;
+  /** What was drawn last: the companies, what they did and whether they moved. */
+  private signature = '';
+  /** Men of the crowd who have fallen, and the fallen of earlier crowds, lying where they fell. */
+  private dead = new Uint8Array(0);
+  private corpses: Soldier[] = [];
+  private corpseCrowd: SoldierCrowd | null = null;
+  /** Seconds since the last battle ended. */
+  private peace = 0;
+  /** Where each archer shooting at a raider aims, per soldier. */
+  private aims: Array<THREE.Vector3 | undefined> = [];
 
   constructor(private readonly city: CityState) {
     this.sync();
@@ -152,23 +168,19 @@ export class ArmyView {
     const now = new Map<number, { xs: Float32Array; zs: Float32Array }>();
     if (this.crowd !== null) {
       for (const co of this.companies) {
-        const xs = new Float32Array(co.unit.men);
-        const zs = new Float32Array(co.unit.men);
-        for (let k = 0; k < co.unit.men; k++) {
+        const men = Math.min(co.unit.men, co.drawn);
+        const xs = new Float32Array(men);
+        const zs = new Float32Array(men);
+        for (let k = 0; k < men; k++) {
           const s = this.crowd.soldiers[co.start + k];
           xs[k] = s.x;
           zs[k] = s.z;
         }
         now.set(co.unit.id, { xs, zs });
       }
-      this.group.remove(this.crowd.group);
-      this.crowd.dispose();
-      this.crowd = null;
     }
-    this.companies = [];
-    this.byId.clear();
-    this.lastScale = -1;
     if (b === undefined || b.level === 0 || c.army.units.length === 0) {
+      this.dropCrowd();
       this.stations.clear();
       this.marches.clear();
       this.lay = null;
@@ -235,8 +247,20 @@ export class ArmyView {
       this.stations.set(u.id, station);
       const drilling = u.field === null && u.drill !== null;
       const rest = restAnim(u, lane >= 0);
-      const co: Company = { unit: u, def, start: 0, station, march, lane: lane >= 0 ? lane : null, rest };
-      entries.push({ co, live: march !== null || lane >= 0 || (drilling && isLive(rest)) });
+      const co: Company = {
+        unit: u,
+        def,
+        start: 0,
+        station,
+        march,
+        lane: lane >= 0 ? lane : null,
+        rest,
+        drawn: u.men,
+        fighting: false,
+      };
+      // In a battle every company out of the barracks may fight at any moment.
+      const war = c.war !== null && u.field !== null;
+      entries.push({ co, live: march !== null || lane >= 0 || (drilling && isLive(rest)) || war });
     }
     for (const id of [...this.stations.keys()]) {
       if (!seen.has(id)) {
@@ -255,6 +279,26 @@ export class ArmyView {
       m.t = -Math.min(wait, MAX_WAIT);
       wait += (m.depth + GATE_ROOM) / pace;
     }
+
+    // The same companies, no larger, doing the same and moving as before: the crowd stays as
+    // it is, and only where they are bound changes.
+    const signature = `${b.id}:${b.level}|${entries.map((e) => `${e.co.unit.id}:${e.co.rest}:${e.live ? 1 : 0}`).join('|')}`;
+    if (
+      this.crowd !== null &&
+      signature === this.signature &&
+      entries.every((e) => e.co.unit.men <= (this.byId.get(e.co.unit.id)?.drawn ?? -1))
+    ) {
+      for (const { co } of entries) {
+        const old = this.byId.get(co.unit.id)!;
+        old.unit = co.unit;
+        old.station = co.station;
+        old.march = co.march;
+      }
+      this.fitSphere();
+      return true;
+    }
+    this.signature = signature;
+    this.dropCrowd();
 
     // The men who move come first: they are redrawn every time.
     entries.sort((p, q) => Number(q.live) - Number(p.live));
@@ -293,6 +337,8 @@ export class ArmyView {
       for (let k = 0; k < co.unit.men; k++) this.laps[co.start + k] = (k / co.unit.men + co.lane * 0.13) % 1;
     }
     this.crowd = new SoldierCrowd(soldiers, live);
+    this.dead = new Uint8Array(soldiers.length);
+    this.aims = [];
     this.group.add(this.crowd.group);
     this.fitSphere();
     this.place(0);
@@ -300,11 +346,56 @@ export class ArmyView {
     return true;
   }
 
+  /**
+   * Takes the crowd down; the men who had fallen in it are laid among the corpses, to lie
+   * on the field until the battle is long over.
+   */
+  private dropCrowd(): void {
+    const crowd = this.crowd;
+    this.lastScale = -1;
+    if (crowd === null) return;
+    let fell = false;
+    for (let i = 0; i < crowd.soldiers.length; i++) {
+      if (this.dead[i] !== 1) continue;
+      const s = crowd.soldiers[i];
+      this.corpses.push({ ...s, anim: 'fall', t: 5, aim: null });
+      fell = true;
+    }
+    if (fell) {
+      if (this.corpses.length > MOST_CORPSES) this.corpses.splice(0, this.corpses.length - MOST_CORPSES);
+      this.layCorpses();
+    }
+    this.group.remove(crowd.group);
+    crowd.dispose();
+    this.crowd = null;
+    this.companies = [];
+    this.byId.clear();
+  }
+
+  /** Draws the fallen again, all lying still. */
+  private layCorpses(): void {
+    if (this.corpseCrowd !== null) {
+      this.group.remove(this.corpseCrowd.group);
+      this.corpseCrowd.dispose();
+      this.corpseCrowd = null;
+    }
+    if (this.corpses.length === 0) return;
+    this.corpseCrowd = new SoldierCrowd(this.corpses, 0);
+    this.group.add(this.corpseCrowd.group);
+    this.corpseCrowd.update(Math.max(1, this.lastScale));
+  }
+
   /** Moves the drill and the marches on and redraws the men, when they are in sight. */
   update(dt: number, zoom: number, camera: THREE.Camera): void {
     const crowd = this.crowd;
-    const pace = PACE[this.city.calendar.speed] ?? 1;
+    const pace = BATTLE_PACE[this.city.calendar.speed];
     const step = Math.min(dt, 0.1) * pace;
+    // The fallen are taken off the field a while after the battle.
+    if (this.city.war !== null) this.peace = 0;
+    else if (this.corpses.length > 0 && (this.peace += dt) > CORPSES_STAY) {
+      this.corpses = [];
+      this.layCorpses();
+    }
     // Marches go on whether or not anyone is looking.
     for (const [id, m] of this.marches) {
       m.t += step;
@@ -315,21 +406,27 @@ export class ArmyView {
       }
     }
     this.group.visible = crowd !== null && zoom < 48;
-    if (crowd === null || !this.group.visible) return;
+    if (crowd === null) return;
     for (const s of crowd.soldiers) s.t += step;
     this.sinceLive += dt;
+    // The men are moved on even out of sight: where they stand is where the battle has them.
+    const moved = pace !== 0 && this.sinceLive >= LIVE_EVERY;
+    if (moved) {
+      this.place(this.sinceLive * pace);
+      this.sinceLive = 0;
+    }
+    if (!this.group.visible) return;
     this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pv);
     if (!this.frustum.intersectsSphere(this.sphere)) return;
     crowd.setDetail(zoom < COARSE_ZOOM ? 0 : zoom < FINE_ZOOM ? 1 : 2);
     const scale = 1 + 0.3 * smoothstep(10, 34, zoom);
     const rescaled = Math.abs(scale - this.lastScale) > 1e-3;
-    if (!rescaled && (pace === 0 || this.sinceLive < LIVE_EVERY)) return;
+    if (!rescaled && !moved) return;
     this.lastScale = scale;
-    this.place(this.sinceLive * pace);
-    this.sinceLive = 0;
     if (rescaled) {
       crowd.update(scale);
+      this.corpseCrowd?.update(scale);
       return;
     }
     // Everyone who moves, and one slice of the men at ease.
@@ -349,12 +446,12 @@ export class ArmyView {
     if (co === undefined || crowd === null) return null;
     let x = 0;
     let z = 0;
-    for (let k = 0; k < co.unit.men; k++) {
+    const n = Math.max(1, Math.min(co.unit.men, co.drawn));
+    for (let k = 0; k < n; k++) {
       const s = crowd.soldiers[co.start + k];
       x += s.x;
       z += s.z;
     }
-    const n = co.unit.men;
     const heading = co.march !== null && !co.march.done ? co.march.heading() : co.station.heading;
     return { x: x / n, z: z / n, heading };
   }
@@ -366,7 +463,7 @@ export class ArmyView {
     let best = reach * reach;
     let found: number | null = null;
     for (const co of this.companies) {
-      for (let k = 0; k < co.unit.men; k++) {
+      for (let k = 0; k < Math.min(co.unit.men, co.drawn); k++) {
         const s = crowd.soldiers[co.start + k];
         const d = (s.x - x) ** 2 + (s.z - z) ** 2;
         if (d < best) {
@@ -389,7 +486,7 @@ export class ArmyView {
     let r1 = -Infinity;
     let f0 = Infinity;
     let f1 = -Infinity;
-    for (let k = 0; k < co.unit.men; k++) {
+    for (let k = 0; k < Math.min(co.unit.men, co.drawn); k++) {
       const s = crowd.soldiers[co.start + k];
       const r = (s.x - at.x) * a.rx + (s.z - at.z) * a.rz;
       const f = (s.x - at.x) * a.fx + (s.z - at.z) * a.fz;
@@ -563,12 +660,49 @@ export class ArmyView {
     const { rot } = this.frame;
     const circuit = this.lay?.circuit;
     const out = { x: 0, z: 0, heading: 0, anim: 'idle' as Anim };
+    const war = this.city.war;
+    const foes = war === null ? null : new Map(war.foes.map((f) => [f.id, f]));
     for (const co of this.companies) {
       if (co.start >= crowd.live) continue;
       const m = co.march;
-      for (let k = 0; k < co.unit.men; k++) {
+      const alive = Math.min(co.unit.men, co.drawn);
+      // The fallen drop where they stand, and lie there.
+      for (let k = alive; k < co.drawn; k++) {
+        const i = co.start + k;
+        if (this.dead[i] === 1) continue;
+        this.dead[i] = 1;
+        const s = crowd.soldiers[i];
+        s.anim = 'fall';
+        s.t = 0;
+        s.aim = null;
+      }
+      const f = war?.fighters[co.unit.id];
+      const foe = f?.target != null ? foes?.get(f.target) : undefined;
+      const fighting = m === null && foe !== undefined && (f?.state === 'fight' || f?.state === 'shoot');
+      const shooting = fighting && f?.state === 'shoot';
+      const blow = fighting ? fightAnim(co.def, shooting) : co.rest;
+      for (let k = 0; k < alive; k++) {
         const i = co.start + k;
         const s = crowd.soldiers[i];
+        if (fighting && foe !== undefined) {
+          // At blows or shooting: each man turns to the foe; archers loose into its ranks.
+          s.anim = blow;
+          s.heading = Math.atan2(foe.x - s.x, foe.z - s.z);
+          if (shooting) {
+            const aim = (this.aims[i] ??= new THREE.Vector3());
+            const jx = (hash2(i, 3, 41) - 0.5) * 1.6;
+            const jz = (hash2(i, 5, 43) - 0.5) * 1.6;
+            aim.set(foe.x + jx, this.groundY(foe.x + jx, foe.z + jz) + 0.1, foe.z + jz);
+            s.aim = aim;
+          } else s.aim = null;
+          continue;
+        }
+        if (co.fighting && m === null) {
+          // The fight is over: back to standing in the ranks.
+          s.anim = co.rest;
+          s.heading = co.station.headings[k] ?? s.heading;
+          s.aim = null;
+        }
         if (m !== null) {
           m.at(k, co.station, co.rest, out);
           s.x = out.x;
@@ -587,6 +721,7 @@ export class ArmyView {
           s.heading = dir + rot;
         }
       }
+      co.fighting = fighting;
     }
   }
 
@@ -874,6 +1009,13 @@ function isLive(anim: Anim): boolean {
 
 function isRider(u: Unit): boolean {
   return u.kind === 'atli_okcu' || u.kind === 'gulam';
+}
+
+/** What a man does in battle: looses his bow, or strikes with what he carries. */
+function fightAnim(def: UnitDef, shooting: boolean): Anim {
+  if (def.weapon === 'bow') return def.horse ? 'rideShoot' : shooting ? 'shoot' : 'slash';
+  if (def.weapon === 'lance') return 'couch';
+  return def.weapon === 'spear' ? 'thrust' : 'slash';
 }
 
 /** What a company does where it stands: its drill, or standing at ease. */

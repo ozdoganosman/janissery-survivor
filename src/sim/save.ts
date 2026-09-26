@@ -6,6 +6,8 @@ import { createCity, type CityState } from './city';
 import type { CityDef } from './city-def';
 import { removeField } from './countryside';
 import { organize, type Echelon } from './echelons';
+import { DAYS_PER_MONTH } from './calendar';
+import type { Fighter, Foe, RaidClock, War } from './war';
 import { updateStats, type OrderState } from './economy';
 import type { FieldPost } from './field';
 import { replayGrowth } from './growth';
@@ -81,6 +83,9 @@ export interface SaveGame {
   streetsLaid: number;
   /** The companies under arms. Older saves have none. */
   army?: { units: SavedUnit[]; nextId: number; echelons?: Echelon[]; nextEchelon?: number };
+  /** The raid being fought, and when the next is due. Older saves have neither. */
+  war?: War | null;
+  raids?: RaidClock;
 }
 
 export interface SavedUnit {
@@ -138,6 +143,8 @@ export function saveGame(city: CityState): SaveGame {
       echelons: city.army.echelons.map((e) => ({ ...e })),
       nextEchelon: city.army.nextEchelon,
     },
+    war: city.war === null ? null : saveWar(city.war),
+    raids: { ...city.raids },
   };
 }
 
@@ -223,6 +230,13 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
   );
   // Links to echelons that are not there are dropped, and taburs without one find one.
   organize(city);
+  city.war = restoreWar(city, s.war);
+  const r = s.raids;
+  city.raids =
+    r !== undefined && finite(r.next) && finite(r.count)
+      ? { next: r.next, warned: r.warned === true, count: r.count }
+      : // A save from before raids: the first comes as long after loading as after a start.
+        { next: s.day! + balance.army.war.raids.first * DAYS_PER_MONTH, warned: false, count: 0 };
   city.army.nextId = s.army?.nextId ?? city.army.units.reduce((n, u) => Math.max(n, u.id + 1), 1);
   const keep = new Set(s.fields);
   for (const id of [...city.fields.keys()]) if (!keep.has(id)) removeField(city, id);
@@ -265,5 +279,44 @@ export function replaceCity(city: CityState, next: CityState): void {
     fields: rev.fields + 1,
     walls: rev.walls + 1,
     army: rev.army + 1,
+  };
+}
+
+/** A raid as it is saved: all of it but the raiders' own ways off the map, found again. */
+function saveWar(war: War): War {
+  return {
+    ...war,
+    foes: war.foes.map((f) => {
+      const { way: _way, ...rest } = f;
+      return { ...rest, slot: [f.slot[0], f.slot[1]] };
+    }),
+    fighters: Object.fromEntries(Object.entries(war.fighters).map(([id, f]) => [id, { ...f }])),
+    target: { ...war.target },
+    exit: { ...war.exit },
+    way: war.way.map(([x, z]) => [x, z]),
+    taken: { ...war.taken },
+  };
+}
+
+/** The raid a save was made during, as far as it makes sense; else none. */
+function restoreWar(city: CityState, w: War | null | undefined): War | null {
+  if (w === null || w === undefined || !Array.isArray(w.foes) || !Array.isArray(w.way)) return null;
+  const kinds = city.balance.army.war.enemies;
+  const foes: Foe[] = w.foes
+    .filter(
+      (f) => f.kind in kinds && [f.x, f.z, f.heading, f.men, f.start, f.morale].every(finite) && f.men > 0,
+    )
+    .map((f) => ({ ...f, slot: [f.slot[0], f.slot[1]], target: null }));
+  if (foes.length === 0 || w.way.length < 2) return null;
+  const units = new Set(city.army.units.map((u) => u.id));
+  const fighters: Record<number, Fighter> = {};
+  for (const [id, f] of Object.entries(w.fighters))
+    if (units.has(Number(id))) fighters[Number(id)] = { ...f, target: null };
+  return {
+    ...w,
+    foes,
+    fighters,
+    nextFoe: Math.max(w.nextFoe, ...foes.map((f) => f.id + 1)),
+    way: w.way.map(([x, z]) => [x, z]),
   };
 }

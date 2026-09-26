@@ -188,7 +188,7 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   beş ya da on tabur birden toplanır; panel taburları türe göre sayar (kaç tabur, kaç er,
   kaçı talimde) ve **Terhis** o türün en son toplanan taburunu evine gönderir.
 
-  Savaş değerleri şimdilik yalnız veridedir; savaş katmanı onları kullanacak.
+  Savaş değerleri (yakın dövüş, savunma, ok, hız, moral) savaşta kullanılır; bkz. _Savaş_.
 
 - **Askerler halktan gelir.** Tabur toplanınca o kadar kişi nüfustan çıkar ve kışlaya
   girer; terhis edilince evine döner. Kışla yıkılırsa bütün taburlar terhis olur.
@@ -278,6 +278,65 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   yerine dizilir; sığmazlarsa saflar sıklaşır, yine de sığmazsa meydanın içinde
   kalabalıklaşırlar, kapıdan dışarı taşmazlar. Eski (14×10 kışlalı) kayıtlar yüklenirken
   kışla, yeri elveriyorsa yeni boyuna (26×22) genişletilir.
+
+### Savaş: akınlar ve çarpışma
+
+Şehrin ordusu artık dövüşür. Akıncılar ufuktan gelir; ordu onları karşılar. Savaş gerçek
+zamanlıdır (yürüyüşle aynı hızda), sürerken şehrin günleri yavaşlar (`cityPace`: normal
+hızın yirmide biri), oyun hızlıysa normal hıza iner. Kurallar `src/sim/war.ts`'te, sayılar
+`data/balance.json` → `army.war`'da.
+
+- **Düşmanlar** (tarihe göre): **Moğol atlı okçusu** (hafif atlı okçu; yakına gelen
+  yaya ve mızraklıdan geri çekilip yine ok atar), **Moğol ağır atlısı** (zırhlı mızraklı;
+  hücumu yıkıcı), **Harezmli piyade** (kılıçlı, kalkanlı paralı yaya). Hepsi 100'er erlik
+  taburdur; kendi renkleri ve kara sancaklarıyla çizilir.
+- **Akınlar:** "Moğol akıncıları" (doğu-kuzeydoğudan; üç atlı okçuya bir ağır atlı) ve
+  "Harezmli çapulcular" (doğu-güneydoğudan; üç piyadeye bir atlı okçu). İlk akın oyunun 30. ayında gelir, sonra her 18–30 ayda bir; her akın bir öncekinden %35 büyüktür (ilk 4
+  tabur). Casuslar akını iki ay önceden haber verir. Akıncılar haritanın kenarında
+  toplanır, en yakın dış sur kapısına yürür ve kapının önündeki varoşları yağmalar.
+- **Sur şehri korur:** akıncılar hiçbir sur halkasının içine girmez, kapıdan da geçmez;
+  yağma kapının önündeki varoşlaradır. Yağmalayan her yüz akıncı saniyede hazinenin
+  %0,25'ini ve iki canı götürür; 40 saniye yağmalayıp çekilirler.
+- **Deneme akını:** Ordu komutası panelinde "Deneme akını: Küçük (4) / Orta (8) / Büyük
+  (16)" ordunun sınanması için hemen bir akın gönderir; takvimi etkilemez.
+- **Düşman yapay zekâsı:** akın dizisi yolu en yavaşının adımıyla izler, geride kalanı
+  bekler. 16 karo içinde bizden bir tabur görünce:
+  - atlı okçular menzile (10 karo) girer ve ok atar; yaya ya da mızraklı 5 karodan yakına
+    gelirse geri çekilip yine atar;
+  - yakın dövüşçüler en yakın tabura hücum eder (8 karodan yakında hücum hızıyla);
+  - biriyle göğüs göğüse gelen durur ve ona döner.
+- **Bizim taburlar:** sahadaki her tabur savaşa girer. Okçular menzildeki (yaya 12, atlı
+  10 karo) en yakın düşmana, gönderildikleri düşman menzildeyse ona ok atar. Boşta duran
+  yakın dövüşçüler 6 karodan yakına gelen düşmana kendiliğinden saldırır. **Düşmana sağ
+  tık** (ya da düşman sancağına tık) seçili taburları ona gönderir: yakın dövüşçüler onun
+  yanına varıp çarpışır, okçular menzile girip durur. Yürüyen tabura düşman değerse tabur
+  durup dövüşür, bir süre sonra ona döner. Başka bir emir saldırı emrini kaldırır.
+- **Çarpışma:** her tabur bir bloktur. Ok: saniyede atıcı sayısı × ok değeri × 0,0025 ×
+  uzaklık payı (menzilin sonunda %60) ÷ (1 + savunma × 0,15); kalkanlı yayaya önden gelen
+  okun %60'ı işler. Yakın dövüş: saniyede en çok 30 er × yakın dövüş × 0,009 ÷ (1 + savunma
+  × 0,15). Hücum (değerken koşarak gelmek) ilk 4 saniye atlıda ×2,2, yayada ×1,6; mızrak
+  atlıya ×1,8, atlı önden mızraklı yayaya ÷1,8; yandan ×1,5, arkadan ×2,2; bozguna uğrayana
+  ×2.
+- **Moral:** 40 + 6 × moral değeri (mızraklı 76, gulam 94). Kayıplar (kaybedilen payın
+  1,1 katı), ok altında kalmak (saniyede 0,3), yandan ya da arkadan vurulmak ve hücum
+  karşılamak (−8) morali düşürür; dövüşmeyen ve ok yemeyen tabur saniyede 1,5 toparlanır.
+  Moral 12'ye inince tabur bozulur: akıncı haritanın kenarına kaçar, bizimki kışlaya
+  koşar; yakındaki yoldaşlarının morali −8. Beş erden aza inen tabur yok olur.
+- **Sonuç:** bütün akıncılar düşer ya da kaçarsa savaş biter. Yağma olmadıysa **zafer**:
+  düşen her akıncıdan 10 akçe ganimet. Yağma olduysa götürdükleri bildirilir. Her iki
+  durumda iki tarafın kaybı sayılır.
+- **Kayıp ve ikmal:** ölen askerler geri gelmez; tabur eksik er ile sürer. Kışladaki
+  eksik taburlar kışla panelindeki **İkmal** ile tamamlanır (erin toplama bedeli kadar
+  akçe, ve o kadar kişi halktan).
+- **Görünüm:** akıncılar er er çizilir; kendi kara sancakları var (üst üste binecek kadar
+  sıklaşınca tek bir akın sancağı). Savaşta her sancağın altında moral çubuğu durur.
+  Dövüşen taburun erleri düşmana döner, mızraklılar hamle yapar, kılıçlılar vurur,
+  mızraklı atlılar kargıyı indirir, okçuların okları düşmanın saflarına uçar. Ölen er
+  olduğu yere düşer; ölüler savaştan bir dakika sonra kaldırılır. Seçili taburların
+  gönderildiği düşman kırmızı çerçeveyle gösterilir. Haritanın üstünde savaş bandı akını,
+  kalan düşmanı, iki tarafın kaybını ve yağmayı gösterir; "Göster" kamerayı oraya götürür.
+- **Kayıt:** akın ve savaş durumu (akıncıların yeri, eri, morali, yağma) kayda girer;
+  sonraki akının günü de.
 
 ### Surlar ve sokaklar
 
@@ -445,5 +504,6 @@ kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 | 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi                                                                                                     | ✅    |
 | 8c  | **Ordu komutası:** taburları tek tek ya da kutuyla seçme, sağ tıkla yürütme (düzen bozmadan, sokaklardan, kapıdan; sura ve evlere taşmadan dizilme), dur, dön, düzen, kışlaya dönüş                                                     | ✅    |
 | 8d  | **Kademeler:** taburlar dörderli tugaylara, tugaylar kolordulara, kolordular ordulara kendiliğinden toplanır; ağaçtan ve U ile kademe seçme, seçiliden kademe kurma, iç içe geçen sancaklar, kademe kademe dizilme, dizerken yön okları | ✅    |
+| 8e  | **Savaş:** düşman akınları (Moğol, Harezm), düşman yapay zekâsı, ok ve yakın dövüş, hücum, yan ve arka, moral ve bozgun, yağma, zafer ve ganimet, ikmal, deneme akını, düşmana sağ tıkla saldırı, savaş bandı                           | ✅    |
 | 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                                                                                                                   |       |
 | 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                                                                                                        |       |

@@ -1,5 +1,14 @@
 import { ECHELON_LEVELS, UNIT_KINDS, type LevelDef, type UnitKind } from './balance';
-import { armyByKind, armyCapacity, armyMen, armyPay, levyLimit, recruitOffer, recruitRoom } from './army';
+import {
+  armyByKind,
+  armyCapacity,
+  armyMen,
+  armyPay,
+  levyLimit,
+  recruitOffer,
+  recruitRoom,
+  replenishOffer,
+} from './army';
 import { demolishRefund, kindName, upgradeOffer, type Building, type UpgradeOffer } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
@@ -35,6 +44,9 @@ export interface ArmyPanel {
     drilling: number;
     /** Months until the next company at drill is ready. */
     monthsLeft: number | null;
+    /** Men the companies in the barracks lack, and the akçe to make them whole. */
+    missing: number;
+    refill: number;
   }>;
   offers: Array<{
     kind: UnitKind;
@@ -79,6 +91,8 @@ export function armyPanel(city: CityState): ArmyPanel {
         ready: t.ready,
         drilling: t.drilling,
         monthsLeft: t.soonest === null ? null : Math.ceil(t.soonest / DAYS_PER_MONTH),
+        missing: replenishOffer(city, kind).men,
+        refill: replenishOffer(city, kind).cost,
       };
     }),
     offers: UNIT_KINDS.map((kind) => {

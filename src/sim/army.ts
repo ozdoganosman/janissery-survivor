@@ -155,6 +155,54 @@ export function disband(city: CityState, id: number, why?: string): boolean {
   return true;
 }
 
+/**
+ * A company broken in battle: struck off, and the few left alive go home. False when there
+ * is none.
+ */
+export function destroyUnit(city: CityState, id: number, why: string): boolean {
+  const k = city.army.units.findIndex((u) => u.id === id);
+  if (k < 0) return false;
+  const [u] = city.army.units.splice(k, 1);
+  city.population += u.men;
+  city.revision.army++;
+  organize(city);
+  notify(city, why, 'bad');
+  return true;
+}
+
+/** Men the companies of a kind in the barracks lack, and the akçe to make them whole. */
+export function replenishOffer(city: CityState, kind: UnitKind): { men: number; cost: number } {
+  const def = city.balance.army.units[kind];
+  let men = 0;
+  for (const u of city.army.units) {
+    if (u.kind === kind && u.field === null) men += Math.max(0, def.men - u.men);
+  }
+  return { men, cost: Math.ceil((men * def.cost) / def.men) };
+}
+
+/**
+ * Makes the companies of a kind in the barracks whole again from the townspeople, as far as
+ * the akçe, the room and the people allow. Returns the men taken on.
+ */
+export function replenish(city: CityState, kind: UnitKind): number {
+  const def = city.balance.army.units[kind];
+  const each = def.cost / def.men;
+  let room = Math.min(armyCapacity(city) - armyMen(city), levyLimit(city) - armyMen(city));
+  let taken = 0;
+  for (const u of city.army.units) {
+    if (u.kind !== kind || u.field !== null) continue;
+    const want = Math.min(def.men - u.men, Math.floor(room), Math.floor(city.treasury / each));
+    if (want <= 0) continue;
+    u.men += want;
+    room -= want;
+    taken += want;
+    city.treasury -= want * each;
+    city.population -= want;
+  }
+  if (taken > 0) city.revision.army++;
+  return taken;
+}
+
 /** Sends home the company of `kind` raised last, the least drilled. False when there is none. */
 export function disbandKind(city: CityState, kind: UnitKind): boolean {
   for (let k = city.army.units.length - 1; k >= 0; k--) {

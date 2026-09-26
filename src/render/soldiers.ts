@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { UNIT_KINDS, type UnitKind } from '../sim/balance';
+import { ENEMY_KINDS, UNIT_KINDS, type EnemyKind, type UnitKind } from '../sim/balance';
 import { hash2 } from '../core/rng';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS } from './palette';
@@ -35,9 +35,13 @@ export const ANIMS = [
 
 export type Anim = (typeof ANIMS)[number];
 
+/** Whose men a soldier is drawn as: one of the city's kinds, or a raider's. */
+export type LookKind = UnitKind | EnemyKind;
+const LOOK_KINDS: readonly LookKind[] = [...UNIT_KINDS, ...ENEMY_KINDS];
+
 /** One man, and his horse if he has one. Positions are world coordinates. */
 export interface Soldier {
-  kind: UnitKind;
+  kind: LookKind;
   x: number;
   y: number;
   z: number;
@@ -201,9 +205,12 @@ interface Look {
   legs: string;
   hatColor: string[];
   shieldColor: string[];
+  /** The horse's cloth and the lance's pennant, where they have them. */
+  bardingColor?: string;
+  pennantColor?: string;
 }
 
-const LOOKS: Record<UnitKind, Look> = {
+const LOOKS: Record<LookKind, Look> = {
   mizrakci: {
     horse: false,
     weapon: 'spear',
@@ -255,6 +262,48 @@ const LOOKS: Record<UnitKind, Look> = {
     legs: '#2a2a33',
     hatColor: ['#c9ccd0', '#b9bec4'],
     shieldColor: ['#e0b13a', '#b8322a'],
+  },
+  // The raiders: dark felt and fur, lacquered leather, black pennants.
+  mogol_okcu: {
+    horse: true,
+    weapon: 'bow',
+    hat: 'bork',
+    shield: false,
+    quiver: true,
+    mail: false,
+    barding: false,
+    coat: ['#3b3f5c', '#4a3b2c', '#34303a'],
+    legs: '#241c16',
+    hatColor: ['#5a4632', '#3e3226', '#6b5238'],
+    shieldColor: ['#4a3b2c'],
+  },
+  mogol_agir: {
+    horse: true,
+    weapon: 'lance',
+    hat: 'helmet',
+    shield: false,
+    quiver: false,
+    mail: true,
+    barding: true,
+    coat: ['#2c2c34', '#3a2f2a'],
+    legs: '#1c1a1e',
+    hatColor: ['#5d5f63', '#4d4f54'],
+    shieldColor: ['#2c2c34'],
+    bardingColor: '#3a2a24',
+    pennantColor: '#1e1e22',
+  },
+  harezm_yaya: {
+    horse: false,
+    weapon: 'sword',
+    hat: 'helmet',
+    shield: true,
+    quiver: false,
+    mail: false,
+    barding: false,
+    coat: ['#7a6440', '#6b5a3a', '#86704a'],
+    legs: '#3a2e22',
+    hatColor: ['#8f8a84', '#7d7872'],
+    shieldColor: ['#6b4a2a', '#8a3a2a', '#4a4a4a'],
   },
 };
 
@@ -612,7 +661,7 @@ export class SoldierCrowd {
     setInkClass(this.group, INK_CLASS.building);
     const geoms = partGeometries();
     const coarse = partGeometries(true);
-    const rigByKind = new Map<UnitKind, Rig>();
+    const rigByKind = new Map<LookKind, Rig>();
     const counts: number[] = [];
     const partNames: PartName[] = [];
     soldiers.forEach((s, i) => {
@@ -679,9 +728,9 @@ export class SoldierCrowd {
                           ? '#2e2218'
                           : horse
                         : part === 'barding'
-                          ? '#a8261c'
+                          ? (look.bardingColor ?? '#a8261c')
                           : part === 'pennant'
-                            ? '#b8322a'
+                            ? (look.pennantColor ?? '#b8322a')
                             : part === 'quiver'
                               ? QUIVER
                               : part === 'spear' || part === 'lance' || part === 'bow' || part === 'arrow'
@@ -775,10 +824,10 @@ export class SoldierCrowd {
   }
 
   /** The pose of a rig at a time, shared by everyone of that kind at that moment. */
-  private poseOf(rig: Rig, kind: UnitKind, anim: Anim, t: number): Float32Array {
+  private poseOf(rig: Rig, kind: LookKind, anim: Anim, t: number): Float32Array {
     const step = anim === 'idle' || anim === 'stand' ? EASE_STEP : POSE_STEP;
     const q = Math.round(t / step);
-    const key = (q * ANIMS.length + ANIMS.indexOf(anim)) * UNIT_KINDS.length + UNIT_KINDS.indexOf(kind);
+    const key = (q * ANIMS.length + ANIMS.indexOf(anim)) * LOOK_KINDS.length + LOOK_KINDS.indexOf(kind);
     let out = this.cache.get(key);
     if (out === undefined) {
       out = new Float32Array(rig.parts.length * 16 + 1);
@@ -942,6 +991,6 @@ export class SoldierCrowd {
 }
 
 /** Parts a man of each company is drawn with, for the smoke test and for tuning. */
-export function partCount(kind: UnitKind): number {
+export function partCount(kind: LookKind): number {
   return partsOf(LOOKS[kind]).reduce((n, [, k]) => n + k, 0);
 }

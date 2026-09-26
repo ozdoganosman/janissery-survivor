@@ -3,7 +3,7 @@ import { valueNoise } from '../core/noise';
 import { createRng, type Rng } from '../core/rng';
 import type { Balance, TaxRate } from './balance';
 import { placeStartBuildings, type Building } from './buildings';
-import { createCalendar, type Calendar } from './calendar';
+import { createCalendar, DAYS_PER_MONTH, type Calendar } from './calendar';
 import { validateCityDef, type CityDef, type LandmarkDef, type LandmarkKind } from './city-def';
 import { seedCountryside, type Field } from './countryside';
 import { orderState, updateStats, type OrderState } from './economy';
@@ -13,6 +13,7 @@ import { layLots, syncHouses } from './housing';
 import { generateTerrain, type Terrain } from './terrain';
 import { circleRing, type WallRing } from './walls';
 import { createArmy, type Army } from './army';
+import type { RaidClock, War } from './war';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
 
@@ -85,6 +86,9 @@ export interface CityState {
   streetsLaid: number;
   /** The soldiers the barracks has raised. */
   army: Army;
+  /** The raid being fought, if one is on, and when the next is due. */
+  war: War | null;
+  raids: RaidClock;
   balance: Balance;
   /** Akçe in the treasury. */
   treasury: number;
@@ -186,6 +190,8 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     rings: [circleRing('Sur', def.tepe.x, def.tepe.z, def.walls.radius, def.walls.height)],
     expansion: { built: 0, work: null },
     army: createArmy(),
+    war: null,
+    raids: { next: 0, warned: false, count: 0 },
     streetsLaid: 0,
     balance,
     treasury: balance.start.treasury,
@@ -227,6 +233,7 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
   updateStats(city);
   syncHouses(city);
   city.announced = { level: city.stats.level, order: orderState(city) };
+  city.raids.next = city.calendar.day + balance.army.war.raids.first * DAYS_PER_MONTH;
   return city;
 }
 

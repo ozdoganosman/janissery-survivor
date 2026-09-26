@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BuildingKind, TaxRate, UnitKind } from './sim/balance';
-import { disbandKind, recruitMany } from './sim/army';
+import { disbandKind, recruitMany, replenish } from './sim/army';
+import { BATTLE_PACE, warStep, type Whereabouts } from './sim/war';
 import {
   buildBuilding,
   builders,
@@ -123,6 +124,7 @@ export class Game {
       onDemolish: (id) => this.demolish(id),
       onRecruit: (kind, count) => this.recruit(kind, count),
       onDisband: (kind) => this.disband(kind),
+      onReplenish: (kind) => this.replenish(kind),
       onCloseInfo: () => this.select(null),
       onSave: () => this.save('kayit'),
       onLoad: (slot) => this.load(slot),
@@ -179,6 +181,7 @@ export class Game {
     this.elapsed += dt;
     this.applyKeys(dt);
     const days = stepTime(this.city, dt);
+    this.battle(dt);
     const month = Math.floor(this.city.calendar.day / DAYS_PER_MONTH);
     if (month !== this.month) {
       // A month has closed: the treasury rings, and the game keeps its own save.
@@ -275,6 +278,32 @@ export class Game {
     if (ok) this.sound.play('build');
     this.changed();
     return ok;
+  }
+
+  /** Makes the companies of a kind in the barracks whole again. */
+  replenish(kind: UnitKind): boolean {
+    const ok = replenish(this.city, kind) > 0;
+    if (ok) this.sound.play('build');
+    this.changed();
+    return ok;
+  }
+
+  /**
+   * A slice of any battle on: our taburs where the army view has them, the raiders where the
+   * rules move them. When a raid sets out the game slows to its plainest pace.
+   */
+  private battle(dt: number): void {
+    const was = this.city.war !== null;
+    const where = new Map<number, Whereabouts>();
+    const army = this.world.army;
+    for (const u of this.city.army.units) {
+      const moving = army.destination(u.id) !== null;
+      if (u.field === null && !moving) continue;
+      const p = army.anchor(u.id);
+      if (p !== null) where.set(u.id, { x: p.x, z: p.z, heading: p.heading, moving });
+    }
+    warStep(this.city, dt * BATTLE_PACE[this.city.calendar.speed], where);
+    if (!was && this.city.war !== null && this.city.calendar.speed > 1) this.setSpeed(1);
   }
 
   /** Sends home the last company of a kind raised. */

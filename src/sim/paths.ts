@@ -128,11 +128,14 @@ export function reachFrom(city: CityState, x: number, z: number, radius: number)
 /**
  * The way from one point of the map to another, as world points: the start, the turns,
  * the end. Null when there is none (the end is walled in, or across water with no bridge).
+ * Without `gates`, the way does not pass through the city's gates either: raiders keep to
+ * the country outside the walls.
  */
 export function findPath(
   city: CityState,
   from: { x: number; z: number },
   to: { x: number; z: number },
+  opts: { gates?: boolean } = {},
 ): Array<[number, number]> | null {
   const { grid } = city;
   const n = grid.size;
@@ -144,8 +147,13 @@ export function findPath(
   const start = sz * n + sx;
   const goal = tz * n + tx;
   const clear = clearance(city);
+  const gates = opts.gates ?? true;
   const cost = (i: number): number =>
-    i === start || i === goal ? 1 : marchCost(city, i) + crowding(clear, i);
+    i === start || i === goal
+      ? 1
+      : !gates && city.wall[i] !== 0
+        ? Infinity
+        : marchCost(city, i) + crowding(clear, i);
   if (start === goal)
     return [
       [from.x, from.z],

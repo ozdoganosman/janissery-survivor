@@ -487,6 +487,132 @@
         "rank": 0.34,
         "march": 1.6
       }
+    },
+    "war": {
+      "cityPace": 0.05,
+      "enemies": {
+        "mogol_okcu": {
+          "name": "Moğol atlı okçusu",
+          "hint": "Hafif atlı; uzaktan ok yağdırır, yakına gelene geri çekilip yine atar",
+          "men": 100,
+          "horse": true,
+          "weapon": "bow",
+          "melee": 4,
+          "defense": 4,
+          "missile": 7,
+          "speed": 9,
+          "morale": 6,
+          "file": 0.16,
+          "rank": 0.33,
+          "march": 1.8,
+          "formation": "kare"
+        },
+        "mogol_agir": {
+          "name": "Moğol ağır atlısı",
+          "hint": "Zırhlı mızraklı atlı; hücumu yıkıcıdır",
+          "men": 100,
+          "horse": true,
+          "weapon": "lance",
+          "melee": 8,
+          "defense": 8,
+          "missile": 0,
+          "speed": 7,
+          "morale": 8,
+          "file": 0.17,
+          "rank": 0.34,
+          "march": 1.6,
+          "formation": "saf"
+        },
+        "harezm_yaya": {
+          "name": "Harezmli piyade",
+          "hint": "Kılıçlı, kalkanlı paralı yaya",
+          "men": 100,
+          "horse": false,
+          "weapon": "sword",
+          "melee": 6,
+          "defense": 6,
+          "missile": 0,
+          "speed": 3,
+          "morale": 5,
+          "file": 0.125,
+          "rank": 0.14,
+          "march": 1.0,
+          "formation": "saf"
+        }
+      },
+      "raids": {
+        "first": 30,
+        "every": [18, 30],
+        "warn": 2,
+        "base": 4,
+        "grow": 0.35,
+        "kinds": [
+          {
+            "name": "Moğol akıncıları",
+            "people": "Moğollar",
+            "from": [-60, 30],
+            "mix": {
+              "mogol_okcu": 3,
+              "mogol_agir": 1
+            }
+          },
+          {
+            "name": "Harezmli çapulcular",
+            "people": "Harezmliler",
+            "from": [-20, 80],
+            "mix": {
+              "harezm_yaya": 3,
+              "mogol_okcu": 1
+            }
+          }
+        ],
+        "tests": {
+          "kucuk": 4,
+          "orta": 8,
+          "buyuk": 16
+        }
+      },
+      "combat": {
+        "missile": 0.0025,
+        "shield": 0.6,
+        "melee": 0.009,
+        "defense": 0.15,
+        "front": 30,
+        "charge": 2.2,
+        "chargeSeconds": 4,
+        "spearVsHorse": 1.8,
+        "flank": 1.5,
+        "rear": 2.2,
+        "routed": 2,
+        "range": {
+          "foot": 12,
+          "horse": 10
+        },
+        "aware": 16,
+        "guard": 6,
+        "kite": 5,
+        "chargeSpeed": 1.4,
+        "routSpeed": 1.3,
+        "destroyed": 5
+      },
+      "morale": {
+        "base": 40,
+        "perPoint": 6,
+        "rout": 12,
+        "loss": 110,
+        "shot": 0.3,
+        "flank": 3,
+        "charged": 8,
+        "nearbyRout": 8,
+        "recover": 1.5,
+        "rally": 45
+      },
+      "pillage": {
+        "seconds": 40,
+        "treasury": 0.0025,
+        "people": 0.02
+      },
+      "loot": 10
     }
   }
 }

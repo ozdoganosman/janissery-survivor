@@ -1,4 +1,4 @@
-import type { EchelonLevel, FormationKind, UnitKind } from '../sim/balance';
+import type { EchelonLevel, EnemyKind, FormationKind, TestRaid, UnitKind } from '../sim/balance';
 
 /** One row of the chain of command: an echelon, or a tabur under its tugay. */
 export interface EchelonRow {
@@ -40,6 +40,9 @@ export interface OrdersView {
   forms: Array<{ level: EchelonLevel; name: string; hint: string; problem: string | null }>;
   /** The ordus, each with its kolordus, tugays and taburs. */
   tree: EchelonRow[];
+  /** A raid is on; trial raids the player may send when none is. */
+  raid: boolean;
+  raids: Array<{ size: TestRaid; taburs: number }>;
   /** Touch screen: the hints speak of taps. */
   touch: boolean;
 }
@@ -56,11 +59,28 @@ export type ArmyCommand =
   | { kind: 'selectTabur'; id: number; add: boolean }
   | { kind: 'climb' }
   | { kind: 'form'; level: EchelonLevel }
+  | { kind: 'raid'; size: TestRaid }
+  | { kind: 'showRaid' }
   | { kind: 'clear' };
 
-/** What a flag stands for: a tabur, or an echelon. */
+/** The raid on, as the banner over the map tells it. */
+export interface WarView {
+  name: string;
+  people: string;
+  gate: string;
+  /** Raider taburs and men left, their men killed and ours lost. */
+  foes: number;
+  men: number;
+  killed: number;
+  lost: number;
+  pillaging: boolean;
+  trial: boolean;
+}
+
+/** What a flag stands for: a tabur, an echelon, or a raider tabur. */
 export interface FlagKey {
   echelon: boolean;
+  foe?: boolean;
   id: number;
 }
 
@@ -69,7 +89,7 @@ export interface CompanyPlace {
   key: FlagKey;
   x: number;
   y: number;
-  kind: UnitKind | 'karma';
+  kind: UnitKind | EnemyKind | 'karma';
   level: EchelonLevel | 'tabur';
   /** An echelon's number and letters ("3. Tug"); a tabur's flag shows its kind's. */
   short: string;
@@ -78,6 +98,8 @@ export interface CompanyPlace {
   /** Whether its taburs are chosen: none, some or all of them. */
   selected: 'none' | 'some' | 'all';
   moving: boolean;
+  /** Its morale, 0..1, while it is in a battle. */
+  bar?: number;
 }
 
 export interface OrdersCallbacks {
@@ -87,7 +109,18 @@ export interface OrdersCallbacks {
 }
 
 /** The first letters of each kind, on its flag. */
-const SHORT: Record<UnitKind, string> = { mizrakci: 'Mz', okcu: 'Ok', atli_okcu: 'Ao', gulam: 'Gu' };
+const SHORT: Record<UnitKind | EnemyKind, string> = {
+  mizrakci: 'Mz',
+  okcu: 'Ok',
+  atli_okcu: 'Ao',
+  gulam: 'Gu',
+  mogol_okcu: 'Mo',
+  mogol_agir: 'Ma',
+  harezm_yaya: 'Hy',
+};
+
+/** The trial raids' names on their buttons. */
+const RAID_NAMES: Record<TestRaid, string> = { kucuk: 'Küçük', orta: 'Orta', buyuk: 'Büyük' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -106,6 +139,8 @@ const fmt = (n: number): string => Math.round(n).toLocaleString('tr-TR');
 export class OrdersPanel {
   private readonly panel: HTMLElement;
   private readonly box: HTMLElement;
+  private readonly banner: HTMLElement;
+  private bannerShown = '';
   private readonly layer: HTMLElement;
   private readonly flags = new Map<string, HTMLButtonElement>();
   private shown = '';
@@ -127,6 +162,41 @@ export class OrdersPanel {
     this.box = el('div', 'selbox');
     this.box.hidden = true;
     ui.appendChild(this.box);
+    this.banner = el('div', 'war-banner panel');
+    this.banner.hidden = true;
+    ui.appendChild(this.banner);
+  }
+
+  /** The banner over the map while a raid is on. */
+  showWar(v: WarView | null): void {
+    const key = JSON.stringify(v);
+    if (key === this.bannerShown) return;
+    this.bannerShown = key;
+    this.banner.hidden = v === null;
+    if (v === null) return;
+    const b = this.banner;
+    b.innerHTML = '';
+    b.classList.toggle('pillage', v.pillaging);
+    b.appendChild(
+      el(
+        'div',
+        'title',
+        `⚔ <b>${v.name}</b>${v.trial ? ' <small>(deneme)</small>' : ''} · ${fmt(v.foes)} tabur, ${fmt(v.men)} er`,
+      ),
+    );
+    b.appendChild(
+      el(
+        'div',
+        'tally',
+        (v.pillaging
+          ? `<span class="bad">${v.gate} önünde yağmalıyorlar!</span> · `
+          : `Hedef: ${v.gate} · `) + `Düşman kaybı ${fmt(v.killed)} · bizim ${fmt(v.lost)}`,
+      ),
+    );
+    const go = el('button', 'btn', 'Göster');
+    go.title = 'Kamerayı akıncılara götür';
+    go.addEventListener('click', () => this.cb.onCommand({ kind: 'showRaid' }));
+    b.appendChild(go);
   }
 
   /** Shows the chosen companies and their orders, or hides the panel. */
@@ -236,13 +306,24 @@ export class OrdersPanel {
       }
       p.appendChild(form);
     }
+    // Trial raids, to try the army.
+    const trial = el('div', 'buttons raid');
+    trial.appendChild(el('span', 'dim', 'Deneme akını:'));
+    for (const r of v.raids) {
+      const b = el('button', 'btn', RAID_NAMES[r.size]);
+      b.title = v.raid ? 'Zaten bir akın sürüyor' : `${r.taburs} taburluk bir düşman akını gönder`;
+      b.disabled = v.raid;
+      b.addEventListener('click', () => this.cb.onCommand({ kind: 'raid', size: r.size }));
+      trial.appendChild(b);
+    }
+    p.appendChild(trial);
     p.appendChild(
       el(
         'small',
         'tips',
         v.touch
           ? 'Tabura dokun: seç · Boş yere dokun: oraya yürü'
-          : 'Tıkla ya da sürükle: seç · Shift: ekle · Çift tık: tugayını seç · U: üst birlik<br>Sağ tık: oraya yürü · Sağ tuşla sürükle: cepheyi çiz (hiza, genişlik ve yön)',
+          : 'Tıkla ya da sürükle: seç · Shift: ekle · Çift tık: tugayını seç · U: üst birlik<br>Sağ tık: oraya yürü; düşmana sağ tık: saldır · Sağ tuşla sürükle: cepheyi çiz (hiza, genişlik ve yön)',
       ),
     );
     p.scrollTop = scroll;
@@ -309,7 +390,7 @@ export class OrdersPanel {
     if (!visible) return;
     const seen = new Set<string>();
     for (const p of places) {
-      const id = `${p.key.echelon ? 'e' : 't'}${p.key.id}`;
+      const id = `${p.key.foe === true ? 'f' : p.key.echelon ? 'e' : 't'}${p.key.id}`;
       seen.add(id);
       let f = this.flags.get(id);
       if (f === undefined) {
@@ -319,15 +400,22 @@ export class OrdersPanel {
         this.flags.set(id, f);
         this.layer.appendChild(f);
       }
-      const state = `${p.kind}|${p.short}|${p.label}|${p.selected}|${p.moving}|${p.title}`;
+      const bar = p.bar === undefined ? -1 : Math.round(p.bar * 20);
+      const state = `${p.kind}|${p.short}|${p.label}|${p.selected}|${p.moving}|${p.title}|${bar}`;
       if (f.dataset.state !== state) {
         f.dataset.state = state;
         f.className =
           `company ${p.kind} ${p.level}` +
+          (p.key.foe === true ? ' foe' : '') +
           (p.selected === 'all' ? ' on' : p.selected === 'some' ? ' some' : '') +
           (p.moving ? ' moving' : '');
         const short = p.kind === 'karma' || p.level !== 'tabur' ? p.short : SHORT[p.kind];
-        f.innerHTML = `<b>${short}</b>${p.label}`;
+        // Morale, while in battle: a bar under the flag, green to red.
+        const gauge =
+          bar < 0
+            ? ''
+            : `<i class="morale" style="width:${bar * 5}%;background:hsl(${bar * 6},70%,42%)"></i>`;
+        f.innerHTML = `<b>${short}</b>${p.label}${gauge}`;
         f.title = p.title;
       }
       f.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -100%)`;

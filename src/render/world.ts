@@ -10,6 +10,8 @@ import { FieldsView } from './fields-view';
 import { HousesView } from './houses-view';
 import { shading } from './materials';
 import { ArmyView } from './army-view';
+import { EnemyView } from './enemy-view';
+import { BATTLE_PACE } from '../sim/war';
 import { PeopleView } from './people-view';
 import { MiniPipeline } from './pipeline';
 import { RoadsView } from './roads-view';
@@ -39,6 +41,7 @@ export class World {
   private readonly walls: WallsView;
   readonly people: PeopleView;
   readonly army: ArmyView;
+  readonly enemies: EnemyView;
   private readonly pipeline: MiniPipeline;
   /** Seconds since the city layers were last compared with the simulation. */
   private sinceSync = Infinity;
@@ -69,6 +72,7 @@ export class World {
     this.walls = new WallsView(city);
     this.people = new PeopleView(city);
     this.army = new ArmyView(city);
+    this.enemies = new EnemyView(city, (id) => this.army.anchor(id));
     this.cursor = new CursorView(city);
     this.selection = new SelectionView(city);
     this.scene.add(
@@ -82,6 +86,7 @@ export class World {
       this.works.group,
       this.people.group,
       this.army.group,
+      this.enemies.group,
       this.cursor.group,
       this.selection.group,
     );
@@ -138,6 +143,8 @@ export class World {
     this.works.update(elapsed);
     this.people.update(dt, this.rig.zoom);
     this.army.update(dt, this.rig.zoom, this.rig.camera);
+    this.enemies.sync();
+    this.enemies.update(dt, this.rig.zoom, BATTLE_PACE[this.city.calendar.speed]);
     this.applyCloseness(moved || changed);
     this.pipeline.render();
   }

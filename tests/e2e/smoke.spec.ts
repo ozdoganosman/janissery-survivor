@@ -217,6 +217,22 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await page.locator('.orders .tree .row.ordu .pick').click();
   expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(1);
   await expect(page.locator('.companies .company').first()).toBeVisible();
+  // A trial raid: the raiders are drawn man for man, the banner tells of them, and the
+  // tabur sent against one of them goes for it.
+  await page.locator('.orders .buttons.raid .btn').first().click();
+  await expect(page.locator('.war-banner')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__game!.world.enemies.count)).toBeGreaterThan(0);
+  // "Göster" brings the camera to them, and their flags into sight.
+  await page.locator('.war-banner .btn').click();
+  await expect(page.locator('.companies .company.foe').first()).toBeAttached();
+  const foe = await page.evaluate(() => window.__game!.city.war!.foes[0].id);
+  await page.evaluate((id) => window.__game!.commander.attack(id), foe);
+  expect(
+    await page.evaluate(
+      (id) => window.__game!.city.war!.fighters[window.__game!.city.army.units[0].id]?.order?.foe === id,
+      foe,
+    ),
+  ).toBe(true);
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 

@@ -29,6 +29,9 @@ const MAX_SPREAD = 3;
 const GAP = 0.5;
 const GROUP_GAP = 1.5;
 
+/** How closely men stand: the room each takes along the rank and from rank to rank. */
+export type Ranks = Pick<UnitDef, 'file' | 'rank'>;
+
 /** Forward and to-the-right unit vectors for a heading. */
 export function axes(heading: number): { fx: number; fz: number; rx: number; rz: number } {
   const s = Math.sin(heading);
@@ -42,7 +45,7 @@ export function formationCols(city: CityState, formation: FormationKind, men: nu
 }
 
 /** Front and depth of a company in ranks `cols` men wide, in tiles. */
-export function companySize(def: UnitDef, men: number, cols: number): { w: number; d: number } {
+export function companySize(def: Ranks, men: number, cols: number): { w: number; d: number } {
   const c = Math.max(1, Math.min(cols, men));
   return { w: c * def.file, d: Math.ceil(men / c) * def.rank };
 }
@@ -51,7 +54,7 @@ export function companySize(def: UnitDef, men: number, cols: number): { w: numbe
  * Where man `k` of a company stands about its centre, as [to its right, forward]: the
  * first rank at the front, each rank filled from the left.
  */
-export function slotOf(def: UnitDef, men: number, cols: number, k: number): [number, number] {
+export function slotOf(def: Ranks, men: number, cols: number, k: number): [number, number] {
   const c = Math.max(1, Math.min(cols, men));
   const ranks = Math.ceil(men / c);
   const col = k % c;
