@@ -3,6 +3,7 @@ import { smoothstep } from '../core/geom';
 import { createRng, hash2, type Rng } from '../core/rng';
 import { FACING_DIRS } from '../sim/buildings';
 import { dateOf } from '../sim/calendar';
+import { eastGate } from '../sim/events';
 import type { CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { faceNearestRoad } from './buildings-view';
@@ -24,7 +25,22 @@ import {
  * fetch water, gather at the mosque doors, work the fields in season and mind the flocks.
  */
 
-type Part = 'robe' | 'head' | 'turban' | 'cap' | 'scarf' | 'jug' | 'sack' | 'staff' | 'donkey' | 'pack';
+type Part =
+  | 'robe'
+  | 'head'
+  | 'turban'
+  | 'cap'
+  | 'scarf'
+  | 'jug'
+  | 'sack'
+  | 'staff'
+  | 'donkey'
+  | 'pack'
+  | 'helmet'
+  | 'spear'
+  | 'shield'
+  | 'horse'
+  | 'furcap';
 type Mode = 'walk' | 'stand' | 'work';
 
 interface Figure {
@@ -47,6 +63,10 @@ interface Figure {
   y: number;
   phase: number;
   small: boolean;
+  /** Raised off the ground: a rider in the saddle. */
+  lift: number;
+  /** A soldier walking the rounds; patrols follow the garrison, not the population. */
+  patrol: boolean;
 }
 
 const ROBES = [
@@ -66,10 +86,20 @@ const CAPS = ['#f3ead6', '#b8322a'];
 const SCARVES = ['#f3ead6', '#b8322a', '#2f4f9a', '#6b4a8a', '#e0b13a'];
 const DONKEYS = ['#8c8479', '#7a5c44', '#a39a8c'];
 const PACKS = ['#c9a071', '#a8834f'];
+const SOLDIER_ROBES = ['#8c2a1c', '#a8261c', '#2f4f9a', '#6b2f1c'];
+const SHIELDS = ['#b8322a', '#c98b4a', '#2f4f9a', '#e0b13a'];
+const HORSES = ['#7a5238', '#5e3b22', '#a67c52', '#e8dcc4', '#3b2c24'];
+/** Mongol riders: dark quilted coats and fur-trimmed caps. */
+const MONGOL_ROBES = ['#3b4a5e', '#5e3b22', '#4a5a3a', '#6b4a8a'];
+const FURS = ['#6b4a2a', '#8a6a44', '#4a3222'];
 
 /** Walking pace in tiles a second at each game speed; paused, the town holds still. */
 const PACE = [0, 1, 1.6, 2.2];
 const MAX_WALKERS = 480;
+const MAX_PATROLS = 40;
+const MAX_SENTRIES = 48;
+/** Saddle height of a rider, in figure units. */
+const SADDLE = 0.17;
 
 function geometries(): Record<Part, THREE.BufferGeometry> {
   const donkey = mergeParts([
@@ -85,6 +115,25 @@ function geometries(): Record<Part, THREE.BufferGeometry> {
     new THREE.BoxGeometry(0.045, 0.06, 0.1).translate(-0.058, 0.155, -0.01),
     new THREE.BoxGeometry(0.045, 0.06, 0.1).translate(0.058, 0.155, -0.01),
   ]);
+  const spear = mergeParts([
+    new THREE.CylinderGeometry(0.005, 0.005, 0.44, 4).translate(0.06, 0.22, 0.02),
+    new THREE.ConeGeometry(0.012, 0.05, 4).translate(0.06, 0.465, 0.02),
+  ]);
+  const horse = mergeParts([
+    new THREE.BoxGeometry(0.1, 0.1, 0.28).translate(0, 0.2, 0),
+    new THREE.BoxGeometry(0.055, 0.13, 0.07).rotateX(0.5).translate(0, 0.28, 0.14),
+    new THREE.BoxGeometry(0.05, 0.05, 0.11).translate(0, 0.335, 0.2),
+    new THREE.BoxGeometry(0.02, 0.12, 0.025).rotateX(-0.5).translate(0, 0.19, -0.16),
+    ...[-1, 1].flatMap((sx) =>
+      [-1, 1].map((sz) => new THREE.BoxGeometry(0.025, 0.16, 0.025).translate(sx * 0.032, 0.08, sz * 0.1)),
+    ),
+  ]);
+  const furcap = mergeParts([
+    new THREE.CylinderGeometry(0.052, 0.052, 0.022, 8).translate(0, 0.25, 0),
+    new THREE.SphereGeometry(0.036, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2)
+      .scale(1, 1.5, 1)
+      .translate(0, 0.258, 0),
+  ]);
   return {
     robe: new THREE.CylinderGeometry(0.034, 0.07, 0.19, 7).translate(0, 0.095, 0),
     head: new THREE.SphereGeometry(0.036, 8, 6).translate(0, 0.225, 0),
@@ -96,6 +145,13 @@ function geometries(): Record<Part, THREE.BufferGeometry> {
     staff: new THREE.CylinderGeometry(0.006, 0.006, 0.34, 4).translate(0.06, 0.17, 0.03),
     donkey,
     pack,
+    helmet: new THREE.ConeGeometry(0.04, 0.085, 8).translate(0, 0.285, 0),
+    spear,
+    shield: new THREE.CylinderGeometry(0.05, 0.05, 0.012, 10)
+      .rotateZ(Math.PI / 2)
+      .translate(-0.07, 0.13, 0.01),
+    horse,
+    furcap,
   };
 }
 
@@ -143,6 +199,11 @@ export class PeopleView {
     return this.figures.length;
   }
 
+  /** How many horsemen are in the saddle, for the smoke test. */
+  get riders(): number {
+    return this.figures.filter((f) => f.lift > 0).length;
+  }
+
   /** Rebuilds the streets and the gathering places when the city they depend on changes. */
   sync(): boolean {
     const c = this.city;
@@ -152,7 +213,10 @@ export class PeopleView {
     const netKey = String(r.roads);
     const weightKey = `${Math.floor(r.houses / 8)}:${r.buildings}`;
     const month = dateOf(c.calendar).month;
-    const placesKey = `${r.buildings}:${r.fields}:${month}:${Math.round(c.stats.staffing * 10)}:${Math.round(c.stats.population / 200)}`;
+    const ev = c.events;
+    const placesKey =
+      `${r.buildings}:${r.fields}:${month}:${Math.round(c.stats.staffing * 10)}:${Math.round(c.stats.population / 200)}` +
+      `:${Math.round(c.policy.garrison / 10)}:${ev.pendingEvent?.kind ?? ''}:${ev.plague !== null}:${ev.defense.kosedag}`;
     if (netKey === this.netKey && weightKey === this.weightKey && placesKey === this.placesKey) return false;
     const newNet = netKey !== this.netKey;
     if (newNet) this.net = buildWalkNetwork(c, busyness(c));
@@ -163,9 +227,14 @@ export class PeopleView {
     this.placesKey = placesKey;
     if (!replace) return false;
     // Walkers keep walking unless their streets changed; the rest are laid out afresh.
-    this.figures = newNet ? [] : this.figures.filter((f) => f.mode === 'walk');
+    this.figures = newNet
+      ? []
+      : this.figures.filter((f) => f.mode === 'walk' && !f.patrol && !f.leader?.patrol);
     this.fillWalkers();
+    this.placePatrols();
     this.placeGatherings();
+    this.placeGarrison();
+    this.placeMongols();
     this.placeFieldHands(month);
     this.buildMeshes();
     return true;
@@ -236,7 +305,7 @@ export class PeopleView {
     const s = scale * (f.small ? 0.78 : 1) * (f.mode === 'walk' ? f.fade : 1);
     this.e.set(bend, turn, 0, 'YXZ');
     this.q.setFromEuler(this.e);
-    this.v.set(f.x, f.y + bob, f.z);
+    this.v.set(f.x, f.y + bob + f.lift * s, f.z);
     this.sv.set(s, s, s);
     this.m.compose(this.v, this.q, this.sv);
     for (const part of f.parts) {
@@ -294,8 +363,10 @@ export class PeopleView {
   private fillWalkers(): void {
     const net = this.net;
     if (net === null || net.edges.length === 0) return;
-    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round(this.city.stats.population / 9)));
-    let have = this.figures.filter((f) => f.leader === null).length;
+    // In a plague year people keep indoors, and the streets empty.
+    const indoors = this.city.events.plague !== null ? 0.35 : 1;
+    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round((this.city.stats.population / 9) * indoors)));
+    let have = this.figures.filter((f) => f.leader === null && !f.patrol).length;
     while (have < want) {
       const f = this.person('walk');
       f.walk = spawnWalk(net, this.rng);
@@ -315,7 +386,7 @@ export class PeopleView {
     if (have > want) {
       let drop = have - want;
       this.figures = this.figures.filter((f) => {
-        if (drop > 0 && f.leader === null && f.mode === 'walk') {
+        if (drop > 0 && f.leader === null && f.mode === 'walk' && !f.patrol) {
           drop--;
           return false;
         }
@@ -433,6 +504,104 @@ export class PeopleView {
     });
   }
 
+  /** Soldiers walking the rounds, a few for every company in the garrison. */
+  private placePatrols(): void {
+    const net = this.net;
+    if (net === null || net.edges.length === 0) return;
+    const n = Math.min(MAX_PATROLS, Math.round(this.city.policy.garrison / 12));
+    for (let k = 0; k < n; k++) {
+      const f = this.soldier('walk');
+      f.walk = spawnWalk(net, this.rng);
+      f.life = 10 + this.rng.next() * 40;
+      f.patrol = true;
+      this.figures.push(f);
+    }
+  }
+
+  /** Guards at every gate and sentries on the towers, as many as the garrison can spare. */
+  private placeGarrison(): void {
+    const c = this.city;
+    const soldiers = c.policy.garrison;
+    if (soldiers <= 0) return;
+    const { def, terrain } = c;
+    const R = def.walls.radius;
+    const H = def.walls.height;
+    const r = createRng(9001);
+    const stand = (x: number, z: number, y: number, heading: number): void => {
+      const f = this.soldier('stand', r);
+      f.x = x;
+      f.z = z;
+      f.y = y;
+      f.heading = heading;
+      this.figures.push(f);
+    };
+    // Two at each gate, either side of the way in, looking out along the road.
+    for (const g of c.gates) {
+      const ca = Math.cos(g.angle);
+      const sa = Math.sin(g.angle);
+      for (const side of [-1, 1]) {
+        const x = def.tepe.x + ca * (R - 1.0) - sa * side * 0.7;
+        const z = def.tepe.z + sa * (R - 1.0) + ca * side * 0.7;
+        stand(x, z, sampleHeight(terrain, x, z), Math.atan2(ca, sa));
+      }
+    }
+    // Sentries on the towers, spread round the circuit; the towers are laid out as the
+    // walls view lays them out, so each man stands on a tower top.
+    const gateHalf = 1.55 / R;
+    const count = Math.max(8, Math.round((2 * Math.PI * R) / def.walls.towerSpacing));
+    const towers: number[] = [];
+    for (let k = 0; k < count; k++) {
+      const a = (k / count) * Math.PI * 2;
+      if (c.gates.some((g) => Math.abs(angleStep(a, g.angle)) < gateHalf + 2.2 / R)) continue;
+      towers.push(a);
+    }
+    const n = Math.min(MAX_SENTRIES, towers.length, Math.round(soldiers / 8));
+    for (let k = 0; k < n; k++) {
+      const a = towers[Math.floor((k * towers.length) / n)];
+      const x = def.tepe.x + Math.cos(a) * R;
+      const z = def.tepe.z + Math.sin(a) * R;
+      stand(x, z, sampleHeight(terrain, x, z) + H + 0.5, Math.atan2(Math.cos(a), Math.sin(a)));
+    }
+  }
+
+  /**
+   * Mongol horsemen: envoys waiting inside the east gate while their demand is unanswered,
+   * the whole host drawn up outside it on the eve of Kösedağ, and the Ilkhan's overseer
+   * with his escort once the city has bowed.
+   */
+  private placeMongols(): void {
+    const c = this.city;
+    const pending = c.events.pendingEvent?.kind;
+    const kosedag = c.events.defense.kosedag;
+    let riders = 0;
+    let outside = false;
+    if (pending === 'kosedag') {
+      riders = 14;
+      outside = true;
+    } else if (pending === 'elci') {
+      riders = 4;
+    } else if (kosedag === 'teslim' || kosedag === 'yagma') {
+      riders = 2;
+    }
+    if (riders === 0 || c.gates.length === 0) return;
+    // They come from the east: the gate that faces the rising sun.
+    const gate = c.gates.find((g) => g.tiles === eastGate(c)) ?? c.gates[0];
+    const { def } = c;
+    const R = def.walls.radius;
+    const ca = Math.cos(gate.angle);
+    const sa = Math.sin(gate.angle);
+    const r = createRng(9101);
+    for (let k = 0; k < riders; k++) {
+      // Rows of three, across the road; inside they face the city, outside the walls.
+      const row = Math.floor(k / 3);
+      const col = (k % 3) - 1;
+      const out = outside ? R + 3 + row * 0.9 : R - 2.2 - row * 0.9;
+      const x = def.tepe.x + ca * out - sa * col * 0.55 + (r.next() - 0.5) * 0.15;
+      const z = def.tepe.z + sa * out + ca * col * 0.55 + (r.next() - 0.5) * 0.15;
+      this.rider(x, z, Math.atan2(-ca, -sa), r);
+    }
+  }
+
   /** Farmers in the fields in the working months, a shepherd with every flock. */
   private placeFieldHands(month: number): void {
     const c = this.city;
@@ -506,6 +675,8 @@ export class PeopleView {
       y: 0,
       phase: r.next() * 6,
       small: mode === 'walk' && r.chance(0.12),
+      lift: 0,
+      patrol: false,
     };
   }
 
@@ -515,6 +686,46 @@ export class PeopleView {
     f.colors = { donkey: DONKEYS[Math.floor(this.rng.next() * DONKEYS.length)], pack: PACKS[0] };
     f.small = false;
     return f;
+  }
+
+  /** One of the sultan's men: a red or blue coat, an iron helmet, spear and round shield. */
+  private soldier(mode: Mode, r: Rng = this.rng): Figure {
+    const f = this.person(mode, null, r);
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(r.next() * list.length)];
+    f.parts = ['robe', 'head', 'helmet', 'spear', 'shield'];
+    f.colors = {
+      robe: pick(SOLDIER_ROBES),
+      head: pick(SKIN),
+      helmet: '#6d6a66',
+      spear: '#6b4a2a',
+      shield: pick(SHIELDS),
+    };
+    f.small = false;
+    f.speed = 0.3;
+    return f;
+  }
+
+  /** A Mongol horseman, in two figures: the horse, and the rider sat on it. */
+  private rider(x: number, z: number, heading: number, r: Rng): void {
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(r.next() * list.length)];
+    const y = sampleHeight(this.city.terrain, x, z);
+    const horse = this.person('stand', null, r);
+    horse.parts = ['horse'];
+    horse.colors = { horse: pick(HORSES) };
+    const man = this.person('stand', null, r);
+    man.parts = ['robe', 'head', 'furcap'];
+    man.colors = { robe: pick(MONGOL_ROBES), head: pick(SKIN), furcap: pick(FURS) };
+    man.lift = SADDLE;
+    for (const f of [horse, man]) {
+      f.small = false;
+      f.x = x;
+      f.z = z;
+      f.y = y;
+      f.heading = heading;
+      // Horses stand still under their riders, who look about only a little.
+      f.phase = 0;
+      this.figures.push(f);
+    }
   }
 }
 

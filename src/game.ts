@@ -4,6 +4,14 @@ import { buildBuilding, proposeBuilding, type BuildingProposal } from './sim/bui
 import { dateOf, formatDate, type Speed } from './sim/calendar';
 import type { CityState } from './sim/city';
 import { stepTime } from './sim/economy';
+import {
+  repairWalls,
+  resolveEvent,
+  setGarrison,
+  triggerEvent,
+  type CityEvent,
+  type EventKind,
+} from './sim/events';
 import { buildField, proposeField, setFieldPlan, type FieldProposal } from './sim/fields';
 import { inspectTile } from './sim/inspect';
 import { buildRoad, planRoad, type RoadPlan } from './sim/roads';
@@ -58,6 +66,8 @@ export class Game {
   private elapsed = 0;
   private last = performance.now();
   frames = 0;
+  /** The event the view last turned to, so it turns only once for each. */
+  private followed: CityEvent | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -77,6 +87,9 @@ export class Game {
       onVakif: (on) => this.setVakif(on),
       onTax: (rate) => this.setTax(rate),
       onNarh: (on) => this.setNarh(on),
+      onGarrison: (step) => setGarrison(city, city.policy.garrison + step),
+      onRepairWalls: () => repairWalls(city),
+      onEventChoice: (id) => this.chooseEvent(id),
       onCrop: (c) => this.setCrop(c),
       onBuildKind: (k) => this.setBuildKind(k),
       onFieldPlan: (id, plan) => this.setFieldPlan(id, plan),
@@ -114,6 +127,7 @@ export class Game {
       this.hud.setDate(text);
     }
     this.hud.setStats(this.city);
+    this.followEvent();
     for (const n of this.city.notices.splice(0)) this.hud.notify(n);
     // The open panel follows its tile as the season moves on.
     this.sinceInfo += dt;
@@ -195,6 +209,36 @@ export class Game {
 
   setNarh(on: boolean): void {
     this.city.policy.narh = on;
+  }
+
+  /** Shows a new event and turns the view to where it happens: the burning street, the gate. */
+  private followEvent(): void {
+    const e = this.city.events.pendingEvent;
+    this.hud.showEvent(this.city);
+    if (e === this.followed) return;
+    this.followed = e;
+    if (e === null || e.tiles.length === 0) return;
+    const { grid } = this.city;
+    const t = e.tiles[Math.floor(e.tiles.length / 2)];
+    this.world.rig.setView(
+      grid.centre(t % grid.size),
+      grid.centre(Math.floor(t / grid.size)),
+      Math.min(this.world.rig.zoom, 12),
+    );
+  }
+
+  /** Answers the open event; the clock runs again once it is settled. */
+  chooseEvent(id: string): boolean {
+    const ok = resolveEvent(this.city, id);
+    this.hud.showEvent(this.city);
+    return ok;
+  }
+
+  /** Test hook: opens an event now, as if the day had drawn it. */
+  debugEvent(kind: EventKind): boolean {
+    const ok = triggerEvent(this.city, kind);
+    this.hud.showEvent(this.city);
+    return ok;
   }
 
   resize(): void {

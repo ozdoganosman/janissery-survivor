@@ -103,6 +103,8 @@ export const SERVICE_NAMES: Record<Service, string> = {
   saglik: 'Sağlık',
   esnaf: 'Ahi teşkilatı',
   sulama: 'Sulama',
+  asayis: 'Asayiş',
+  imaret: 'İmaret',
 };
 
 export const STAGE_NAMES: Record<FieldStage, string> = {

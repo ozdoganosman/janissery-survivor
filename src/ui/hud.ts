@@ -18,6 +18,13 @@ import {
   type TileInfo,
 } from '../sim/inspect';
 import { LAYER_NAMES, LAYERS, type Layer } from '../render/layers';
+import {
+  chronicleDate,
+  defenceStrength,
+  soldiersNeeded,
+  wallRepairCost,
+  type CityEvent,
+} from '../sim/events';
 
 export type Tool = 'incele' | 'yol' | 'konut' | 'tarla' | 'yapi' | 'yik';
 
@@ -30,6 +37,10 @@ export interface HudCallbacks {
   onVakif(on: boolean): void;
   onTax(rate: TaxRate): void;
   onNarh(on: boolean): void;
+  /** Adds (or with a negative step, stands down) soldiers. */
+  onGarrison(step: number): void;
+  onRepairWalls(): void;
+  onEventChoice(id: string): void;
   onFieldPlan(fieldId: number, plan: FieldPlan): void;
   onCloseInfo(): void;
 }
@@ -96,6 +107,13 @@ export class Hud {
   private readonly budgetLines: HTMLElement;
   private readonly taxButtons = new Map<TaxRate, HTMLButtonElement>();
   private readonly narhButton: HTMLButtonElement;
+  private readonly defense: HTMLElement;
+  private readonly defenseLines: HTMLElement;
+  private readonly garrisonCount: HTMLElement;
+  private readonly repairButton: HTMLButtonElement;
+  private readonly chronicle: HTMLElement;
+  private readonly eventPanel: HTMLElement;
+  private shownEvent: CityEvent | null = null;
   private readonly layerBar: HTMLElement;
   private readonly layerButtons = new Map<Layer, HTMLButtonElement>();
   private readonly layerToggle: HTMLButtonElement;
@@ -160,16 +178,10 @@ export class Hud {
     this.goodsToggle.setAttribute('aria-expanded', 'false');
     this.goodsTable = el('div', 'goods');
     this.goodsTable.hidden = true;
-    this.goodsToggle.addEventListener('click', () => {
-      this.goodsTable.hidden = !this.goodsTable.hidden;
-      this.goodsToggle.textContent = this.goodsTable.hidden ? 'Mallar ▾' : 'Mallar ▴';
-      this.goodsToggle.setAttribute('aria-expanded', String(!this.goodsTable.hidden));
-      this.statsKey = '';
-    });
     this.budgetToggle = el('button', 'btn goods-toggle', 'Bütçe ▾');
     this.budgetToggle.title = 'Gelir, gider, vergi ve narh';
     this.budgetToggle.setAttribute('aria-expanded', 'false');
-    this.budget = el('div', 'budget');
+    this.budget = el('div', 'sheet budget');
     this.budget.hidden = true;
     this.budgetLines = el('div', 'lines');
     const tax = el('div', 'policy', '<span class="label">Vergi</span>');
@@ -187,16 +199,62 @@ export class Hud {
     this.narhButton.addEventListener('click', () => cb.onNarh(!this.narhButton.classList.contains('on')));
     narh.appendChild(this.narhButton);
     this.budget.append(this.budgetLines, tax, narh);
-    this.budgetToggle.addEventListener('click', () => {
-      this.budget.hidden = !this.budget.hidden;
-      this.budgetToggle.textContent = this.budget.hidden ? 'Bütçe ▾' : 'Bütçe ▴';
-      this.budgetToggle.setAttribute('aria-expanded', String(!this.budget.hidden));
-      this.statsKey = '';
-    });
+
+    // Defence: the garrison, the walls, and how near the Mongols are.
+    this.defense = el('div', 'sheet defense');
+    this.defense.hidden = true;
+    this.defenseLines = el('div', 'lines');
+    const garrison = el('div', 'policy', '<span class="label">Asker</span>');
+    const fewer = el('button', 'btn', '−');
+    fewer.title = 'Asker azalt';
+    fewer.setAttribute('aria-label', 'Asker azalt');
+    fewer.addEventListener('click', () => cb.onGarrison(-balance.defense.garrisonStep));
+    this.garrisonCount = el('span', 'count');
+    const more = el('button', 'btn', '+');
+    more.title = 'Asker ekle';
+    more.setAttribute('aria-label', 'Asker ekle');
+    more.addEventListener('click', () => cb.onGarrison(balance.defense.garrisonStep));
+    garrison.append(fewer, this.garrisonCount, more);
+    const walls = el('div', 'policy', '<span class="label">Sur</span>');
+    this.repairButton = el('button', 'btn', 'Onar');
+    this.repairButton.addEventListener('click', () => cb.onRepairWalls());
+    walls.appendChild(this.repairButton);
+    this.defense.append(this.defenseLines, garrison, walls);
+
+    this.chronicle = el('div', 'sheet chronicle');
+    this.chronicle.hidden = true;
+
+    // The ledger's folds open one at a time, so it never runs off a small screen.
+    const folds: Array<[HTMLButtonElement, HTMLElement, string]> = [];
+    const fold = (button: HTMLButtonElement, body: HTMLElement, label: string): void => {
+      folds.push([button, body, label]);
+      button.addEventListener('click', () => {
+        const opening = body.hidden;
+        for (const [b, other, l] of folds) {
+          other.hidden = !(opening && other === body);
+          b.textContent = `${l} ${other.hidden ? '▾' : '▴'}`;
+          b.setAttribute('aria-expanded', String(!other.hidden));
+        }
+        this.statsKey = '';
+      });
+    };
+    const defenseToggle = el('button', 'btn goods-toggle', 'Savunma ▾');
+    defenseToggle.title = 'Garnizon, surlar ve Moğol tehdidi';
+    const chronicleToggle = el('button', 'btn goods-toggle', 'Vakayiname ▾');
+    chronicleToggle.title = 'Şehrin başından geçenler';
+    fold(this.budgetToggle, this.budget, 'Bütçe');
+    fold(defenseToggle, this.defense, 'Savunma');
+    fold(chronicleToggle, this.chronicle, 'Vakayiname');
+    fold(this.goodsToggle, this.goodsTable, 'Mallar');
     const toggles = el('div', 'toggles');
-    toggles.append(this.budgetToggle, this.goodsToggle);
-    ledger.append(toggles, this.budget, this.goodsTable);
+    toggles.append(this.budgetToggle, defenseToggle, chronicleToggle, this.goodsToggle);
+    ledger.append(toggles, this.budget, this.defense, this.chronicle, this.goodsTable);
     ui.appendChild(ledger);
+
+    this.eventPanel = el('div', 'event panel');
+    this.eventPanel.hidden = true;
+    this.eventPanel.setAttribute('role', 'dialog');
+    ui.appendChild(this.eventPanel);
 
     const speed = el('div', 'speed panel');
     const speedIcons = [ICONS.pause, ICONS.play1, ICONS.play2, ICONS.play3];
@@ -327,7 +385,8 @@ export class Hud {
     const treasury = city.treasury;
     const granary = city.granary;
     const goodsKey = this.goodsTable.hidden ? '' : GOODS.map((g) => Math.round(city.goods[g])).join(',');
-    const policy = `${city.policy.tax}|${city.policy.narh}|${s.founders}|${city.unpaid}|${Math.round(s.netLastMonth)}`;
+    const def = city.events.defense;
+    const policy = `${city.policy.tax}|${city.policy.narh}|${s.founders}|${city.unpaid}|${Math.round(s.netLastMonth)}|${city.policy.garrison}|${Math.round(def.walls * 100)}|${Math.round(def.threat * 100)}|${def.kosedag}|${city.events.chronicle.length}`;
     const key = `${Math.round(treasury)}|${Math.round(granary)}|${Math.round(s.population)}|${Math.round(s.unemployed)}|${s.demand.toFixed(2)}|${s.freeLots}|${s.incomeLastMonth}|${s.prosperity.toFixed(2)}|${goodsKey}|${policy}`;
     if (key === this.statsKey) return;
     this.statsKey = key;
@@ -339,6 +398,8 @@ export class Hud {
     this.income.classList.toggle('bad', net < 0);
     this.income.title = s.incomeLastMonth > 0 ? 'Geçen ayın gelirinden giderler düşüldükten sonra kalan' : '';
     if (!this.budget.hidden) this.renderBudget(city);
+    if (!this.defense.hidden) this.renderDefense(city);
+    if (!this.chronicle.hidden) this.renderChronicle(city);
     for (const [rate, b] of this.taxButtons) b.classList.toggle('on', rate === city.policy.tax);
     this.narhButton.classList.toggle('on', city.policy.narh);
     this.narhButton.textContent = city.policy.narh ? 'Konuldu' : 'Yok';
@@ -383,10 +444,87 @@ export class Hud {
       line('Çarşı vergisi', s.income.market) +
       line('Bakım', -s.expenses.upkeep) +
       (s.expenses.vakif > 0 ? line('Vakıf payları', -s.expenses.vakif) : '') +
+      line('Garnizon', -s.expenses.garrison) +
       line('Sultan payı', -s.expenses.tribute) +
+      (s.expenses.ilkhan > 0 ? line('İlhanlı vergisi', -s.expenses.ilkhan) : '') +
       line('Kalan', s.netLastMonth, 'total') +
       (city.unpaid ? '<span class="bad wide">Hazine borçta: kamu görevlileri maaş alamıyor</span>' : '') +
       `<span class="wide dim">Vakıf yaptıracak eşraf: ${s.founders}</span>`;
+  }
+
+  /** The garrison, the walls and the Mongol storm. */
+  private renderDefense(city: CityState): void {
+    const d = city.events.defense;
+    const need = soldiersNeeded(city);
+    const strength = defenceStrength(city);
+    const threat = d.threat < 0.15 ? 'uzak' : d.threat < 0.45 ? 'yaklaşıyor' : 'kapıda';
+    let mongol: string;
+    if (d.kosedag === 'bekliyor')
+      mongol = `Moğol tehdidi: <b>${threat}</b> · savunma %${Math.round(strength * 100)}`;
+    else if (d.kosedag === 'direndi') mongol = 'Moğollar geri püskürtüldü';
+    else mongol = `İlhanlı vergisi: gelirin %${Math.round(d.ilkhanShare * 100)}'i`;
+    this.defenseLines.innerHTML =
+      `<span>Garnizon</span><span class="n">${fmt(city.policy.garrison)} asker</span>` +
+      `<span>Maaş</span><span class="n down">${signed(-city.policy.garrison * this.balance.defense.payPerSoldier)}/ay</span>` +
+      `<span>Surları tutmak için</span><span class="n">${fmt(need)} asker</span>` +
+      `<span>Sur sağlamlığı</span><span class="n ${d.walls < 0.5 ? 'down' : ''}">%${Math.round(d.walls * 100)}</span>` +
+      `<span class="wide">${mongol}</span>`;
+    this.garrisonCount.textContent = fmt(city.policy.garrison);
+    const cost = wallRepairCost(city);
+    this.repairButton.textContent = cost > 0 ? `Onar · ${fmt(cost)} dirhem` : 'Sağlam';
+    this.repairButton.disabled = cost <= 0 || cost > city.treasury;
+  }
+
+  /** The chronicle: the latest of what befell the city, newest first. */
+  private renderChronicle(city: CityState): void {
+    const list = city.events.chronicle.slice(-12).reverse();
+    this.chronicle.innerHTML =
+      list.length === 0
+        ? '<span class="dim">Henüz kayda değer bir şey olmadı.</span>'
+        : list
+            .map(
+              (e) =>
+                `<p><span class="when">${chronicleDate(city, e.day)}</span> <b>${e.title}</b> ${e.outcome}</p>`,
+            )
+            .join('');
+  }
+
+  /** Shows the event waiting for a decision, or hides the panel when there is none. */
+  showEvent(city: CityState): void {
+    const e = city.events.pendingEvent;
+    if (e === this.shownEvent) {
+      if (e !== null) this.refreshChoices(city);
+      return;
+    }
+    this.shownEvent = e;
+    if (e === null) {
+      this.eventPanel.hidden = true;
+      return;
+    }
+    this.eventPanel.innerHTML = `<div class="when">${chronicleDate(city, e.day)}</div><h2>${e.title}</h2><p>${e.text}</p>`;
+    const choices = el('div', 'choices');
+    for (const c of e.choices) {
+      const b = el(
+        'button',
+        'btn choice',
+        `<b>${c.label}</b><small>${c.hint}${c.cost > 0 ? ` · ${fmt(c.cost)} dirhem` : ''}</small>`,
+      );
+      b.dataset.choice = c.id;
+      b.addEventListener('click', () => this.cb.onEventChoice(c.id));
+      choices.appendChild(b);
+    }
+    this.eventPanel.appendChild(choices);
+    this.refreshChoices(city);
+    this.eventPanel.hidden = false;
+  }
+
+  private refreshChoices(city: CityState): void {
+    const e = city.events.pendingEvent;
+    if (e === null) return;
+    for (const b of this.eventPanel.querySelectorAll<HTMLButtonElement>('button.choice')) {
+      const c = e.choices.find((ch) => ch.id === b.dataset.choice);
+      b.disabled = c === undefined || c.cost > city.treasury || c.available === false;
+    }
   }
 
   /** Stock of every good, and last month's balance of made against used. */

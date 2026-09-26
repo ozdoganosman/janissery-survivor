@@ -22,14 +22,17 @@ export type BuildingKind =
   | 'medrese'
   | 'darussifa'
   | 'zaviye'
-  | 'dolap';
+  | 'dolap'
+  | 'subasi'
+  | 'imaret';
 /** Where a building sits in the build menu. */
 export type BuildingCategory = 'imalat' | 'carsi' | 'hizmet' | 'tarim';
 /**
  * What a public building spreads over its radius. The first five are what houses need;
  * `esnaf` makes bazaars more productive and `sulama` waters fields.
  */
-export type Service = 'su' | 'ibadet' | 'temizlik' | 'egitim' | 'saglik' | 'esnaf' | 'sulama';
+export type Service =
+  'su' | 'ibadet' | 'temizlik' | 'egitim' | 'saglik' | 'esnaf' | 'sulama' | 'asayis' | 'imaret';
 export type TaxRate = 'hafif' | 'orta' | 'agir';
 /** The crafts that fill bazaar shops. */
 export type Trade = 'firinci' | 'dokumaci' | 'demirci';
@@ -116,6 +119,23 @@ export interface Balance {
     peoplePerFounder: number;
     konaksPerFounder: number;
     founders: string[];
+  };
+  events: EventsBalance;
+  defense: {
+    startGarrison: number;
+    payPerSoldier: number;
+    garrisonStep: number;
+    /** Largest share of the people who can be under arms. */
+    maxGarrisonShare: number;
+    startWalls: number;
+    wallDecayPerYear: number;
+    /** Dirhems to bring ruined walls back to full strength. */
+    repairCostFull: number;
+    threatFromYear: number;
+    threatPerYear: number;
+    /** Soldiers needed to hold the walls against the Mongols, at no threat and per unit of it. */
+    requiredBase: number;
+    requiredPerThreat: number;
   };
   serviceEffects: {
     /** Extra output an ahi lodge's bazaars get from the same input. */
@@ -225,10 +245,116 @@ export const BUILDING_KINDS: readonly BuildingKind[] = [
   'hamam',
   'medrese',
   'darussifa',
+  'subasi',
+  'imaret',
   'dolap',
 ];
 /** Services houses need, in the order they are asked for. */
 export const HOUSE_SERVICES: readonly Service[] = ['su', 'ibadet', 'temizlik', 'egitim', 'saglik'];
-export const SERVICES: readonly Service[] = [...HOUSE_SERVICES, 'esnaf', 'sulama'];
+export const SERVICES: readonly Service[] = [...HOUSE_SERVICES, 'esnaf', 'sulama', 'asayis', 'imaret'];
 export const TAX_RATES: readonly TaxRate[] = ['hafif', 'orta', 'agir'];
 export const TRADES: readonly Trade[] = ['firinci', 'dokumaci', 'demirci'];
+
+/** Tuning of the city's events; every chance is per day. */
+export interface EventsBalance {
+  enabled: boolean;
+  /** Quiet days at the start of a game before anything can happen. */
+  graceDays: number;
+  yangin: {
+    chancePerDay: number;
+    summerFactor: number;
+    /** Chance a burning house sets a neighbour alight each day. */
+    spread: number;
+    burnDays: number;
+    ashDays: number;
+    /** Spread multipliers near a fountain and near a subaşı. */
+    waterFactor: number;
+    guardFactor: number;
+    sendCost: number;
+    sendFactor: number;
+    breakRadius: number;
+    cooldownDays: number;
+  };
+  salgin: {
+    chancePerDay: number;
+    /** Population at which the city counts as crowded. */
+    crowdPop: number;
+    minDays: number;
+    maxDays: number;
+    /** Share of households lost each day at full severity. */
+    lossPerDay: number;
+    /** Chance a house under a hospital's or a bath's care is spared. */
+    healthFactor: number;
+    quarantineFactor: number;
+    physicianCost: number;
+    physicianFactor: number;
+    demandPenalty: number;
+    cooldownDays: number;
+  };
+  kitlik: {
+    belowMonths: number;
+    sultanMonths: number;
+    sultanTributeExtra: number;
+    sultanDays: number;
+    grainPrice: number;
+    buyMonths: number;
+    cooldownDays: number;
+  };
+  deprem: {
+    chancePerDay: number;
+    houseShare: number;
+    wallDamage: number;
+    repairPerHouse: number;
+    cooldownDays: number;
+  };
+  mevlana: {
+    fromYear: number;
+    chancePerDay: number;
+    demandBonus: number;
+    prosperityBonus: number;
+    listenDays: number;
+    honourCost: number;
+  };
+  ahi: {
+    chancePerDay: number;
+    heavyTaxMonths: number;
+    lowProsperity: number;
+    lowMonths: number;
+    dealCost: number;
+    garrisonNeeded: number;
+    prosperityPenalty: number;
+    penaltyDays: number;
+    shopsClosed: number;
+    cooldownDays: number;
+  };
+  kervan: {
+    chancePerDay: number;
+    priceFactor: number;
+    sellShare: number;
+    silkCost: number;
+    silkBonus: number;
+    silkDays: number;
+    toll: number;
+    cooldownDays: number;
+  };
+  elci: {
+    fromYear: number;
+    chancePerDay: number;
+    giftCost: number;
+    giftThreat: number;
+    stallThreat: number;
+    expelThreat: number;
+    cooldownDays: number;
+  };
+  kosedag: {
+    year: number;
+    month: number;
+    tributeShare: number;
+    failTributeShare: number;
+    graceYears: number;
+    laterShare: number;
+    plunderShare: number;
+    burnRadius: number;
+    fires: number;
+  };
+}

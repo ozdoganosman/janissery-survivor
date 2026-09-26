@@ -207,6 +207,62 @@ Sayılar `data/balance.json` dosyasında.
 Yangın (ahşapta yayılır, çeşme yakınında az zarar), salgın, kıtlık, deprem, Mevlana'nın
 sohbetleri, Moğol elçileri, Ahi ayaklanmaları. Her olayda bir seçim.
 
+### Olaylar ve savunma (5. aşamada kurulan)
+
+Sayılar `data/balance.json` dosyasında. Olaylar şehrin kendi rastgelelik akışından gelir;
+aynı şehir aynı seçimlerle aynı tarihi yaşar.
+
+- **Olay penceresi:** Bir olay çıkınca oyun durur ve seçenekler sunulur. Seçim yapılınca
+  zaman kaldığı hızla akar. Her olay ve seçim **Vakayiname**'ye yazılır.
+- **Yangın:** Yaz aylarında ve sık evli mahallelerde daha sık çıkar. Ateş her gün
+  komşu evlere sıçrayabilir; yanan ev yıkılır, arsası bir süre kül olarak kalır.
+  - Çeşmeye yakın evlere ve subaşı karakolunun çevresine zor sıçrar.
+  - Seçenekler:
+    - Subaşının adamlarını gönder: para ister, yayılmayı yarıya indirir.
+    - Çevredeki evleri yıkıp ateşi kes: ateş hemen durur, yıkılan evler gider.
+    - Kendi hâline bırak.
+- **Salgın:** Kalabalık ve sağlık hizmeti az olan şehirde çıkar. Aylarca sürer, her gün
+  bazı hanelerden can alır; darüşşifanın ve hamamın çevresi daha az etkilenir. Salgında
+  sokaklar boşalır, göçmen gelmez.
+  - Seçenekler:
+    - Karantina: salgını yarıya indirir ama çarşı ve esnaf satışı da yarıya düşer.
+    - Hekim ve ilaç: para ister, salgını hafifletir.
+    - Dua et, bekle.
+- **Kıtlık:** Ambar iki aylık zahirenin altına inince çıkar.
+  - Seçenekler:
+    - Sultandan zahire iste: bir yıl boyunca sultan payı artar.
+    - Eşraftan satın al: para ister.
+    - Halk kendi başının çaresine baksın.
+  - **İmaret** çevresindeki evler kıtlıkta göç etmez.
+- **Deprem:** Seyrektir. Evler kat kaybeder, surlar yıpranır. Yıkılanlar hazineden
+  onarılabilir.
+- **Mevlânâ'nın sohbetleri:** Bir medrese varsa bir kez gelir. Sohbetler şehrin ününü
+  artırır: konut talebi ve refah yükselir. Mevlânâ'ya bir medrese vakfetmek bunu kalıcı
+  kılar.
+- **Ahi huzursuzluğu:** Ağır vergi ya da uzun süren düşük refah ahileri kızdırır.
+  - Seçenekler:
+    - Vergiyi hafiflet.
+    - Şeyhlerle anlaş: para ister.
+    - Subaşıyı gönder: garnizon yeterliyse bastırılır ama refah düşer; yetmezse
+      çarşıda dükkânlar kapanır.
+- **Kervan:** Arada bir Tebriz'den ya da Antalya'dan bir kervan gelir. Depodaki fazla malı
+  iyi fiyata alır, ya da ipek ve baharat satar (refah), ya da gümrük verip geçer.
+- **Moğol tehdidi:** 1236'dan sonra her yıl artar. Moğol elçileri gelir: hediyelerle
+  ağırlamak tehdidi azaltır, kovmak artırır.
+- **Kösedağ (1243):** Selçuklu ordusu Kösedağ'da yenilir.
+  - Seçenekler:
+    - Teslim ol: şehir korunur ama hazine her ay gelirin bir payını **İlhanlı vergisi**
+      olarak öder.
+    - Direnin: sonucu surların sağlamlığı ve garnizon belirler. Başarılı olursa şehir
+      birkaç yıl vergisiz kalır. Başarısız olursa şehir yağmalanır: hazine ve depo
+      yarılanır, sur dibindeki evler yanar, vergi yine gelir.
+- **Garnizon:** Asker sayısını oyuncu seçer.
+  - Askerler maaş ister, yiyecek yer ve işgücünden düşer.
+  - Kapılarda nöbet tutar, surlarda devriye gezerler.
+- **Surlar:** Zamanla ve depremle yıpranır; Savunma panelinden para karşılığı
+  onarılır.
+- **Subaşı karakolu:** Çevresinde yangını ve asayişsizliği azaltır.
+
 ### Total War bağlantısı
 
 - Her şehir ya oyuncu tarafından ya da bir subaşıya bırakılarak yönetilir.
@@ -268,5 +324,5 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
 | 2   | **Konut ve tarım:** konut imarı, nüfus, tarla çizme, hasat, ambar — ilk oynanabilir döngü                  | ✅    |
 | 3   | **Üretim ve çarşı:** imalathaneler, çarşılar, esnaf, üretim zincirleri                                     | ✅    |
 | 4   | **Hizmetler ve bütçe:** kamu yapıları, etki alanları, bilgi katmanları, vergi, vakıf                       | ✅    |
-| 5   | **Olaylar ve savunma:** yangın, salgın, kıtlık, Moğol elçileri, sur, garnizon                              |       |
+| 5   | **Olaylar ve savunma:** yangın, salgın, kıtlık, Moğol elçileri, sur, garnizon                              | ⏳    |
 | 6   | **Cila:** mevsim görünümleri, ses, kayıt/yükleme, telefon                                                  |       |

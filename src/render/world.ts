@@ -5,6 +5,7 @@ import { BuildingsView } from './buildings-view';
 import { CameraRig } from './camera-rig';
 import { CursorView } from './cursor-view';
 import { FieldsView } from './fields-view';
+import { FireView } from './fire-view';
 import { HousesView } from './houses-view';
 import { houseTint, layerKey, layerTexture, paintLayer, type Layer } from './layers';
 import { shading } from './materials';
@@ -34,6 +35,7 @@ export class World {
   private readonly fields: FieldsView;
   private readonly zones: ZonesView;
   private readonly works: WorksView;
+  readonly fire: FireView;
   readonly people: PeopleView;
   private readonly pipeline: MiniPipeline;
   private layer: Layer | null = null;
@@ -66,6 +68,7 @@ export class World {
     this.fields = new FieldsView(city);
     this.zones = new ZonesView(city);
     this.works = new WorksView(city);
+    this.fire = new FireView(city);
     this.people = new PeopleView(city);
     this.cursor = new CursorView(city);
     this.layerTex = layerTexture(city.grid.size);
@@ -78,6 +81,7 @@ export class World {
       this.trees.group,
       new BuildingsView(city).group,
       this.works.group,
+      this.fire.group,
       this.people.group,
       this.cursor.group,
     );
@@ -147,6 +151,7 @@ export class World {
         this.fields.sync(),
         this.zones.sync(),
         this.works.sync(),
+        this.fire.sync(),
       ];
       this.people.sync();
       changed = results.some((r) => r);
@@ -154,6 +159,7 @@ export class World {
     }
     this.terrain.update(elapsed);
     this.works.update(elapsed);
+    this.fire.update(elapsed);
     this.people.update(dt, this.rig.zoom);
     this.applyCloseness(moved || changed);
     this.pipeline.render();

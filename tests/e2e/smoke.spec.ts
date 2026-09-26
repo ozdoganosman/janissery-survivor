@@ -52,7 +52,9 @@ async function drag(page: Page, from: [number, number], to: [number, number]): P
   await page.mouse.up();
 }
 
-test('the city draws, grows on zoned land, takes fields, a bazaar, layers and a budget', async ({ page }) => {
+test('the city draws, grows on zoned land, takes fields, a bazaar, layers, a budget and events', async ({
+  page,
+}) => {
   const problems: string[] = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
@@ -154,6 +156,35 @@ test('the city draws, grows on zoned land, takes fields, a bazaar, layers and a 
   await expect(page.locator('.ledger .budget')).toContainText('Sultan payı');
   await page.getByRole('button', { name: /^Ağır$/ }).click();
   expect(await page.evaluate(() => window.__game!.city.policy.tax)).toBe('agir');
+
+  // Defence: the garrison grows from the panel.
+  await page.getByRole('button', { name: /Savunma/ }).click();
+  await expect(page.locator('.ledger .defense')).toContainText('Sur sağlamlığı');
+  const soldiers = await page.evaluate(() => window.__game!.city.policy.garrison);
+  await page.getByRole('button', { name: 'Asker ekle' }).click();
+  expect(await page.evaluate(() => window.__game!.city.policy.garrison)).toBeGreaterThan(soldiers);
+
+  // A fire breaks out: the clock stops, the flames show, and the governor's answer goes into
+  // the chronicle.
+  await page.keyboard.press('1');
+  expect(await page.evaluate(() => window.__game!.debugEvent('yangin'))).toBe(true);
+  await expect(page.locator('.event')).toBeVisible();
+  await expect(page.locator('.event h2')).toContainText('Yangın');
+  await expect.poll(() => page.evaluate(() => window.__game!.world.fire.burning)).toBeGreaterThan(0);
+  const day = await page.evaluate(() => window.__game!.city.calendar.day);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => window.__game!.city.calendar.day)).toBe(day);
+  await page.locator('.event button.choice').first().click();
+  await expect(page.locator('.event')).toBeHidden();
+  await page.getByRole('button', { name: /Vakayiname/ }).click();
+  await expect(page.locator('.ledger .chronicle')).toContainText('Yangın');
+
+  // Mongol envoys ride in and wait at the gate until they are answered.
+  expect(await page.evaluate(() => window.__game!.debugEvent('elci'))).toBe(true);
+  await expect(page.locator('.event h2')).toContainText('Moğol');
+  await expect.poll(() => page.evaluate(() => window.__game!.world.people.riders)).toBe(4);
+  await page.locator('.event button.choice:enabled').first().click();
+  await expect(page.locator('.event')).toBeHidden();
 
   expect(problems).toEqual([]);
 });

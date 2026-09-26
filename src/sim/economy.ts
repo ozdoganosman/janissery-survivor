@@ -8,6 +8,7 @@ import { distanceFactor, harvestAll, shearAll, sowAll, touchesRoad } from './fie
 import { DIRS4 } from './grid';
 import { notify } from './notices';
 import { closeBooks, consumeDay, esnafMonth, produceDay, prosperity } from './production';
+import { eventsDay, eventsMonth, ilkhanShare, modifierSum } from './events';
 import { coverage, supportedLevel, vakifFounders } from './services';
 
 export { notify };
@@ -29,15 +30,23 @@ const MAX_DAYS_PER_STEP = 30;
 export function stepTime(city: CityState, realSeconds: number): number {
   const cal = city.calendar;
   if (!Number.isFinite(realSeconds) || realSeconds <= 0) return 0;
+  // While the governor has a decision to make, the city waits.
+  if (city.events.pendingEvent !== null) return 0;
   const total = cal.fraction + realSeconds * DAYS_PER_SECOND[cal.speed];
   const whole = Math.floor(total);
   cal.fraction = total - whole;
   const days = Math.min(whole, MAX_DAYS_PER_STEP);
-  for (let k = 0; k < days; k++) {
+  let done = 0;
+  while (done < days) {
     cal.day++;
     simulateDay(city);
+    done++;
+    if (city.events.pendingEvent !== null) {
+      cal.fraction = 0;
+      break;
+    }
   }
-  return days;
+  return done;
 }
 
 /** Runs `days` whole days, regardless of speed. For tests and headless balance runs. */
@@ -88,6 +97,7 @@ export function simulateDay(city: CityState): void {
   }
 
   produceDay(city);
+  eventsDay(city);
   const wasHungry = city.hungry;
   city.hungry = consumeDay(city);
   if (city.hungry && !wasHungry) {
@@ -98,6 +108,7 @@ export function simulateDay(city: CityState): void {
 
 function monthStart(city: CityState): void {
   closeBudget(city);
+  eventsMonth(city);
   esnafMonth(city);
   settleHouses(city);
   if (city.granary > 0 && city.stats.foodMonths < 2) {
@@ -128,12 +139,15 @@ function closeBudget(city: CityState): void {
   }
   const closed = closeBooks(city);
   const gross = tax + closed.sales + closed.market;
-  const tribute = gross * b.tax.tributeShare;
-  city.treasury += tax - upkeep - vakif - tribute;
+  const tribute = gross * (b.tax.tributeShare + modifierSum(city, 'tribute'));
+  const ilkhan = gross * ilkhanShare(city);
+  const garrison = city.policy.garrison * b.defense.payPerSoldier;
+  const spent = upkeep + vakif + tribute + ilkhan + garrison;
+  city.treasury += tax - spent;
   city.stats.income = { tax, sales: closed.sales, market: closed.market };
-  city.stats.expenses = { upkeep, vakif, tribute };
+  city.stats.expenses = { upkeep, vakif, tribute, garrison, ilkhan };
   city.stats.incomeLastMonth = gross;
-  city.stats.netLastMonth = gross - upkeep - vakif - tribute;
+  city.stats.netLastMonth = gross - spent;
 
   const wasUnpaid = city.unpaid;
   city.unpaid = city.treasury < 0;
@@ -217,7 +231,8 @@ export function updateStats(city: CityState): void {
     }
   }
   const population = households * b.people.perStorey;
-  const labor = population * b.people.laborShare;
+  // Soldiers are townsmen under arms: they draw pay instead of working.
+  const labor = Math.max(0, population * b.people.laborShare - city.policy.garrison);
 
   // Farm distance only changes when houses or fields do; recompute it only then.
   const distKey = `${city.revision.houses}:${city.revision.fields}`;
@@ -277,7 +292,8 @@ export function updateStats(city: CityState): void {
       dm.jobWeight * jobTerm +
         dm.foodWeight * foodTerm +
         b.needs.demandBonus * wellBeing +
-        b.tax.demand[city.policy.tax],
+        b.tax.demand[city.policy.tax] +
+        modifierSum(city, 'demand'),
     ),
   );
 
@@ -305,7 +321,14 @@ function buildableLots(city: CityState): number[] {
   const reach = city.balance.zoning.roadReach;
   const out: number[] = [];
   for (let i = 0; i < city.zone.length; i++) {
-    if (city.zone[i] === 1 && city.house[i] === 0 && roadDist[i] <= reach && city.terrain.water[i] === 0) {
+    const ashes = city.events.ash[i] > 0;
+    if (
+      city.zone[i] === 1 &&
+      city.house[i] === 0 &&
+      roadDist[i] <= reach &&
+      city.terrain.water[i] === 0 &&
+      !ashes
+    ) {
       out.push(i);
     }
   }
@@ -372,8 +395,10 @@ function growOrShrink(city: CityState): void {
   if (famine) rate += g.famineAbandonPerDay;
   const n = eventsToday(city, rate);
   if (n === 0) return;
+  // In a famine, those an imaret feeds stay; everyone else may go.
+  const fed = famine ? coverage(city).imaret : null;
   const houses: number[] = [];
-  for (let i = 0; i < city.house.length; i++) if (city.house[i] > 0) houses.push(i);
+  for (let i = 0; i < city.house.length; i++) if (city.house[i] > 0 && fed?.[i] !== 1) houses.push(i);
   let left = 0;
   for (let k = 0; k < n && houses.length > 0; k++) {
     // The first to leave are those at the ragged edge of town.

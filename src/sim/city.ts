@@ -12,6 +12,7 @@ import { roadDistance } from './distance';
 import { updateStats } from './economy';
 import { seedStartingFields } from './fields';
 import type { Field } from './fields';
+import { initialEvents, type EventState } from './events';
 import { emptyFlows, emptyGoods, estimateNeeds, type Flows } from './production';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
@@ -83,7 +84,11 @@ export interface CityState {
   /** Someone went without food today. */
   hungry: boolean;
   /** The governor's standing orders. */
-  policy: { tax: TaxRate; narh: boolean };
+  policy: { tax: TaxRate; narh: boolean; garrison: number };
+  /** Fires, plague, the Mongols: all that happens unplanned, and the city's defences. */
+  events: EventState;
+  /** The day the game began. */
+  startDay: number;
   /** The treasury closed last month in debt: public staff go unpaid. */
   unpaid: boolean;
   calendar: Calendar;
@@ -94,7 +99,7 @@ export interface CityState {
   /** Messages for the player, oldest first; the UI drains this queue. */
   notices: Notice[];
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number; zones: number; fields: number; buildings: number };
+  revision: { roads: number; houses: number; zones: number; fields: number; buildings: number; fire: number };
 }
 
 export interface CityStats {
@@ -121,7 +126,7 @@ export interface CityStats {
   incomeLastMonth: number;
   /** Where last month's income came from, and where it went. */
   income: { tax: number; sales: number; market: number };
-  expenses: { upkeep: number; vakif: number; tribute: number };
+  expenses: { upkeep: number; vakif: number; tribute: number; garrison: number; ilkhan: number };
   /** Income less expenses, last month. */
   netLastMonth: number;
   /** Notables ready to endow a vakıf. */
@@ -172,7 +177,9 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     flows: { current: emptyFlows(), last: emptyFlows() },
     needs: { ekmek: 0, kumas: 0, alet: 0 },
     hungry: false,
-    policy: { tax: balance.tax.start, narh: false },
+    policy: { tax: balance.tax.start, narh: false, garrison: balance.defense.startGarrison },
+    events: initialEvents(grid.count, balance),
+    startDay: 0,
     unpaid: false,
     calendar: createCalendar(def.start),
     rngState: (def.seed * 2654435761) >>> 0,
@@ -192,15 +199,16 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
       freeLots: 0,
       incomeLastMonth: 0,
       income: { tax: 0, sales: 0, market: 0 },
-      expenses: { upkeep: 0, vakif: 0, tribute: 0 },
+      expenses: { upkeep: 0, vakif: 0, tribute: 0, garrison: 0, ilkhan: 0 },
       netLastMonth: 0,
       founders: 0,
       lastHarvest: 0,
       lastShearing: 0,
     },
     notices: [],
-    revision: { roads: 0, houses: 0, zones: 0, fields: 0, buildings: 0 },
+    revision: { roads: 0, houses: 0, zones: 0, fields: 0, buildings: 0, fire: 0 },
   };
+  city.startDay = city.calendar.day;
   const rng = createRng(def.seed);
   buildWalls(city);
   placeLandmarks(city);

@@ -145,6 +145,12 @@ export class WorksView {
       case 'dolap':
         this.noria(b, f, front, depth, base, rot);
         break;
+      case 'subasi':
+        guardPost(f, front, depth);
+        break;
+      case 'imaret':
+        this.soupKitchen(f, front, depth, base, cx, cz, rot, b.id);
+        break;
     }
   }
 
@@ -281,9 +287,68 @@ export class WorksView {
       f.part(box(0.6, 0.07, 0.1), PAL.iron, w * 0.25, 0.02 + k * 0.07, depth / 2 - 0.55 + (k % 2) * 0.12);
     f.part(cone(0.32, 0.28, 7), PAL.ore, -w / 2 + 0.3, 0, depth / 2 - 0.45);
 
-    const top = new THREE.Vector3(chimX, 2.85, chimZ)
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), rot)
-      .add(new THREE.Vector3(cx, base, cz));
+    this.smoke(new THREE.Vector3(chimX, 2.85, chimZ), base, cx, cz, rot, hash2(id, 3, 41));
+  }
+
+  /**
+   * An imaret: a long vaulted kitchen with its chimneys smoking, a domed refectory at one
+   * end, and the great cauldron in the yard before it where the soup is ladled out.
+   */
+  private soupKitchen(
+    f: Frame,
+    front: number,
+    depth: number,
+    base: number,
+    cx: number,
+    cz: number,
+    rot: number,
+    id: number,
+  ): void {
+    const w = front - 0.3;
+    const d = depth - 0.3;
+    const kd = d * 0.55;
+    const kz = -d / 2 + kd / 2;
+    const kw = w * 0.62;
+    const kx = -w / 2 + kw / 2;
+    f.part(box(kw, 1.0 + 0.5, kd), PAL.stone, kx, -0.5, kz);
+    // A barrel vault along the kitchen, drawn as a half cylinder lying on its side.
+    const vault = new THREE.CylinderGeometry(kd / 2, kd / 2, kw, 12);
+    vault.rotateZ(Math.PI / 2);
+    vault.scale(1, 0.55, 1);
+    f.part(vault, PAL.lead, kx, 1.0, kz);
+    for (let k = 0; k < 3; k++)
+      f.part(arch(0.26, 0.42, 0.03), PAL.door, kx - kw / 3 + (k * kw) / 3, 0, kz + kd / 2);
+    // The refectory: a square domed hall at the far end.
+    const rw = w - kw - 0.1;
+    const rx = w / 2 - rw / 2;
+    f.part(box(rw, 1.2 + 0.5, kd), PAL.plaster, rx, -0.5, kz);
+    f.part(cylinder(rw * 0.45, rw * 0.45, 0.15, 8), PAL.stoneDark, rx, 1.2, kz);
+    f.part(dome(rw * 0.42), PAL.lead, rx, 1.35, kz);
+    f.part(arch(0.34, 0.55, 0.03), PAL.door, rx, 0, kz + kd / 2);
+    // Chimneys on the kitchen.
+    const chims = [kx - kw * 0.25, kx + kw * 0.25];
+    chims.forEach((x, k) => {
+      f.part(box(0.2, 0.75, 0.2), PAL.brick, x, 1.0 + kd * 0.15, kz - kd * 0.15);
+      f.part(cone(0.16, 0.14, 4), PAL.stoneDark, x, 1.75 + kd * 0.15, kz - kd * 0.15);
+      this.smoke(new THREE.Vector3(x, 1.95 + kd * 0.15, kz - kd * 0.15), base, cx, cz, rot, hash2(id, k, 43));
+    });
+    // The yard: the great copper cauldron on its hearth, a woodpile, a low wall with a gate.
+    const yz = kz + kd / 2 + (d - kd) / 2;
+    f.part(cylinder(0.34, 0.38, 0.16, 10), PAL.stoneDark, -w * 0.12, 0, yz);
+    const bowl = dome(0.3, 12);
+    bowl.rotateX(Math.PI);
+    f.part(bowl, PAL.copper, -w * 0.12, 0.46, yz);
+    f.part(cylinder(0.27, 0.27, 0.02, 10), PAL.bread, -w * 0.12, 0.42, yz);
+    for (let k = 0; k < 3; k++)
+      f.part(box(0.5, 0.08, 0.08), PAL.timber, w * 0.28, 0.04 + k * 0.08, yz - 0.1 + (k % 2) * 0.1);
+    const gz = d / 2 - 0.04;
+    f.part(box(w / 2 - 0.3, 0.3, 0.07), PAL.stone, -w / 4 - 0.15, 0, gz);
+    f.part(box(w / 2 - 0.3, 0.3, 0.07), PAL.stone, w / 4 + 0.15, 0, gz);
+  }
+
+  /** A chimney top in the building's frame that puffs smoke. */
+  private smoke(local: THREE.Vector3, base: number, cx: number, cz: number, rot: number, seed: number): void {
+    const top = local.applyAxisAngle(new THREE.Vector3(0, 1, 0), rot).add(new THREE.Vector3(cx, base, cz));
     const puffs: THREE.Mesh[] = [];
     for (let k = 0; k < PUFFS; k++) {
       const p = new THREE.Mesh(this.puffGeom, miniMaterial({ color: PAL.smoke }));
@@ -291,8 +356,46 @@ export class WorksView {
       puffs.push(p);
       this.group.add(p);
     }
-    this.chimneys.push({ top, puffs, seed: hash2(id, 3, 41) });
+    this.chimneys.push({ top, puffs, seed });
   }
+}
+
+/**
+ * The subaşı's post: a walled block with a crenellated parapet, a gate on the street, a
+ * square watchtower at the back corner flying the red banner, and a tethered horse.
+ */
+function guardPost(f: Frame, front: number, depth: number): void {
+  const w = front - 0.3;
+  const d = depth - 0.3;
+  const h = 0.95;
+  f.part(box(w, h + 0.5, d), PAL.stone, 0, -0.5, 0);
+  f.part(box(w + 0.06, 0.07, d + 0.06), PAL.stoneDark, 0, h, 0);
+  // Merlons round the parapet.
+  const n = 5;
+  for (let k = 0; k < n; k++) {
+    const t = -w / 2 + 0.08 + (k * (w - 0.16)) / (n - 1);
+    f.part(box(0.12, 0.14, 0.08), PAL.stone, t, h + 0.07, d / 2 - 0.02);
+    f.part(box(0.12, 0.14, 0.08), PAL.stone, t, h + 0.07, -d / 2 + 0.02);
+    f.part(box(0.08, 0.14, 0.12), PAL.stone, w / 2 - 0.02, h + 0.07, t * (d / w));
+    f.part(box(0.08, 0.14, 0.12), PAL.stone, -w / 2 + 0.02, h + 0.07, t * (d / w));
+  }
+  f.part(arch(0.42, 0.66, 0.04), PAL.door, 0, 0, d / 2);
+  f.part(box(0.5, 0.06, 0.05), PAL.stoneDark, 0, 0.72, d / 2 + 0.01);
+  // The watchtower and its banner.
+  const tx = w / 2 - 0.3;
+  const tz = -d / 2 + 0.3;
+  f.part(box(0.55, 1.9, 0.55), PAL.stone, tx, h, tz);
+  f.part(box(0.63, 0.07, 0.63), PAL.stoneDark, tx, h + 1.9, tz);
+  f.part(cone(0.42, 0.4, 4).rotateY(Math.PI / 4), PAL.roofs[3], tx, h + 1.97, tz);
+  f.part(box(0.12, 0.2, 0.02), PAL.ink, tx, h + 1.2, tz + 0.28);
+  f.part(cylinder(0.02, 0.02, 0.8, 5), PAL.timberDark, tx, h + 2.3, tz);
+  f.part(box(0.4, 0.24, 0.015), PAL.banner, tx + 0.21, h + 2.82, tz);
+  // A horse tied at the gate.
+  const hx = -w * 0.3;
+  const hz = d / 2 + 0.22;
+  f.part(box(0.36, 0.16, 0.12), PAL.horse, hx, 0.2, hz);
+  for (const lx of [-0.13, 0.13]) f.part(box(0.04, 0.2, 0.1), PAL.horse, hx + lx, 0, hz);
+  f.part(box(0.1, 0.18, 0.08), PAL.horse, hx + 0.2, 0.3, hz);
 }
 
 function dyeworks(f: Frame, front: number, depth: number, id: number): void {

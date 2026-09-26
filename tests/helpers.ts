@@ -9,7 +9,10 @@ import { buildRoad, planRoad } from '../src/sim/roads';
 /** Shared set-up for the simulation tests. */
 
 export const def = konya as unknown as CityDef;
-export const balance = balanceJson as unknown as Balance;
+/** The balance as shipped, events and all. */
+export const fullBalance = balanceJson as unknown as Balance;
+/** The same with random events off, for tests of everything else. */
+export const balance: Balance = { ...fullBalance, events: { ...fullBalance.events, enabled: false } };
 export const newCity = (): CityState => createCity(def, balance);
 
 export const usable = (p: BuildingProposal): boolean => p.problem === undefined;

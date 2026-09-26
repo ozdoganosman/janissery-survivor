@@ -12,7 +12,9 @@ import { inspectTile } from '../src/sim/inspect';
 import { applyZone, clearArea, proposeZone } from '../src/sim/zoning';
 
 const def = konya as unknown as CityDef;
-const balance = balanceJson as unknown as Balance;
+const loaded = balanceJson as unknown as Balance;
+// These tests are about the economy: no fires or plague to muddy the figures.
+const balance: Balance = { ...loaded, events: { ...loaded.events, enabled: false } };
 const newCity = (): CityState => createCity(def, balance);
 
 /** Runs until the calendar reaches the given month (0-based), day 1. */
@@ -96,7 +98,9 @@ describe('starting economy', () => {
     expect(expenses.upkeep).toBe(upkeep);
     expect(expenses.tribute).toBeCloseTo(c.stats.incomeLastMonth * balance.tax.tributeShare, 6);
     const today = c.flows.current.sales + c.flows.current.market;
-    expect(c.treasury).toBeCloseTo(before + income.tax - upkeep - expenses.tribute + today, 6);
+    expect(expenses.garrison).toBe(balance.defense.startGarrison * balance.defense.payPerSoldier);
+    const spent = upkeep + expenses.tribute + expenses.garrison;
+    expect(c.treasury).toBeCloseTo(before + income.tax - spent + today, 6);
     expect(c.stats.netLastMonth).toBeGreaterThan(0);
   });
 });

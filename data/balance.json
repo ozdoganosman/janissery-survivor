@@ -28,7 +28,7 @@
     },
     "start": "orta",
     "konakFactor": 1.5,
-    "tributeShare": 0.15
+    "tributeShare": 0.25
   },
   "zoning": {
     "maxSlope": 0.5,
@@ -316,6 +316,34 @@
       "waterReach": 1,
       "maxSlope": 0.5,
       "hint": "Suya bitişik; yakın tarlaları sular"
+    },
+    "subasi": {
+      "name": "Subaşı Karakolu",
+      "category": "hizmet",
+      "size": [2, 2],
+      "cost": 900,
+      "upkeep": 12,
+      "workers": 4,
+      "in": {},
+      "out": {},
+      "service": "asayis",
+      "radius": 14,
+      "maxSlope": 0.5,
+      "hint": "Asayiş; yangını ve kargaşayı azaltır"
+    },
+    "imaret": {
+      "name": "İmaret",
+      "category": "hizmet",
+      "size": [3, 2],
+      "cost": 1400,
+      "upkeep": 20,
+      "workers": 5,
+      "in": {},
+      "out": {},
+      "service": "imaret",
+      "radius": 16,
+      "maxSlope": 0.5,
+      "hint": "Aşevi; kıtlıkta çevresi göç etmez"
     }
   },
   "trades": {
@@ -421,5 +449,114 @@
     "esnafOutputBonus": 0.2,
     "irrigationYieldBonus": 0.3,
     "minStaffing": 0.5
+  },
+  "events": {
+    "enabled": true,
+    "graceDays": 90,
+    "yangin": {
+      "chancePerDay": 0.004,
+      "summerFactor": 2,
+      "spread": 0.32,
+      "burnDays": 3,
+      "ashDays": 90,
+      "waterFactor": 0.5,
+      "guardFactor": 0.5,
+      "sendCost": 200,
+      "sendFactor": 0.4,
+      "breakRadius": 2,
+      "cooldownDays": 120
+    },
+    "salgin": {
+      "chancePerDay": 0.0006,
+      "crowdPop": 4000,
+      "minDays": 60,
+      "maxDays": 120,
+      "lossPerDay": 0.0012,
+      "healthFactor": 0.5,
+      "quarantineFactor": 0.5,
+      "physicianCost": 600,
+      "physicianFactor": 0.6,
+      "demandPenalty": 0.3,
+      "cooldownDays": 720
+    },
+    "kitlik": {
+      "belowMonths": 2,
+      "sultanMonths": 4,
+      "sultanTributeExtra": 0.05,
+      "sultanDays": 360,
+      "grainPrice": 1.5,
+      "buyMonths": 3,
+      "cooldownDays": 240
+    },
+    "deprem": {
+      "chancePerDay": 0.0003,
+      "houseShare": 0.06,
+      "wallDamage": 0.2,
+      "repairPerHouse": 15,
+      "cooldownDays": 1500
+    },
+    "mevlana": {
+      "fromYear": 1231,
+      "chancePerDay": 0.004,
+      "demandBonus": 0.05,
+      "prosperityBonus": 0.05,
+      "listenDays": 360,
+      "honourCost": 1500
+    },
+    "ahi": {
+      "chancePerDay": 0.01,
+      "heavyTaxMonths": 6,
+      "lowProsperity": 0.25,
+      "lowMonths": 8,
+      "dealCost": 800,
+      "garrisonNeeded": 150,
+      "prosperityPenalty": 0.1,
+      "penaltyDays": 180,
+      "shopsClosed": 2,
+      "cooldownDays": 360
+    },
+    "kervan": {
+      "chancePerDay": 0.004,
+      "priceFactor": 1.6,
+      "sellShare": 0.5,
+      "silkCost": 600,
+      "silkBonus": 0.06,
+      "silkDays": 180,
+      "toll": 250,
+      "cooldownDays": 240
+    },
+    "elci": {
+      "fromYear": 1236,
+      "chancePerDay": 0.004,
+      "giftCost": 1500,
+      "giftThreat": -0.15,
+      "stallThreat": 0.05,
+      "expelThreat": 0.2,
+      "cooldownDays": 500
+    },
+    "kosedag": {
+      "year": 1243,
+      "month": 5,
+      "tributeShare": 0.2,
+      "failTributeShare": 0.25,
+      "graceYears": 5,
+      "laterShare": 0.1,
+      "plunderShare": 0.5,
+      "burnRadius": 4,
+      "fires": 8
+    }
+  },
+  "defense": {
+    "startGarrison": 100,
+    "payPerSoldier": 3,
+    "garrisonStep": 25,
+    "maxGarrisonShare": 0.1,
+    "startWalls": 0.8,
+    "wallDecayPerYear": 0.02,
+    "repairCostFull": 4000,
+    "threatFromYear": 1236,
+    "threatPerYear": 0.1,
+    "requiredBase": 150,
+    "requiredPerThreat": 350
   }
 }

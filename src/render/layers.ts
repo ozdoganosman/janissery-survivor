@@ -9,7 +9,17 @@ import { coverage, supportedLevel } from '../sim/services';
  * Each reads the simulation and never changes it.
  */
 export type Layer =
-  'verim' | 'su' | 'ibadet' | 'temizlik' | 'egitim' | 'saglik' | 'sulama' | 'duman' | 'konut';
+  | 'verim'
+  | 'su'
+  | 'ibadet'
+  | 'temizlik'
+  | 'egitim'
+  | 'saglik'
+  | 'asayis'
+  | 'imaret'
+  | 'sulama'
+  | 'duman'
+  | 'konut';
 
 export const LAYERS: readonly Layer[] = [
   'verim',
@@ -18,6 +28,8 @@ export const LAYERS: readonly Layer[] = [
   'temizlik',
   'egitim',
   'saglik',
+  'asayis',
+  'imaret',
   'sulama',
   'duman',
   'konut',
@@ -30,6 +42,8 @@ export const LAYER_NAMES: Record<Layer, string> = {
   temizlik: 'Temizlik',
   egitim: 'Eğitim',
   saglik: 'Sağlık',
+  asayis: 'Asayiş',
+  imaret: 'İmaret',
   sulama: 'Sulama',
   duman: 'Duman',
   konut: 'Konut',
@@ -44,6 +58,8 @@ export const SERVICE_TINT: Record<Service, string> = {
   saglik: '#5f9a3a',
   esnaf: '#c97b4c',
   sulama: '#3b6ea3',
+  asayis: '#8c2a1c',
+  imaret: '#c98b4a',
 };
 
 const RED = '#c8312a';

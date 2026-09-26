@@ -5,6 +5,7 @@ import { emptyShop } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
 import { notify } from './notices';
+import { modifierSum } from './events';
 import { coveredAt, serves } from './services';
 
 /**
@@ -92,7 +93,8 @@ function runRecipe(
   for (const [s, amount] of entries(r.in)) {
     take(city, s, amount * share);
     if (sell && s !== 'zahire') {
-      const value = amount * share * goods[s].price;
+      // Under quarantine the bazaar is half empty, and so is the state's till.
+      const value = amount * share * goods[s].price * (city.events.plague?.quarantine === true ? 0.5 : 1);
       city.treasury += value;
       city.flows.current.sales += value;
     }
@@ -206,7 +208,8 @@ export function consumeDay(city: CityState): boolean {
   flows.used.alet += tools;
 
   // Under narh the muhtesib holds prices down, and the bazaar's takings with them.
-  const cut = city.policy.narh ? 1 - b.narh.priceCut : 1;
+  const cut =
+    (city.policy.narh ? 1 - b.narh.priceCut : 1) * (city.events.plague?.quarantine === true ? 0.5 : 1);
   const market = ((bread + moreBread) * b.goods.ekmek.price + cloth * b.goods.kumas.price) * cut * tax;
   city.treasury += market;
   flows.market += market;
@@ -224,7 +227,8 @@ export function consumeDay(city: CityState): boolean {
 export function prosperity(city: CityState): number {
   const w = city.balance.needs.weights;
   const met = (w.ekmek * city.needs.ekmek + w.kumas * city.needs.kumas) / (w.ekmek + w.kumas);
-  return Math.min(1, met + (city.policy.narh ? city.balance.narh.prosperityBonus : 0));
+  const narh = city.policy.narh ? city.balance.narh.prosperityBonus : 0;
+  return Math.max(0, Math.min(1, met + narh + modifierSum(city, 'prosperity')));
 }
 
 /** A first guess at how well needs are met, so a new city does not start from nothing. */
