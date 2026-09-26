@@ -3,11 +3,25 @@
     "perStorey": 5,
     "laborShare": 0.42,
     "serviceShare": 0.12,
-    "landmarkJobs": { "cami": 30, "kumbet": 2, "kosk": 25, "mescit": 6, "hamam": 12 }
+    "landmarkJobs": {
+      "cami": 30,
+      "kumbet": 2,
+      "kosk": 25,
+      "mescit": 6,
+      "hamam": 12
+    }
   },
-  "food": { "perPersonPerMonth": 0.6, "startGranary": 22000 },
-  "tax": { "perHouseholdPerMonth": 2 },
-  "zoning": { "maxSlope": 0.5, "roadReach": 2 },
+  "food": {
+    "perPersonPerMonth": 0.6,
+    "startGranary": 22000
+  },
+  "tax": {
+    "perHouseholdPerMonth": 2
+  },
+  "zoning": {
+    "maxSlope": 0.5,
+    "roadReach": 2
+  },
   "fields": {
     "costPerTile": 4,
     "minSide": 2,
@@ -17,11 +31,27 @@
     "fallowWork": 0.25,
     "sowMonths": [2, 3],
     "harvestMonth": 7,
-    "soil": { "drain": 0.12, "regain": 0.3, "floor": 0.55 },
-    "distance": { "free": 10, "range": 50, "maxPenalty": 0.35 },
+    "soil": {
+      "drain": 0.12,
+      "regain": 0.3,
+      "floor": 0.55
+    },
+    "distance": {
+      "free": 10,
+      "range": 50,
+      "maxPenalty": 0.35
+    },
     "crops": {
-      "bugday": { "name": "Buğday", "yield": 48, "fertilityWeight": 1 },
-      "arpa": { "name": "Arpa", "yield": 46, "fertilityWeight": 0.45 }
+      "bugday": {
+        "name": "Buğday",
+        "yield": 48,
+        "fertilityWeight": 1
+      },
+      "arpa": {
+        "name": "Arpa",
+        "yield": 46,
+        "fertilityWeight": 0.45
+      }
     },
     "startTiles": 820
   },
@@ -40,5 +70,192 @@
     "unemploymentSpan": 0.12,
     "comfortMonths": 3,
     "monthsSpan": 4
+  },
+  "goods": {
+    "un": {
+      "name": "Un",
+      "unit": "kile",
+      "price": 1,
+      "cap": 2000,
+      "food": 1
+    },
+    "ekmek": {
+      "name": "Ekmek",
+      "unit": "somun",
+      "price": 0.06,
+      "cap": 15000,
+      "food": 0.05
+    },
+    "yun": {
+      "name": "Yün",
+      "unit": "batman",
+      "price": 1,
+      "cap": 4000
+    },
+    "iplik": {
+      "name": "İplik",
+      "unit": "batman",
+      "price": 3,
+      "cap": 400
+    },
+    "kumas": {
+      "name": "Kumaş",
+      "unit": "top",
+      "price": 12,
+      "cap": 150
+    },
+    "cevher": {
+      "name": "Cevher",
+      "unit": "yük",
+      "price": 1,
+      "cap": 400
+    },
+    "demir": {
+      "name": "Demir",
+      "unit": "batman",
+      "price": 5,
+      "cap": 150
+    },
+    "alet": {
+      "name": "Alet",
+      "unit": "adet",
+      "price": 6,
+      "cap": 200
+    }
+  },
+  "works": {
+    "degirmen": {
+      "name": "Değirmen",
+      "size": [2, 2],
+      "cost": 1500,
+      "workers": 6,
+      "in": {
+        "zahire": 600
+      },
+      "out": {
+        "un": 600
+      },
+      "site": "water",
+      "waterReach": 1,
+      "maxSlope": 0.5,
+      "hint": "Suya bitişik; zahireyi una çevirir"
+    },
+    "boyahane": {
+      "name": "Boyahane",
+      "size": [3, 2],
+      "cost": 1200,
+      "workers": 8,
+      "in": {
+        "yun": 80
+      },
+      "out": {
+        "iplik": 80
+      },
+      "site": "water",
+      "waterReach": 2,
+      "maxSlope": 0.5,
+      "hint": "Suya yakın; yünü ipliğe çevirir"
+    },
+    "maden": {
+      "name": "Maden",
+      "size": [2, 2],
+      "cost": 2000,
+      "workers": 10,
+      "in": {},
+      "out": {
+        "cevher": 60
+      },
+      "site": "ore",
+      "maxSlope": 1.3,
+      "hint": "Demir damarı üstünde; cevher çıkarır"
+    },
+    "dokumhane": {
+      "name": "Dökümhane",
+      "size": [3, 3],
+      "cost": 2500,
+      "workers": 8,
+      "in": {
+        "cevher": 60
+      },
+      "out": {
+        "demir": 30
+      },
+      "smoke": 6,
+      "maxSlope": 0.5,
+      "hint": "Cevheri demire çevirir; duman yayar"
+    },
+    "arasta": {
+      "name": "Arasta",
+      "size": [4, 2],
+      "cost": 1000,
+      "workers": 0,
+      "in": {},
+      "out": {},
+      "shops": 4,
+      "maxSlope": 0.5,
+      "hint": "Dört dükkânlı çarşı; esnaf doldurur"
+    }
+  },
+  "trades": {
+    "firinci": {
+      "name": "Fırıncı",
+      "workers": 3,
+      "in": {
+        "un": 150
+      },
+      "out": {
+        "ekmek": 3000
+      }
+    },
+    "dokumaci": {
+      "name": "Dokumacı",
+      "workers": 3,
+      "in": {
+        "iplik": 40
+      },
+      "out": {
+        "kumas": 20
+      }
+    },
+    "demirci": {
+      "name": "Demirci",
+      "workers": 2,
+      "in": {
+        "demir": 8
+      },
+      "out": {
+        "alet": 16
+      }
+    }
+  },
+  "needs": {
+    "breadShare": 0.5,
+    "kumasPerHouseholdPerMonth": 0.1,
+    "weights": {
+      "ekmek": 0.6,
+      "kumas": 0.4
+    },
+    "marketTax": 0.1,
+    "demandBonus": 0.15,
+    "smoothingDays": 20
+  },
+  "tools": {
+    "perTilePerMonth": 0.02,
+    "yieldBonus": 0.25
+  },
+  "pasture": {
+    "name": "Mera",
+    "costPerTile": 2,
+    "maxSlope": 0.9,
+    "workersPerTile": 0.25,
+    "woolPerTile": 8,
+    "shearMonth": 4,
+    "sheepPerTile": 0.7
+  },
+  "esnaf": {
+    "closeAfterMonths": 2,
+    "openMinInputMonths": 0.5,
+    "openStockMonths": 4,
+    "starvedDays": 18
   }
 }

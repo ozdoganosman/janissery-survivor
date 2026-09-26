@@ -118,7 +118,7 @@ export function fertilityTexture(terrain: Terrain): THREE.DataTexture {
   return tex;
 }
 
-export type FieldLook = 'yesil' | 'bugday' | 'arpa' | 'aniz' | 'kis' | 'surulmus' | 'nadas';
+export type FieldLook = 'yesil' | 'bugday' | 'arpa' | 'aniz' | 'kis' | 'surulmus' | 'nadas' | 'mera';
 
 /** World units covered by one repeat of a field texture. */
 export const FIELD_TEXTURE_UNITS = 2.4;
@@ -138,6 +138,7 @@ export function fieldTexture(look: FieldLook): THREE.CanvasTexture {
       kis: '#d3c2a3',
       surulmus: '#c9a071',
       nadas: '#d7bf8e',
+      mera: '#b4c77a',
     };
     g.fillStyle = base[look];
     g.fillRect(0, 0, s, s);
@@ -224,6 +225,25 @@ export function fieldTexture(look: FieldLook): THREE.CanvasTexture {
         break;
       case 'surulmus':
         furrows('#9c6f45', 3.2, 10);
+        break;
+      case 'mera':
+        // Grazed turf: short tufts and clover, no furrows.
+        for (let i = 0; i < 70; i++) {
+          const x = rng.next() * s;
+          const y = rng.next() * s;
+          for (let k = -1; k <= 1; k++) {
+            stroke(
+              g,
+              [
+                [x + k * 3, y + 4],
+                [x + k * 4, y - 4],
+              ],
+              'rgba(96,128,52,0.75)',
+              1.8,
+            );
+          }
+        }
+        for (let i = 0; i < 12; i++) flower(g, rng.next() * s, rng.next() * s, 2.2, '#fbf3e3');
         break;
       case 'nadas':
         furrows('rgba(160,120,80,0.5)', 2, 6, 3);

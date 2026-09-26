@@ -11,6 +11,7 @@ import { MiniPipeline } from './pipeline';
 import { RoadsView } from './roads-view';
 import { TerrainView } from './terrain-view';
 import { TreesView } from './trees-view';
+import { WorksView } from './works-view';
 import { ZonesView } from './zones-view';
 
 /** Sun direction, from the ground towards the light: low from the south-west. */
@@ -30,6 +31,7 @@ export class World {
   private readonly trees: TreesView;
   private readonly fields: FieldsView;
   private readonly zones: ZonesView;
+  private readonly works: WorksView;
   private readonly pipeline: MiniPipeline;
   /** Seconds since the city layers were last compared with the simulation. */
   private sinceSync = Infinity;
@@ -57,6 +59,7 @@ export class World {
     this.trees = new TreesView(city);
     this.fields = new FieldsView(city);
     this.zones = new ZonesView(city);
+    this.works = new WorksView(city);
     this.cursor = new CursorView(city);
     this.scene.add(
       this.terrain.group,
@@ -66,6 +69,7 @@ export class World {
       this.houses.group,
       this.trees.group,
       new BuildingsView(city).group,
+      this.works.group,
       this.cursor.group,
     );
 
@@ -101,10 +105,12 @@ export class World {
         this.trees.sync(),
         this.fields.sync(),
         this.zones.sync(),
+        this.works.sync(),
       ];
       changed = results.some((r) => r);
     }
     this.terrain.update(elapsed);
+    this.works.update(elapsed);
     this.applyCloseness(moved || changed);
     this.pipeline.render();
   }

@@ -81,10 +81,16 @@ describe('starting economy', () => {
     let households = 0;
     for (let i = 0; i < c.house.length; i++) households += c.house[i];
     const before = c.treasury;
+    const sold = c.flows.current.sales + c.flows.current.market;
     simulateDays(c, 1); // 1 Nisan
     expect(dateOf(c.calendar).day).toBe(1);
-    expect(c.stats.incomeLastMonth).toBe(households * balance.tax.perHouseholdPerMonth);
-    expect(c.treasury).toBe(before + c.stats.incomeLastMonth);
+    const { income } = c.stats;
+    expect(income.tax).toBe(households * balance.tax.perHouseholdPerMonth);
+    // Last month's bazaar takings are reported with the tax; today's go straight in.
+    expect(income.sales + income.market).toBeCloseTo(sold, 6);
+    expect(c.stats.incomeLastMonth).toBeCloseTo(income.tax + income.sales + income.market, 6);
+    const today = c.flows.current.sales + c.flows.current.market;
+    expect(c.treasury).toBeCloseTo(before + income.tax + today, 6);
   });
 });
 

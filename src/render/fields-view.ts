@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { hash2 } from '../core/rng';
 import { dateOf } from '../sim/calendar';
 import type { CityState } from '../sim/city';
 import type { Field } from '../sim/fields';
 import { sampleHeight } from '../sim/terrain';
+import { box, PartBatch } from './builder';
 import { miniMaterial, setInkClass } from './materials';
-import { INK_CLASS } from './palette';
+import { INK_CLASS, PAL } from './palette';
 import { FIELD_TEXTURE_UNITS, fieldTexture, type FieldLook } from './textures';
 
 /** Gap left along every field edge, so neighbouring fields read as separate strips. */
@@ -14,6 +16,8 @@ const INSET = 0.08;
 export function fieldLook(f: Field, month: number): FieldLook {
   const winter = month === 11 || month <= 1;
   switch (f.stage) {
+    case 'otlak':
+      return winter ? 'kis' : 'mera';
     case 'nadas':
       return 'nadas';
     case 'bos':
@@ -28,13 +32,18 @@ export function fieldLook(f: Field, month: number): FieldLook {
 }
 
 /**
- * The fields, drawn in their season's colours. One merged mesh per look keeps draw calls
- * low; the whole set is rebuilt when fields change or the month turns.
+ * The fields, drawn in their season's colours, and the pastures with their fences and
+ * flocks. One merged mesh per look keeps draw calls low; the whole set is rebuilt when
+ * fields change or the month turns.
  */
 export class FieldsView {
   readonly group = new THREE.Group();
   private key = '';
   private readonly textures = new Map<FieldLook, THREE.Texture>();
+  private readonly sheepBody = new THREE.SphereGeometry(0.11, 8, 6)
+    .scale(1.35, 0.85, 0.9)
+    .translate(0, 0.1, 0);
+  private readonly sheepHead = new THREE.BoxGeometry(0.07, 0.07, 0.08).translate(0.15, 0.13, 0);
 
   constructor(private readonly city: CityState) {
     setInkClass(this.group, INK_CLASS.field);
@@ -48,7 +57,8 @@ export class FieldsView {
     this.key = key;
     for (const child of this.group.children.slice()) {
       this.group.remove(child);
-      if (child instanceof THREE.Mesh) (child.geometry as THREE.BufferGeometry).dispose();
+      if (child instanceof THREE.InstancedMesh) child.dispose();
+      else if (child instanceof THREE.Mesh) (child.geometry as THREE.BufferGeometry).dispose();
     }
     const byLook = new Map<FieldLook, Field[]>();
     for (const f of this.city.fields.values()) {
@@ -63,7 +73,68 @@ export class FieldsView {
       mesh.receiveShadow = true;
       this.group.add(mesh);
     }
+    this.pastures(month);
     return true;
+  }
+
+  /** Wattle fences round every pasture and its flock, out on the grass except in winter. */
+  private pastures(month: number): void {
+    const { grid, terrain, balance } = this.city;
+    const meras = [...this.city.fields.values()].filter((f) => f.kind === 'mera');
+    if (meras.length === 0) return;
+    const fences = new PartBatch();
+    const sheep: THREE.Matrix4[] = [];
+    const winter = month === 11 || month <= 1;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const f of meras) {
+      const x0 = f.x0 - grid.half + 0.12;
+      const z0 = f.z0 - grid.half + 0.12;
+      const x1 = f.x0 - grid.half + f.w - 0.12;
+      const z1 = f.z0 - grid.half + f.d - 0.12;
+      const rail = (ax: number, az: number, bx: number, bz: number): void => {
+        const len = Math.hypot(bx - ax, bz - az);
+        const steps = Math.max(1, Math.round(len));
+        for (let k = 0; k < steps; k++) {
+          const t0 = k / steps;
+          const t1 = (k + 1) / steps;
+          const px = ax + (bx - ax) * (t0 + t1) * 0.5;
+          const pz = az + (bz - az) * (t0 + t1) * 0.5;
+          const y = sampleHeight(terrain, px, pz);
+          const piece = fences.frame(px, y, pz, Math.atan2(bz - az, bx - ax) * -1);
+          piece.part(box(len / steps + 0.02, 0.05, 0.03), PAL.fence, 0, 0.14, 0);
+          piece.part(box(0.04, 0.2, 0.04), PAL.fence, -len / steps / 2, 0, 0);
+        }
+      };
+      rail(x0, z0, x1, z0);
+      rail(x1, z0, x1, z1);
+      rail(x1, z1, x0, z1);
+      rail(x0, z1, x0, z0);
+      if (winter) continue;
+      const count = Math.round(f.tiles.length * balance.pasture.sheepPerTile);
+      for (let k = 0; k < count; k++) {
+        const x = x0 + 0.2 + hash2(f.id, k, 61) * (x1 - x0 - 0.4);
+        const z = z0 + 0.2 + hash2(f.id, k, 62) * (z1 - z0 - 0.4);
+        const m = new THREE.Matrix4().compose(
+          new THREE.Vector3(x, sampleHeight(terrain, x, z), z),
+          new THREE.Quaternion().setFromAxisAngle(up, hash2(f.id, k, 63) * Math.PI * 2),
+          new THREE.Vector3(1, 1, 1),
+        );
+        sheep.push(m);
+      }
+    }
+    fences.build(this.group, INK_CLASS.tree);
+    if (sheep.length === 0) return;
+    for (const [geom, color] of [
+      [this.sheepBody, PAL.wool],
+      [this.sheepHead, PAL.sheepHead],
+    ] as const) {
+      const mesh = new THREE.InstancedMesh(geom, miniMaterial({ color }), sheep.length);
+      sheep.forEach((m, k) => mesh.setMatrixAt(k, m));
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      setInkClass(mesh, INK_CLASS.building);
+      this.group.add(mesh);
+    }
   }
 
   private texture(look: FieldLook): THREE.Texture {

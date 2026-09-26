@@ -1,4 +1,5 @@
 import type { Vec2 } from '../core/geom';
+import type { BuildingKind, Trade } from './balance';
 
 /**
  * The authored description of a city: what the player inherits on day one.
@@ -22,6 +23,26 @@ export interface CityDef {
   streets: { tepeRing: number; innerRing: number; alleys: number };
   housing: { innerRadius: number; frontFill: number; backFill: number; twoStorey: number };
   landmarks: LandmarkDef[];
+  /** Iron ore in the hills, where a mine can be sunk. */
+  deposits: DepositDef[];
+  /** Workshops and bazaars the city already has on day one. */
+  works: StartWorkDef[];
+}
+
+export interface DepositDef {
+  name: string;
+  x: number;
+  z: number;
+  radius: number;
+}
+
+export interface StartWorkDef {
+  kind: BuildingKind;
+  name: string;
+  /** World position to build at, or as close to it as the rules allow. */
+  near: Vec2;
+  /** Crafts already working in a bazaar's shops. */
+  shops?: Trade[];
 }
 
 export interface GateDef {
@@ -70,6 +91,7 @@ export function validateCityDef(def: CityDef): CityDef {
     if (!explicit && !polar) problems.push(`landmark "${l.name}" has no position`);
     if (l.w < 1 || l.d < 1) problems.push(`landmark "${l.name}" has an empty footprint`);
   }
+  for (const d of def.deposits) if (d.radius <= 0) problems.push(`deposit "${d.name}" has no size`);
   if (problems.length > 0) throw new Error(`Invalid city "${def.id}": ${problems.join('; ')}`);
   return def;
 }

@@ -24,7 +24,7 @@ interface Tree {
 export class TreesView {
   readonly group = new THREE.Group();
   private readonly trees: Tree[];
-  private revision = -1;
+  private revision = '';
   private readonly crowns: Record<Kind, THREE.BufferGeometry>;
   private readonly trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.42, 5).translate(0, 0.21, 0);
 
@@ -49,15 +49,19 @@ export class TreesView {
   }
 
   sync(): boolean {
-    const rev = this.city.revision.roads * 100003 + this.city.revision.houses;
+    const { revision } = this.city;
+    const rev = `${revision.roads}:${revision.houses}:${revision.fields}:${revision.buildings}`;
     if (rev === this.revision) return false;
     this.revision = rev;
     for (const child of this.group.children.slice()) {
       this.group.remove(child);
       if (child instanceof THREE.InstancedMesh) child.dispose();
     }
-    const { road, house } = this.city;
-    const standing = this.trees.filter((t) => road[t.tile] === 0 && house[t.tile] === 0);
+    const { road, house, field, building } = this.city;
+    // A tree gives way to anything built or ploughed on its tile.
+    const standing = this.trees.filter(
+      (t) => road[t.tile] === 0 && house[t.tile] === 0 && field[t.tile] < 0 && building[t.tile] < 0,
+    );
     const tint = { kavak: PAL.kavak, servi: PAL.servi, fruit: PAL.fruit };
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
@@ -105,6 +109,8 @@ function placeTrees(city: CityState): Tree[] {
     if (!grid.inBounds(tx, tz)) return;
     const tile = grid.index(tx, tz);
     if (terrain.water[tile] === 1 || city.wall[tile] !== WALL_NONE || city.structure[tile] >= 0) return;
+    // Nothing grows on bare ore; the seam should be visible from afar.
+    if (terrain.ore[tile] > 0) return;
     out.push({ kind, x, z, scale, tile });
   };
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { Crop, FieldPlan } from './sim/balance';
+import type { BuildingKind, FieldChoice, FieldPlan } from './sim/balance';
+import { buildBuilding, proposeBuilding, type BuildingProposal } from './sim/buildings';
 import { dateOf, formatDate, type Speed } from './sim/calendar';
 import type { CityState } from './sim/city';
 import { stepTime } from './sim/economy';
@@ -26,6 +27,7 @@ type Drag =
   | { kind: 'road'; from: TilePos; plan: RoadPlan | null }
   | { kind: 'zone'; from: TilePos; plan: ZoneProposal | null }
   | { kind: 'field'; from: TilePos; plan: FieldProposal | null }
+  | { kind: 'place'; plan: BuildingProposal | null }
   | { kind: 'clear'; from: TilePos; to: TilePos };
 
 /** A press that moves less than this (CSS pixels) is a click, not a drag. */
@@ -46,7 +48,8 @@ export class Game {
   private hoverTile: TilePos | null = null;
   /** Tile whose panel is pinned open by a click, if any. */
   private selected: TilePos | null = null;
-  private crop: Crop = 'bugday';
+  private crop: FieldChoice = 'bugday';
+  private buildKind: BuildingKind = 'arasta';
   private lastDateText = '';
   private sinceInfo = 0;
   private elapsed = 0;
@@ -64,16 +67,18 @@ export class Game {
       powerPreference: 'high-performance',
     });
     this.world = new World(renderer, city);
-    this.hud = new Hud(uiRoot, city.def.title, {
+    this.hud = new Hud(uiRoot, city.def.title, city.balance, {
       onTool: (t) => this.setTool(t),
       onSpeed: (s) => this.setSpeed(s),
       onFertility: (on) => this.setFertility(on),
       onCrop: (c) => this.setCrop(c),
+      onBuildKind: (k) => this.setBuildKind(k),
       onFieldPlan: (id, plan) => this.setFieldPlan(id, plan),
       onCloseInfo: () => this.select(null),
     });
     this.hud.setTool(this.tool);
     this.hud.setCrop(this.crop);
+    this.hud.setBuildKind(this.buildKind);
     this.hud.setSpeed(city.calendar.speed);
     this.world.rig.setView(4, 6, 30);
     this.world.rig.snap();
@@ -102,7 +107,7 @@ export class Game {
       this.lastDateText = text;
       this.hud.setDate(text);
     }
-    this.hud.setStats(this.city.treasury, this.city.granary, this.city.stats);
+    this.hud.setStats(this.city);
     for (const n of this.city.notices.splice(0)) this.hud.notify(n);
     // The open panel follows its tile as the season moves on.
     this.sinceInfo += dt;
@@ -125,9 +130,15 @@ export class Game {
     this.canvas.style.cursor = tool === 'incele' ? 'grab' : 'crosshair';
   }
 
-  setCrop(crop: Crop): void {
+  setCrop(crop: FieldChoice): void {
     this.crop = crop;
     this.hud.setCrop(crop);
+  }
+
+  setBuildKind(kind: BuildingKind): void {
+    this.buildKind = kind;
+    this.hud.setBuildKind(kind);
+    this.world.cursor.setPreview([]);
   }
 
   setFieldPlan(id: number, plan: FieldPlan): void {
@@ -193,7 +204,12 @@ export class Game {
     c.addEventListener('pointerup', (e) => this.onPointerUp(e));
     c.addEventListener('pointercancel', (e) => this.onPointerUp(e, true));
     c.addEventListener('pointerleave', () => {
-      if (this.drag === null) this.setHover(null);
+      if (this.drag !== null) return;
+      this.setHover(null);
+      if (this.tool === 'yapi') {
+        this.world.cursor.setPreview([]);
+        this.hud.hideTip();
+      }
     });
     c.addEventListener(
       'wheel',
@@ -248,6 +264,9 @@ export class Game {
       case 'tarla':
         this.drag = { kind: 'field', from: tile, plan: null };
         break;
+      case 'yapi':
+        this.drag = { kind: 'place', plan: null };
+        break;
       default:
         this.drag = { kind: 'clear', from: tile, to: tile };
     }
@@ -279,7 +298,13 @@ export class Game {
     }
     const tile = this.tileAt(e.clientX, e.clientY);
     if (e.pointerType === 'mouse') this.setHover(tile);
-    if (tile === null || drag === null) return;
+    if (tile === null) return;
+    if (drag === null) {
+      // With a building in hand, its footprint follows the mouse before any click.
+      if (this.tool === 'yapi' && e.pointerType === 'mouse')
+        this.previewPlacement(tile, e.clientX, e.clientY);
+      return;
+    }
     this.updateDrag(tile, e.clientX, e.clientY);
   }
 
@@ -308,6 +333,9 @@ export class Game {
       buildRoad(this.city, drag.plan);
     } else if (drag.kind === 'zone' && drag.plan !== null) {
       applyZone(this.city, drag.plan);
+    } else if (drag.kind === 'place' && drag.plan !== null && drag.plan.problem === undefined) {
+      const b = buildBuilding(this.city, drag.plan);
+      if (b !== null) this.select({ x: b.x0 + Math.floor(b.w / 2), z: b.z0 + Math.floor(b.d / 2) });
     } else if (drag.kind === 'field' && drag.plan !== null && drag.plan.problem === undefined) {
       const field = buildField(this.city, drag.plan, this.crop);
       if (field !== null) {
@@ -375,8 +403,13 @@ export class Game {
         if (plan.far > 0) text += ` · ${plan.far} tanesi yola uzak, yol gelene dek boş kalır`;
         break;
       }
+      case 'place': {
+        drag.plan = this.previewPlacement(tile, cx, cy);
+        return;
+      }
       case 'field': {
-        const plan = proposeField(city, drag.from.x, drag.from.z, tile.x, tile.z);
+        const mera = this.crop === 'mera';
+        const plan = proposeField(city, drag.from.x, drag.from.z, tile.x, tile.z, mera ? 'mera' : 'tarla');
         drag.plan = plan;
         preview = plan.tiles.map((t) => ({
           x: t.x,
@@ -384,10 +417,16 @@ export class Game {
           color: t.status === 'ok' ? '#a9c76a' : '#c8312a',
         }));
         bad = plan.problem !== undefined;
-        const crop = city.balance.fields.crops[this.crop].name;
-        text =
-          plan.problem ??
-          `${crop} · ${plan.w}×${plan.d} karo · ${plan.cost.toLocaleString('tr-TR')} dirhem · verim %${Math.round(plan.fertility * 100)}`;
+        const cost = `${plan.cost.toLocaleString('tr-TR')} dirhem`;
+        if (this.crop === 'mera') {
+          const sheep = Math.round(plan.w * plan.d * city.balance.pasture.sheepPerTile * 10);
+          text = plan.problem ?? `Mera · ${plan.w}×${plan.d} karo · ${cost} · ${sheep} koyun`;
+        } else {
+          const crop = city.balance.fields.crops[this.crop].name;
+          text =
+            plan.problem ??
+            `${crop} · ${plan.w}×${plan.d} karo · ${cost} · verim %${Math.round(plan.fertility * 100)}`;
+        }
         if (plan.problem === undefined && !plan.roadAccess) text += ' · yola bağlı değil, işlenemez';
         break;
       }
@@ -401,7 +440,8 @@ export class Game {
               (city.road[i] === 1 && city.roadLocked[i] === 0) ||
               city.house[i] > 0 ||
               city.zone[i] === 1 ||
-              city.field[i] >= 0;
+              city.field[i] >= 0 ||
+              city.building[i] >= 0;
             preview.push({ x, z, color: hit ? '#c8312a' : '#e6b872' });
           }
         }
@@ -410,6 +450,7 @@ export class Game {
           found.houses > 0 ? `${found.houses} ev` : '',
           found.zones > 0 ? `${found.zones} arsa` : '',
           found.fields > 0 ? `${found.fields} tarla` : '',
+          found.buildings > 0 ? `${found.buildings} yapı` : '',
         ].filter((p) => p !== '');
         bad = parts.length === 0;
         text = bad ? 'Yıkılacak bir şey yok' : `Yıkılacak: ${parts.join(' · ')}`;
@@ -420,6 +461,38 @@ export class Game {
     }
     this.world.cursor.setPreview(preview);
     this.hud.showTip(text, cx, cy, bad);
+  }
+
+  /** Shows where the chosen building would stand and what it would cost; returns the plan. */
+  private previewPlacement(tile: TilePos, cx: number, cy: number): BuildingProposal {
+    const { city } = this;
+    const plan = proposeBuilding(city, this.buildKind, tile.x, tile.z);
+    const preview: PreviewTile[] = plan.tiles.map((t) => ({
+      x: t.x,
+      z: t.z,
+      color: t.ok && plan.problem === undefined ? '#a9c76a' : t.ok ? '#e6b872' : '#c8312a',
+    }));
+    // A foundry shows how far its smoke will carry.
+    const smoke = city.balance.works[this.buildKind].smoke ?? 0;
+    if (smoke > 0) {
+      const mx = plan.x0 + (plan.w - 1) / 2;
+      const mz = plan.z0 + (plan.d - 1) / 2;
+      for (let z = Math.floor(mz - smoke); z <= Math.ceil(mz + smoke); z++) {
+        for (let x = Math.floor(mx - smoke); x <= Math.ceil(mx + smoke); x++) {
+          const inside = x >= plan.x0 && x < plan.x0 + plan.w && z >= plan.z0 && z < plan.z0 + plan.d;
+          if (!inside && Math.hypot(x - mx, z - mz) <= smoke) preview.push({ x, z, color: '#b9b0a2' });
+        }
+      }
+    }
+    this.world.cursor.setPreview(preview);
+    const w = city.balance.works[this.buildKind];
+    this.hud.showTip(
+      plan.problem ?? `${w.name} · ${w.cost.toLocaleString('tr-TR')} dirhem`,
+      cx,
+      cy,
+      plan.problem !== undefined,
+    );
+    return plan;
   }
 
   private setHover(tile: TilePos | null): void {
@@ -461,6 +534,9 @@ export class Game {
         break;
       case 't':
         this.setTool('tarla');
+        break;
+      case 'y':
+        this.setTool('yapi');
         break;
       case 'b':
         this.setTool('yik');

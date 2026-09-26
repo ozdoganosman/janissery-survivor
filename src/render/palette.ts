@@ -36,6 +36,22 @@ export const PAL = {
   servi: '#2c5c36',
   fruit: '#5f9a3a',
 
+  timber: '#8a5a36',
+  timberDark: '#5e3b22',
+  iron: '#4f4a48',
+  ember: '#e0632a',
+  smoke: '#eee8dc',
+  ore: '#b3694c',
+  rock: '#a58e78',
+  oreDark: '#6e3b2c',
+  dyes: ['#b8322a', '#2f4f9a', '#e0b13a'],
+  bread: '#c98b4a',
+  wool: '#f6f1e4',
+  sheepHead: '#3b2c24',
+  fence: '#9a7148',
+  /** Shop awnings by craft. */
+  awning: { firinci: '#d58a4e', dokumaci: '#2f4f9a', demirci: '#7d6a5c' },
+
   lot: '#f3d7c6',
   /** A zoned lot no road reaches yet. */
   lotFar: '#e6d9c4',

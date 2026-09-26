@@ -1,10 +1,13 @@
-import type { FieldPlan } from './balance';
+import type { BuildingKind, FieldPlan, Good, Trade } from './balance';
+import { smokeMap, type BuildingStatus } from './buildings';
 import type { CityState } from './city';
 import { WALL, WALL_GATE } from './constants';
-import { expectedYield, type FieldStage } from './fields';
+import { expectedYield, type FieldKind, type FieldStage } from './fields';
+import { mainOutput } from './production';
 
 export interface FieldInfo {
   id: number;
+  kind: FieldKind;
   tiles: number;
   plan: FieldPlan;
   stage: FieldStage;
@@ -13,10 +16,42 @@ export interface FieldInfo {
   soil: number;
   fertility: number;
   roadAccess: boolean;
-  /** Harvest this field would give at today's care, in kile. */
+  /** Harvest (or, for a pasture, shearing) this field would give at today's care. */
   expected: number;
   lastYield: number;
   workers: number;
+  /** Sheep on a pasture. */
+  sheep: number;
+}
+
+export interface OutputInfo {
+  good: Good;
+  name: string;
+  unit: string;
+  /** Made last month, or this month so far if it is new. */
+  made: number;
+  /** At full staff and with input to spare. */
+  capacity: number;
+}
+
+export interface ShopInfo {
+  trade: Trade | null;
+  name: string;
+  status: BuildingStatus;
+  output: OutputInfo | null;
+}
+
+export interface BuildingInfo {
+  id: number;
+  kind: BuildingKind;
+  name: string;
+  status: BuildingStatus;
+  workers: number;
+  jobs: number;
+  /** What it takes in, as good names. */
+  inputs: string[];
+  output: OutputInfo | null;
+  shops: ShopInfo[];
 }
 
 export interface TileInfo {
@@ -32,6 +67,11 @@ export interface TileInfo {
   zoned: boolean;
   residents: number;
   field: FieldInfo | null;
+  building: BuildingInfo | null;
+  /** Name of the ore deposit under the tile. */
+  ore: string | null;
+  /** Under a foundry's smoke. */
+  smoke: boolean;
 }
 
 export const STAGE_NAMES: Record<FieldStage, string> = {
@@ -39,7 +79,66 @@ export const STAGE_NAMES: Record<FieldStage, string> = {
   ekili: 'Ekili',
   hasat: 'Hasat edildi',
   nadas: 'Nadasta',
+  otlak: 'Koyunlar otluyor',
 };
+
+export const STATUS_NAMES: Record<BuildingStatus, string> = {
+  calisiyor: 'Çalışıyor',
+  yolsuz: 'Yola bağlı değil',
+  iscisiz: 'İşçi yok',
+  girdisiz: 'Girdi bekliyor',
+  dolu: 'Depo dolu, bekliyor',
+  bos: 'Boş',
+};
+
+function outputInfo(
+  city: CityState,
+  recipe: { out: Partial<Record<Good, number>> },
+  made: number,
+  last: number,
+): OutputInfo | null {
+  const good = mainOutput(recipe);
+  if (good === null) return null;
+  const g = city.balance.goods[good];
+  return {
+    good,
+    name: g.name,
+    unit: g.unit,
+    made: Math.round(last > 0 ? last : made),
+    capacity: recipe.out[good] ?? 0,
+  };
+}
+
+function inspectBuilding(city: CityState, id: number): BuildingInfo | null {
+  const b = city.buildings.get(id);
+  if (b === undefined) return null;
+  const bal = city.balance;
+  const def = bal.works[b.kind];
+  const staffing = b.roadAccess ? city.stats.industryStaffing : 0;
+  let jobs = b.roadAccess ? def.workers : 0;
+  const shops: ShopInfo[] = b.shops.map((s) => {
+    if (s.trade === null) return { trade: null, name: 'Boş dükkân', status: 'bos', output: null };
+    const t = bal.trades[s.trade];
+    if (b.roadAccess) jobs += t.workers;
+    return {
+      trade: s.trade,
+      name: t.name,
+      status: s.status,
+      output: outputInfo(city, t, s.made, s.madeLastMonth),
+    };
+  });
+  return {
+    id: b.id,
+    kind: b.kind,
+    name: b.name,
+    status: b.status,
+    workers: Math.round(jobs * staffing),
+    jobs,
+    inputs: Object.keys(def.in).map((s) => (s === 'zahire' ? 'Zahire' : bal.goods[s as Good].name)),
+    output: outputInfo(city, def, b.made, b.madeLastMonth),
+    shops,
+  };
+}
 
 /** Everything the info panel shows about one tile. */
 export function inspectTile(city: CityState, x: number, z: number): TileInfo | null {
@@ -66,6 +165,7 @@ export function inspectTile(city: CityState, x: number, z: number): TileInfo | n
   if (f !== undefined) {
     field = {
       id: f.id,
+      kind: f.kind,
       tiles: f.tiles.length,
       plan: f.plan,
       stage: f.stage,
@@ -76,21 +176,28 @@ export function inspectTile(city: CityState, x: number, z: number): TileInfo | n
       expected: Math.round(expectedYield(city, f, f.roadAccess ? city.stats.staffing : 0)),
       lastYield: f.lastYield,
       workers: Math.round(f.jobs * city.stats.staffing),
+      sheep: f.kind === 'mera' ? Math.round(f.tiles.length * city.balance.pasture.sheepPerTile * 10) : 0,
     };
   }
+  const building = city.building[i] >= 0 ? inspectBuilding(city, city.building[i]) : null;
+  const oreIndex = terrain.ore[i];
+  const ore = oreIndex > 0 ? (city.def.deposits[oreIndex - 1]?.name ?? 'Demir damarı') : null;
 
   const residents = city.house[i] * city.balance.people.perStorey;
   let feature = 'Boş';
   const s = city.structure[i];
   if (s >= 0) feature = city.landmarks[s]?.name ?? 'Yapı';
+  else if (building !== null) feature = building.name;
   else if (city.wall[i] === WALL) feature = 'Sur';
   else if (city.wall[i] === WALL_GATE) {
     const gate = city.gates.find((g) => g.tiles.includes(i));
     feature = gate?.name ?? 'Kapı';
   } else if (city.road[i] === 1) feature = terrain.water[i] === 1 ? 'Köprü' : 'Yol';
   else if (city.house[i] > 0) feature = city.house[i] === 2 ? 'İki katlı ev' : 'Ev';
+  else if (field !== null && field.kind === 'mera') feature = city.balance.pasture.name;
   else if (field !== null) feature = field.cropName !== null ? `${field.cropName} tarlası` : 'Tarla';
   else if (city.zone[i] === 1) feature = 'Konut arsası';
+  else if (ore !== null) feature = ore;
 
   const farmable = terrain.water[i] === 0 && !insideWalls;
   return {
@@ -103,5 +210,8 @@ export function inspectTile(city: CityState, x: number, z: number): TileInfo | n
     zoned: city.zone[i] === 1,
     residents,
     field,
+    building,
+    ore,
+    smoke: smokeMap(city)[i] === 1,
   };
 }

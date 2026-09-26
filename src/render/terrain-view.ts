@@ -29,6 +29,19 @@ export class TerrainView {
       rock: new THREE.Color(PAL.hillRock),
       tepe: new THREE.Color(PAL.tepe),
       bank: new THREE.Color(PAL.bank),
+      ore: new THREE.Color(PAL.ore),
+    };
+    const oreAround = (cx: number, cz: number): number => {
+      let k = 0;
+      for (const [x, z] of [
+        [cx - 1, cz - 1],
+        [cx, cz - 1],
+        [cx - 1, cz],
+        [cx, cz],
+      ]) {
+        if (terrain.grid.inBounds(x, z) && terrain.ore[terrain.grid.index(x, z)] > 0) k++;
+      }
+      return k / 4;
     };
     const streamCorner = (cx: number, cz: number): number => {
       // Tile-centre distances are close enough for colouring the corners around them.
@@ -60,6 +73,8 @@ export class TerrainView {
           (1 - smoothstep(def.tepe.footRadius - 0.5, def.tepe.footRadius + 0.5, r)),
       );
       c.lerp(col.bank, 1 - smoothstep(0.9, 1.9, ds));
+      // Iron stains the ground rust-red where a seam comes to the surface.
+      c.lerp(col.ore, 0.6 * oreAround(cx, cz));
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;

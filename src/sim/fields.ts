@@ -3,7 +3,7 @@ import type { Rng } from '../core/rng';
 import type { Crop, FieldPlan } from './balance';
 import type { CityState } from './city';
 import { WALL_NONE } from './constants';
-import { dateOf } from './calendar';
+import { dateOf, DAYS_PER_MONTH } from './calendar';
 import { DIRS4 } from './grid';
 
 /**
@@ -11,12 +11,17 @@ import { DIRS4 } from './grid';
  * - `bos`   ploughed, waiting for the next sowing;
  * - `ekili` sown and growing;
  * - `hasat` harvested, stubble until the next sowing;
- * - `nadas` left fallow this year to rest the soil.
+ * - `nadas` left fallow this year to rest the soil;
+ * - `otlak` a pasture, grazed all year round.
  */
-export type FieldStage = 'bos' | 'ekili' | 'hasat' | 'nadas';
+export type FieldStage = 'bos' | 'ekili' | 'hasat' | 'nadas' | 'otlak';
+
+/** Ploughland, or a pasture for sheep. Both are drawn the same way and share a layer. */
+export type FieldKind = 'tarla' | 'mera';
 
 export interface Field {
   id: number;
+  kind: FieldKind;
   /** Tile rectangle. */
   x0: number;
   z0: number;
@@ -32,9 +37,13 @@ export interface Field {
   soil: number;
   /** Mean fertility of the tiles. */
   fertility: number;
-  /** Sum of daily staffing while growing, and the number of days summed. */
+  /**
+   * Sum of daily staffing while growing, and the number of days summed. A pasture sums
+   * the whole year since the last shearing.
+   */
   careSum: number;
   careDays: number;
+  /** Grain at the last harvest, or wool at the last shearing. */
   lastYield: number;
   // Refreshed by the daily economy step:
   roadAccess: boolean;
@@ -46,6 +55,7 @@ export interface Field {
 export type FieldTileStatus = 'ok' | 'blocked';
 
 export interface FieldProposal {
+  kind: FieldKind;
   x0: number;
   z0: number;
   w: number;
@@ -58,24 +68,39 @@ export interface FieldProposal {
   problem?: string;
 }
 
-function tileReason(city: CityState, x: number, z: number): string | undefined {
-  const { grid, terrain } = city;
+function tileReason(city: CityState, x: number, z: number, kind: FieldKind): string | undefined {
+  const { grid, terrain, def } = city;
   if (!grid.inBounds(x, z)) return 'Harita dışı';
   const i = grid.index(x, z);
   if (terrain.water[i] === 1) return 'Su';
   if (city.wall[i] !== WALL_NONE) return 'Sur';
-  if (city.structure[i] >= 0) return 'Yapı';
+  if (city.structure[i] >= 0 || city.building[i] >= 0) return 'Yapı';
   if (city.road[i] === 1) return 'Yol';
   if (city.house[i] > 0) return 'Ev';
   if (city.zone[i] === 1) return 'İmar alanı';
-  if (city.field[i] >= 0) return 'Başka tarla';
-  if (terrain.fertility[i] <= 0) return 'Ekilemez';
-  if (terrain.slope[i] > city.balance.fields.maxSlope) return 'Çok dik';
+  if (city.field[i] >= 0) return city.fields.get(city.field[i])?.kind === 'mera' ? 'Mera' : 'Başka tarla';
+  if (kind === 'tarla') {
+    if (terrain.fertility[i] <= 0) return 'Ekilemez';
+    if (terrain.slope[i] > city.balance.fields.maxSlope) return 'Çok dik';
+  } else {
+    // Sheep graze where nothing grows, but not in the town.
+    if (Math.hypot(grid.centre(x) - def.tepe.x, grid.centre(z) - def.tepe.z) < def.walls.radius + 1.5) {
+      return 'Sur içi';
+    }
+    if (terrain.slope[i] > city.balance.pasture.maxSlope) return 'Çok dik';
+  }
   return undefined;
 }
 
-/** A field over the rectangle between two dragged corners, checked tile by tile. */
-export function proposeField(city: CityState, ax: number, az: number, bx: number, bz: number): FieldProposal {
+/** A field or pasture over the rectangle between two dragged corners, checked tile by tile. */
+export function proposeField(
+  city: CityState,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  kind: FieldKind = 'tarla',
+): FieldProposal {
   const b = city.balance.fields;
   const x0 = Math.min(ax, bx);
   const z0 = Math.min(az, bz);
@@ -87,7 +112,7 @@ export function proposeField(city: CityState, ax: number, az: number, bx: number
   let roadAccess = false;
   for (let z = z0; z < z0 + d; z++) {
     for (let x = x0; x < x0 + w; x++) {
-      const reason = tileReason(city, x, z);
+      const reason = tileReason(city, x, z, kind);
       if (reason === undefined) {
         tiles.push({ x, z, status: 'ok' });
         fert += city.terrain.fertility[city.grid.index(x, z)];
@@ -100,9 +125,9 @@ export function proposeField(city: CityState, ax: number, az: number, bx: number
   }
   if (problem === undefined && Math.min(w, d) < b.minSide) problem = `En az ${b.minSide}×${b.minSide} karo`;
   if (problem === undefined && Math.max(w, d) > b.maxSide) problem = `En çok ${b.maxSide} karo`;
-  const cost = w * d * b.costPerTile;
+  const cost = w * d * (kind === 'mera' ? city.balance.pasture.costPerTile : b.costPerTile);
   if (problem === undefined && cost > city.treasury) problem = 'Hazine yetersiz';
-  const proposal: FieldProposal = { x0, z0, w, d, tiles, cost, fertility: fert / (w * d), roadAccess };
+  const proposal: FieldProposal = { kind, x0, z0, w, d, tiles, cost, fertility: fert / (w * d), roadAccess };
   if (problem !== undefined) proposal.problem = problem;
   return proposal;
 }
@@ -119,20 +144,22 @@ export function fertilityFactor(city: CityState, crop: Crop, fertility: number):
  * Returns null, changing nothing, if the proposal is no longer valid.
  */
 export function buildField(city: CityState, p: FieldProposal, plan: FieldPlan, free = false): Field | null {
-  const fresh = proposeField(city, p.x0, p.z0, p.x0 + p.w - 1, p.z0 + p.d - 1);
+  const kind: FieldKind = plan === 'mera' ? 'mera' : 'tarla';
+  const fresh = proposeField(city, p.x0, p.z0, p.x0 + p.w - 1, p.z0 + p.d - 1, kind);
   if (fresh.problem !== undefined && !(free && fresh.problem === 'Hazine yetersiz')) return null;
   const { grid } = city;
   const id = city.nextFieldId++;
   const tiles = fresh.tiles.map((t) => grid.index(t.x, t.z));
   const field: Field = {
     id,
+    kind,
     x0: fresh.x0,
     z0: fresh.z0,
     w: fresh.w,
     d: fresh.d,
     tiles,
     plan,
-    stage: 'bos',
+    stage: kind === 'mera' ? 'otlak' : 'bos',
     crop: null,
     soil: 1,
     fertility: fresh.fertility,
@@ -147,7 +174,7 @@ export function buildField(city: CityState, p: FieldProposal, plan: FieldPlan, f
   city.fields.set(id, field);
   if (!free) city.treasury -= fresh.cost;
   // Inside the sowing window a new field goes straight into the ground.
-  if (city.balance.fields.sowMonths.includes(dateOf(city.calendar).month)) sow(field);
+  if (kind === 'tarla' && city.balance.fields.sowMonths.includes(dateOf(city.calendar).month)) sow(field);
   field.roadAccess = touchesRoad(city, field);
   city.revision.fields++;
   return field;
@@ -165,7 +192,8 @@ export function removeField(city: CityState, id: number): boolean {
 /** Sets what the field does at the next sowing. The current season is not disturbed. */
 export function setFieldPlan(city: CityState, id: number, plan: FieldPlan): void {
   const field = city.fields.get(id);
-  if (field === undefined || field.plan === plan) return;
+  // A pasture stays a pasture; ploughland is never turned over to sheep this way.
+  if (field === undefined || field.kind === 'mera' || plan === 'mera' || field.plan === plan) return;
   field.plan = plan;
   city.revision.fields++;
 }
@@ -185,12 +213,13 @@ function nextToRoad(city: CityState, x: number, z: number): boolean {
 }
 
 function sow(field: Field): void {
+  if (field.kind === 'mera') return;
   field.careSum = 0;
   field.careDays = 0;
   if (field.plan === 'nadas') {
     field.stage = 'nadas';
     field.crop = null;
-  } else {
+  } else if (field.plan !== 'mera') {
     field.stage = 'ekili';
     field.crop = field.plan;
   }
@@ -209,6 +238,7 @@ export function sowAll(city: CityState): number {
 
 /** The harvest a growing field would give if it were cut today. */
 export function expectedYield(city: CityState, f: Field, staffingToday = 1): number {
+  if (f.kind === 'mera') return expectedWool(city, f);
   if (f.crop === null || f.stage !== 'ekili') return 0;
   const crop = city.balance.fields.crops[f.crop];
   const care = f.careDays > 0 ? f.careSum / f.careDays : staffingToday;
@@ -239,6 +269,32 @@ export function harvestAll(city: CityState): number {
     }
   }
   city.granary += total;
+  city.flows.current.made.zahire += total;
+  city.revision.fields++;
+  return total;
+}
+
+/** Wool a pasture would give if its flock were sheared today. */
+export function expectedWool(city: CityState, f: Field): number {
+  const p = city.balance.pasture;
+  // A flock needs a year on the grass to give its full fleece.
+  const grazed = Math.min(1, f.careSum / (DAYS_PER_MONTH * 12));
+  return f.tiles.length * p.woolPerTile * (0.8 + 0.4 * f.fertility) * grazed;
+}
+
+/** Shearing day: every pasture's wool goes to the depot. Returns the total. */
+export function shearAll(city: CityState): number {
+  let total = 0;
+  for (const f of city.fields.values()) {
+    if (f.kind !== 'mera') continue;
+    const wool = Math.round(expectedWool(city, f));
+    f.lastYield = wool;
+    f.careSum = 0;
+    f.careDays = 0;
+    total += wool;
+  }
+  city.goods.yun += total;
+  city.flows.current.made.yun += total;
   city.revision.fields++;
   return total;
 }

@@ -52,7 +52,7 @@ async function drag(page: Page, from: [number, number], to: [number, number]): P
   await page.mouse.up();
 }
 
-test('the city draws, grows on zoned land and takes new fields', async ({ page }) => {
+test('the city draws, grows on zoned land, takes new fields and a bazaar', async ({ page }) => {
   const problems: string[] = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
@@ -115,9 +115,32 @@ test('the city draws, grows on zoned land and takes new fields', async ({ page }
   await drag(page, [0.38, 0.66], [0.6, 0.78]);
   await expect.poll(() => page.evaluate(() => window.__game!.city.fields.size)).toBe(fieldsBefore + 1);
 
-  // The ledger shows the city's figures and the fertility layer toggles from the toolbar.
+  // A bazaar on the far side of the road: the build tool shows where it would stand, and a
+  // click where the tip names no problem puts it there.
+  const buildingsBefore = await page.evaluate(() => window.__game!.city.buildings.size);
+  await page.getByRole('button', { name: /Yapı/ }).click();
+  await page.getByRole('button', { name: /Arasta/ }).click();
+  const view = (await page.locator('#view').boundingBox())!;
+  let placed = false;
+  for (let y = 0.34; y <= 0.445 && !placed; y += 0.005) {
+    await page.mouse.move(view.x + view.width * 0.5, view.y + view.height * y);
+    if (/^Arasta ·/.test((await page.locator('.tip').textContent()) ?? '')) {
+      await page.mouse.down();
+      await page.mouse.up();
+      placed = true;
+    }
+  }
+  expect(placed).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(buildingsBefore + 1);
+  await expect(page.locator('.info.pinned h3')).toHaveText('Arasta');
+
+  // The ledger shows the city's figures, the depot folds open, and the fertility layer
+  // toggles from the toolbar.
   await expect(page.locator('.ledger')).toContainText('Nüfus');
   await expect(page.locator('.ledger')).toContainText('kile');
+  await expect(page.locator('.ledger')).toContainText('Refah');
+  await page.getByRole('button', { name: /Mallar/ }).click();
+  await expect(page.locator('.ledger .goods')).toContainText('Un');
   await page.getByRole('button', { name: /Verimlilik/ }).click();
   expect(await page.evaluate(() => window.__game!.world.terrain.fertilityVisible)).toBe(true);
 

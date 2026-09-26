@@ -32,8 +32,9 @@ function blockReason(city: CityState, x: number, z: number): string | undefined 
   const i = grid.index(x, z);
   if (city.wall[i] === WALL) return 'Sur';
   if (city.structure[i] >= 0) return city.landmarks[city.structure[i]]?.name ?? 'Yapı';
+  if (city.building[i] >= 0) return city.buildings.get(city.building[i])?.name ?? 'Yapı';
   if (city.house[i] > 0) return 'Ev';
-  if (city.field[i] >= 0) return 'Tarla';
+  if (city.field[i] >= 0) return city.fields.get(city.field[i])?.kind === 'mera' ? 'Mera' : 'Tarla';
   if (city.road[i] === 1) return undefined;
   if (city.terrain.slope[i] > MAX_ROAD_SLOPE) return 'Çok dik';
   return undefined;

@@ -1,7 +1,8 @@
 import { smoothPath, supercoverLine, type Vec2 } from '../core/geom';
 import { valueNoise } from '../core/noise';
 import { createRng, type Rng } from '../core/rng';
-import type { Balance } from './balance';
+import type { Balance, Good } from './balance';
+import { placeStartBuildings, type Building } from './buildings';
 import { createCalendar, type Calendar } from './calendar';
 import { validateCityDef, type CityDef, type LandmarkDef, type LandmarkKind } from './city-def';
 import type { Grid } from './grid';
@@ -11,6 +12,7 @@ import { roadDistance } from './distance';
 import { updateStats } from './economy';
 import { seedStartingFields } from './fields';
 import type { Field } from './fields';
+import { emptyFlows, emptyGoods, estimateNeeds, type Flows } from './production';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
 
@@ -62,12 +64,24 @@ export interface CityState {
   /** Fields by id; removed fields leave no entry. */
   fields: Map<number, Field>;
   nextFieldId: number;
+  /** Id of the workshop or bazaar covering the tile, or -1. */
+  building: Int32Array;
+  buildings: Map<number, Building>;
+  nextBuildingId: number;
   landmarks: Landmark[];
   gates: Gate[];
   balance: Balance;
   treasury: number;
   /** Grain in the city granary, in kile. */
   granary: number;
+  /** Everything else the state holds, in the one city depot. */
+  goods: Record<Good, number>;
+  /** What went in and out of the granary and depot, this month and last. */
+  flows: { current: Flows; last: Flows };
+  /** Share of each need met lately, 0..1: bread and cloth for people, tools for fields. */
+  needs: { ekmek: number; kumas: number; alet: number };
+  /** Someone went without food today. */
+  hungry: boolean;
   calendar: Calendar;
   /** State of the simulation's own random stream, so a saved city resumes identically. */
   rngState: number;
@@ -76,7 +90,7 @@ export interface CityState {
   /** Messages for the player, oldest first; the UI drains this queue. */
   notices: Notice[];
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number; zones: number; fields: number };
+  revision: { roads: number; houses: number; zones: number; fields: number; buildings: number };
 }
 
 export interface CityStats {
@@ -84,10 +98,16 @@ export interface CityStats {
   households: number;
   labor: number;
   fieldJobs: number;
+  /** Workshop and shop jobs. */
+  industryJobs: number;
   otherJobs: number;
   unemployed: number;
   /** Share of field work that gets done, 0..1. */
   staffing: number;
+  /** Share of workshop and shop work that gets done, 0..1. */
+  industryStaffing: number;
+  /** How well bread and cloth needs are met, 0..1. */
+  prosperity: number;
   /** Housing demand, -1..1. */
   demand: number;
   /** How long the granary lasts at today's consumption. */
@@ -95,7 +115,10 @@ export interface CityStats {
   /** Zoned lots where a house could go up right now. */
   freeLots: number;
   incomeLastMonth: number;
+  /** Where last month's income came from. */
+  income: { tax: number; sales: number; market: number };
   lastHarvest: number;
+  lastShearing: number;
 }
 
 export type NoticeKind = 'info' | 'good' | 'bad';
@@ -128,11 +151,18 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     field: new Int32Array(grid.count).fill(-1),
     fields: new Map(),
     nextFieldId: 1,
+    building: new Int32Array(grid.count).fill(-1),
+    buildings: new Map(),
+    nextBuildingId: 1,
     landmarks: [],
     gates: [],
     balance,
     treasury: def.start.treasury,
     granary: balance.food.startGranary,
+    goods: emptyGoods(),
+    flows: { current: emptyFlows(), last: emptyFlows() },
+    needs: { ekmek: 0, kumas: 0, alet: 0 },
+    hungry: false,
     calendar: createCalendar(def.start),
     rngState: (def.seed * 2654435761) >>> 0,
     stats: {
@@ -140,17 +170,22 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
       households: 0,
       labor: 0,
       fieldJobs: 0,
+      industryJobs: 0,
       otherJobs: 0,
       unemployed: 0,
       staffing: 1,
+      industryStaffing: 1,
+      prosperity: 0,
       demand: 0,
       foodMonths: 0,
       freeLots: 0,
       incomeLastMonth: 0,
+      income: { tax: 0, sales: 0, market: 0 },
       lastHarvest: 0,
+      lastShearing: 0,
     },
     notices: [],
-    revision: { roads: 0, houses: 0, zones: 0, fields: 0 },
+    revision: { roads: 0, houses: 0, zones: 0, fields: 0, buildings: 0 },
   };
   const rng = createRng(def.seed);
   buildWalls(city);
@@ -162,7 +197,10 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
   thinRoads(city);
   pruneRoadFragments(city, 4);
   fillHouses(city, rng);
+  placeStartBuildings(city);
   seedStartingFields(city, rng);
+  updateStats(city);
+  estimateNeeds(city);
   updateStats(city);
   return city;
 }

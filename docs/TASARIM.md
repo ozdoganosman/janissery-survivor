@@ -97,6 +97,54 @@ kokusu, dökümhane dumanı konut değerini düşürür: yerleşim kararı önem
 Arasta, Bedesten, Han; dış ticaret için Kervansaray. **Narh:** muhtesib üzerinden fiyat
 tavanı — halk memnun, esnaf kârı düşer.
 
+### Üretim zincirleri (3. aşamada kurulan)
+
+Sayılar `data/balance.json` dosyasında. Şehrin tek ortak deposu var: zahire ambarda,
+öteki mallar depoda durur; taşıma yok.
+
+```
+Tarla ─ zahire ─► Değirmen ─ un ─────► Fırıncı  ─ ekmek ─► halk (yiyecek + refah)
+Mera ── yün ────► Boyahane ─ iplik ──► Dokumacı ─ kumaş ─► halk (refah)
+Maden ─ cevher ─► Dökümhane ─ demir ─► Demirci  ─ alet ──► tarlalar (verim)
+   devlet yatırımı (oyuncu kurar)      esnaf (arastada kendiliğinden açılır)
+```
+
+- **Yapı aracı** ile imalathaneler ve arasta kurulur. Her yapının kenarı bir yola
+  değmeli; yolsuz yapı çalışmaz. Yön kendiliğinden seçilir, ön yüz yola bakar.
+  - **Değirmen:** Suya bitişik kurulur (su değirmeni); zahireyi una çevirir.
+  - **Boyahane:** Suya en fazla 2 karo uzakta kurulur; yünü boyalı ipliğe çevirir.
+  - **Maden:** Tepelerdeki **demir damarı** üstüne kurulur; cevher çıkarır.
+  - **Dökümhane:** Cevheri demire çevirir. Çevresine **duman** yayar.
+  - **Arasta:** Dört dükkânlı çarşı sırası. Dükkânları oyuncu değil esnaf doldurur.
+- **Mera**, Tarla aracında üçüncü seçenektir. Tarla gibi çizilir ama zayıf ve eğimli
+  toprağa da olur. Çobanlar ister; **Mayıs'ta kırkım** yapılır, yün depoya girer.
+- **İmalathane üretimi:** Tam kadroda aylık bir kapasitesi var. İşçi azsa ya da girdi
+  yoksa az üretir. Çıktısı depoda sınırı aşınca bekler, böylece kimsenin almadığı mal
+  birikip zahireyi tüketmez.
+- **Esnaf:** Her ayın başında her arasta bir değişiklik düşünür:
+  - Boş dükkâna, girdisi depoda olan ve talebi en az karşılanan zanaat açılır.
+  - İki ay girdisiz kalan dükkân kapanır.
+  - Dükkân sayısı talebi açıkça aşarsa biri kapanır.
+- **Para:** Esnaf girdisini (un, iplik, demir) devletten satın alır; bu hazinenin geliri.
+  Halkın çarşıdan aldığı ekmek ve kumaştan **çarşı vergisi** alınır.
+- **Halkın ihtiyaçları:**
+  - **Ekmek yiyecektir.** Halk yiyeceğinin yarısını fırından almak ister; alınan ekmek
+    kadar ambardan daha az zahire gider. Zahire biterse depodaki un da yenir.
+  - **Kumaş:** Her hane arada bir kumaş alır.
+- **Refah**, ekmek ve kumaş ihtiyacının ne kadar karşılandığıdır. Evlerin ikinci kata
+  çıkması refaha bağlıdır; iyi bir çarşı konut talebini de biraz artırır.
+- **Alet:** Tarlalar aletle daha çok verir; alet tarla karosu başına azar azar tükenir.
+- **İşgücü sırası:** Önce tarlalar ve meralar, sonra imalathaneler ve dükkânlar, sonra
+  öteki işler.
+- **Duman:** Dökümhane çevresindeki evler kat çıkmaz. Yeni evler de önce dumansız
+  arsalara yapılır.
+- **Başlangıç:** Konya, Meram Çayı üstünde bir değirmen ve iki fırıncısı olan bir
+  arastayla başlar. Kumaş ve alet zincirlerini oyuncu kurar.
+- **Sonraya kalanlar:**
+  - Narh, bakım giderleri ve bütçe: 4. aşama.
+  - Kervansaray ve dış ticaret, bedesten ve han.
+  - Tabakhane, kiremithane ve taş ocağı (yapı malzemesi, kamu yapılarıyla birlikte).
+
 ### Kamu yatırımları
 
 Cami/Mescit, Medrese, Hamam, Darüşşifa, Çeşme, Su yolu, İmaret, Ahi zaviyesi, Subaşı
@@ -166,7 +214,7 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
 | --- | ---------------------------------------------------------------------------------------------------------- | ----- |
 | 1   | **Zemin:** arazi, verimlilik haritası, Konya'nın mevcut çekirdeği, yollar, kamera, zaman, minyatür görüntü | ✅    |
 | 2   | **Konut ve tarım:** konut imarı, nüfus, tarla çizme, hasat, ambar — ilk oynanabilir döngü                  | ✅    |
-| 3   | **Üretim ve çarşı:** imalathaneler, çarşılar, esnaf, üretim zincirleri                                     |       |
+| 3   | **Üretim ve çarşı:** imalathaneler, çarşılar, esnaf, üretim zincirleri                                     | ✅    |
 | 4   | **Hizmetler ve bütçe:** kamu yapıları, etki alanları, bilgi katmanları, vergi, vakıf                       |       |
 | 5   | **Olaylar ve savunma:** yangın, salgın, kıtlık, Moğol elçileri, sur, garnizon                              |       |
 | 6   | **Cila:** mevsim görünümleri, ses, kayıt/yükleme, telefon                                                  |       |

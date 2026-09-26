@@ -1,27 +1,28 @@
 import { clamp01 } from '../core/geom';
 import { nextRandom } from '../core/rng';
-import { dateOf, DAYS_PER_MONTH, DAYS_PER_SECOND, formatDate } from './calendar';
-import type { CityState, NoticeKind } from './city';
+import { buildingTouchesRoad, smokeMap } from './buildings';
+import { dateOf, DAYS_PER_SECOND, formatDate } from './calendar';
+import type { CityState } from './city';
 import { roadDistance } from './distance';
-import { distanceFactor, harvestAll, sowAll, touchesRoad } from './fields';
+import { distanceFactor, harvestAll, shearAll, sowAll, touchesRoad } from './fields';
 import { DIRS4 } from './grid';
+import { notify } from './notices';
+import { closeBooks, consumeDay, esnafMonth, produceDay, prosperity } from './production';
+
+export { notify };
 
 /**
- * The living city, one day at a time: people, work, food, houses and taxes.
+ * The living city, one day at a time: people, work, food, goods, houses and taxes.
  *
  * The loop the player steers:
  *   houses → people → workers and mouths
  *   fields → jobs and (at harvest) grain in the granary
- *   jobs and grain → housing demand → new houses on zoned land, or empty ones
+ *   workshops and shops → goods → bread, cloth and tools → prosperity
+ *   jobs, food and prosperity → housing demand → new houses on zoned land, or empty ones
  */
 
 /** Most days simulated in one call; a long stall must not freeze the page catching up. */
 const MAX_DAYS_PER_STEP = 30;
-
-export function notify(city: CityState, text: string, kind: NoticeKind = 'info'): void {
-  city.notices.push({ text, kind, day: city.calendar.day });
-  if (city.notices.length > 20) city.notices.shift();
-}
 
 /** Advances game time by a slice of real time, simulating every day that begins. */
 export function stepTime(city: CityState, realSeconds: number): number {
@@ -59,22 +60,33 @@ export function simulateDay(city: CityState): void {
       const sown = sowAll(city);
       if (sown > 0) notify(city, `Ekim zamanı: ${sown} tarla ekildi.`);
     }
+    if (date.month === city.balance.pasture.shearMonth) {
+      const wool = shearAll(city);
+      city.stats.lastShearing = wool;
+      if (wool > 0)
+        notify(city, `Kırkım yapıldı: ${wool.toLocaleString('tr-TR')} batman yün depoya girdi.`, 'good');
+    }
     monthStart(city);
   }
 
   updateStats(city);
   const s = city.stats;
+  // Tools make the same hands go further in the fields.
+  const tended = s.staffing * (1 + city.balance.tools.yieldBonus * city.needs.alet);
   for (const f of city.fields.values()) {
     if (f.stage === 'ekili') {
+      f.careSum += f.roadAccess ? tended : 0;
+      f.careDays++;
+    } else if (f.kind === 'mera') {
       f.careSum += f.roadAccess ? s.staffing : 0;
       f.careDays++;
     }
   }
 
-  const eaten = (s.population * city.balance.food.perPersonPerMonth) / DAYS_PER_MONTH;
-  const hadFood = city.granary > 0;
-  city.granary = Math.max(0, city.granary - eaten);
-  if (hadFood && city.granary === 0) {
+  produceDay(city);
+  const wasHungry = city.hungry;
+  city.hungry = consumeDay(city);
+  if (city.hungry && !wasHungry) {
     notify(city, 'Ambar boşaldı! Kıtlık başladı, halk şehri terk ediyor.', 'bad');
   }
   growOrShrink(city);
@@ -84,15 +96,21 @@ function monthStart(city: CityState): void {
   const b = city.balance;
   let households = 0;
   for (let i = 0; i < city.house.length; i++) households += city.house[i];
-  const income = households * b.tax.perHouseholdPerMonth;
-  city.treasury += income;
-  city.stats.incomeLastMonth = income;
+  const tax = households * b.tax.perHouseholdPerMonth;
+  city.treasury += tax;
+  const closed = closeBooks(city);
+  city.stats.income = { tax, sales: closed.sales, market: closed.market };
+  city.stats.incomeLastMonth = tax + closed.sales + closed.market;
+  esnafMonth(city);
 
-  // A prosperous town builds upward: some single-storey houses gain a floor.
-  if (city.stats.demand > 0.3) {
+  // A prosperous town builds upward: while people still want to come, well-supplied
+  // households add a floor. Nobody builds higher under a foundry's smoke.
+  if (city.stats.demand > 0) {
+    const smoke = smokeMap(city);
+    const chance = b.growth.upgradeChancePerMonth * prosperity(city);
     let upgraded = 0;
     for (let i = 0; i < city.house.length; i++) {
-      if (city.house[i] === 1 && nextRandom(city) < b.growth.upgradeChancePerMonth) {
+      if (city.house[i] === 1 && smoke[i] === 0 && nextRandom(city) < chance) {
         city.house[i] = 2;
         upgraded++;
       }
@@ -108,6 +126,7 @@ function monthStart(city: CityState): void {
 
 interface Cache {
   roadsRev: number;
+  buildingsRev: number;
   roadDist: Uint8Array;
   distRev: string;
 }
@@ -118,11 +137,16 @@ function cacheFor(city: CityState): Cache {
   if (c === undefined || c.roadsRev !== city.revision.roads) {
     c = {
       roadsRev: city.revision.roads,
+      buildingsRev: -1,
       roadDist: roadDistance(city, city.balance.zoning.roadReach),
       distRev: '',
     };
     caches.set(city, c);
     for (const f of city.fields.values()) f.roadAccess = touchesRoad(city, f);
+  }
+  if (c.buildingsRev !== city.revision.buildings) {
+    c.buildingsRev = city.revision.buildings;
+    for (const b of city.buildings.values()) b.roadAccess = buildingTouchesRoad(city, b);
   }
   return c;
 }
@@ -166,35 +190,55 @@ export function updateStats(city: CityState): void {
 
   let fieldJobs = 0;
   for (const f of city.fields.values()) {
+    const perTile = f.kind === 'mera' ? b.pasture.workersPerTile : b.fields.workersPerTile;
     const share = f.stage === 'nadas' ? b.fields.fallowWork : 1;
-    f.jobs = f.roadAccess ? f.tiles.length * b.fields.workersPerTile * share : 0;
+    f.jobs = f.roadAccess ? f.tiles.length * perTile * share : 0;
     fieldJobs += f.jobs;
+  }
+  let industryJobs = 0;
+  for (const w of city.buildings.values()) {
+    if (!w.roadAccess) continue;
+    industryJobs += b.works[w.kind].workers;
+    for (const shop of w.shops) if (shop.trade !== null) industryJobs += b.trades[shop.trade].workers;
   }
   let landmarkJobs = 0;
   for (const l of city.landmarks) landmarkJobs += b.people.landmarkJobs[l.kind] ?? 0;
   const otherJobs = population * b.people.serviceShare + landmarkJobs;
 
-  // Food comes first: workers go to the fields before anything else.
+  // Food comes first: workers go to the fields and flocks, then to workshops and shops.
   const staffing = fieldJobs > 0 ? clamp01(labor / fieldJobs) : 1;
-  const unemployed = Math.max(0, labor - fieldJobs - otherJobs);
+  const afterFields = Math.max(0, labor - fieldJobs);
+  const industryStaffing = industryJobs > 0 ? clamp01(afterFields / industryJobs) : 1;
+  const unemployed = Math.max(0, afterFields - industryJobs - otherJobs);
   const monthly = population * b.food.perPersonPerMonth;
-  const foodMonths = monthly > 0 ? city.granary / monthly : 99;
+  const food =
+    city.granary + city.goods.un * (b.goods.un.food ?? 0) + city.goods.ekmek * (b.goods.ekmek.food ?? 0);
+  const foodMonths = monthly > 0 ? food / monthly : 99;
+  const wellBeing = prosperity(city);
 
   const dm = b.demand;
   const uRate = labor > 0 ? unemployed / labor : 0;
   const jobTerm = Math.max(-1, Math.min(1, (dm.targetUnemployment - uRate) / dm.unemploymentSpan));
   const foodTerm =
-    city.granary <= 0 ? -1 : Math.max(-1, Math.min(1, (foodMonths - dm.comfortMonths) / dm.monthsSpan));
-  const demand = Math.max(-1, Math.min(1, dm.jobWeight * jobTerm + dm.foodWeight * foodTerm));
+    city.hungry || food <= 0
+      ? -1
+      : Math.max(-1, Math.min(1, (foodMonths - dm.comfortMonths) / dm.monthsSpan));
+  const demand = Math.max(
+    -1,
+    Math.min(1, dm.jobWeight * jobTerm + dm.foodWeight * foodTerm + b.needs.demandBonus * wellBeing),
+  );
 
   Object.assign(city.stats, {
     population,
     households,
     labor,
     fieldJobs,
+    industryJobs,
     otherJobs,
     unemployed,
     staffing,
+    industryStaffing,
+    prosperity: wellBeing,
     demand,
     foodMonths,
     freeLots,
@@ -212,6 +256,11 @@ function buildableLots(city: CityState): number[] {
     }
   }
   return out;
+}
+
+/** How much a lot draws settlers: neighbours help, a foundry's smoke drives them off. */
+function lotScore(city: CityState, i: number, smoke: Uint8Array): number {
+  return neighbourHouses(city, i) - smoke[i] * 4;
 }
 
 function neighbourHouses(city: CityState, i: number): number {
@@ -239,15 +288,16 @@ function growOrShrink(city: CityState): void {
     const n = eventsToday(city, d * g.housesPerDay);
     if (n > 0) {
       const lots = buildableLots(city);
+      const smoke = smokeMap(city);
       let built = 0;
       for (let k = 0; k < n && lots.length > 0; k++) {
         // Towns grow outward from what is already there: of a few random lots, take the
-        // one with the most neighbours.
+        // one with the most neighbours and the cleanest air.
         let bestAt = Math.floor(nextRandom(city) * lots.length);
-        let bestScore = neighbourHouses(city, lots[bestAt]);
+        let bestScore = lotScore(city, lots[bestAt], smoke);
         for (let t = 0; t < 5; t++) {
           const at = Math.floor(nextRandom(city) * lots.length);
-          const score = neighbourHouses(city, lots[at]);
+          const score = lotScore(city, lots[at], smoke);
           if (score > bestScore) {
             bestAt = at;
             bestScore = score;
@@ -263,7 +313,7 @@ function growOrShrink(city: CityState): void {
     return;
   }
 
-  const famine = city.granary <= 0;
+  const famine = city.hungry;
   let rate = d < -g.abandonThreshold ? (-d - g.abandonThreshold) * g.abandonPerDay : 0;
   if (famine) rate += g.famineAbandonPerDay;
   const n = eventsToday(city, rate);

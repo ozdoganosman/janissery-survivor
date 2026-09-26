@@ -1,5 +1,6 @@
 import type { CityState } from './city';
 import { WALL_NONE } from './constants';
+import { removeBuilding } from './buildings';
 import { removeField } from './fields';
 
 export type ZoneTileStatus = 'new' | 'existing' | 'blocked';
@@ -23,9 +24,9 @@ function zoneReason(city: CityState, x: number, z: number): string | undefined {
   const i = grid.index(x, z);
   if (terrain.water[i] === 1) return 'Su';
   if (city.wall[i] !== WALL_NONE) return 'Sur';
-  if (city.structure[i] >= 0) return 'Yapı';
+  if (city.structure[i] >= 0 || city.building[i] >= 0) return 'Yapı';
   if (city.road[i] === 1) return 'Yol';
-  if (city.field[i] >= 0) return 'Tarla';
+  if (city.field[i] >= 0) return city.fields.get(city.field[i])?.kind === 'mera' ? 'Mera' : 'Tarla';
   if (terrain.slope[i] > city.balance.zoning.maxSlope) return 'Çok dik';
   return undefined;
 }
@@ -90,6 +91,7 @@ export interface Clearance {
   houses: number;
   zones: number;
   fields: number;
+  buildings: number;
 }
 
 /** What clearing a rectangle would remove, without removing it. */
@@ -98,8 +100,8 @@ export function surveyClear(city: CityState, ax: number, az: number, bx: number,
 }
 
 /**
- * Clears a rectangle: roads (except gate passages), houses, zoning, and every field that
- * reaches into it. Landmarks and walls stay.
+ * Clears a rectangle: roads (except gate passages), houses, zoning, and every field,
+ * workshop and bazaar that reaches into it. Landmarks and walls stay.
  */
 export function clearArea(city: CityState, ax: number, az: number, bx: number, bz: number): Clearance {
   return clearImpl(city, ax, az, bx, bz, true);
@@ -115,8 +117,9 @@ function clearImpl(
 ): Clearance {
   const { grid } = city;
   const [x0, z0, x1, z1] = rect(ax, az, bx, bz);
-  const out: Clearance = { roads: 0, houses: 0, zones: 0, fields: 0 };
+  const out: Clearance = { roads: 0, houses: 0, zones: 0, fields: 0, buildings: 0 };
   const fields = new Set<number>();
+  const buildings = new Set<number>();
   for (let z = Math.max(0, z0); z <= Math.min(grid.size - 1, z1); z++) {
     for (let x = Math.max(0, x0); x <= Math.min(grid.size - 1, x1); x++) {
       const i = grid.index(x, z);
@@ -133,11 +136,14 @@ function clearImpl(
         if (apply) city.zone[i] = 0;
       }
       if (city.field[i] >= 0) fields.add(city.field[i]);
+      if (city.building[i] >= 0) buildings.add(city.building[i]);
     }
   }
   out.fields = fields.size;
+  out.buildings = buildings.size;
   if (apply) {
     for (const id of fields) removeField(city, id);
+    for (const id of buildings) removeBuilding(city, id);
     if (out.roads > 0) city.revision.roads++;
     if (out.houses > 0) city.revision.houses++;
     if (out.zones > 0) city.revision.zones++;
