@@ -4,12 +4,14 @@ import { sampleHeight } from '../sim/terrain';
 import { BuildingsView } from './buildings-view';
 import { CameraRig } from './camera-rig';
 import { CursorView } from './cursor-view';
+import { FieldsView } from './fields-view';
 import { HousesView } from './houses-view';
 import { shading } from './materials';
 import { MiniPipeline } from './pipeline';
 import { RoadsView } from './roads-view';
 import { TerrainView } from './terrain-view';
 import { TreesView } from './trees-view';
+import { ZonesView } from './zones-view';
 
 /** Sun direction, from the ground towards the light: low from the south-west. */
 const SUN = new THREE.Vector3(-0.55, 0.9, 0.5).normalize();
@@ -26,7 +28,11 @@ export class World {
   private readonly roads: RoadsView;
   private readonly houses: HousesView;
   private readonly trees: TreesView;
+  private readonly fields: FieldsView;
+  private readonly zones: ZonesView;
   private readonly pipeline: MiniPipeline;
+  /** Seconds since the city layers were last compared with the simulation. */
+  private sinceSync = Infinity;
   private readonly sun = new THREE.DirectionalLight('#ffffff', Math.PI);
   private shadowDirty = true;
 
@@ -49,9 +55,13 @@ export class World {
     this.roads = new RoadsView(city);
     this.houses = new HousesView(city);
     this.trees = new TreesView(city);
+    this.fields = new FieldsView(city);
+    this.zones = new ZonesView(city);
     this.cursor = new CursorView(city);
     this.scene.add(
       this.terrain.group,
+      this.fields.group,
+      this.zones.group,
       this.roads.group,
       this.houses.group,
       this.trees.group,
@@ -80,10 +90,20 @@ export class World {
   frame(dt: number, elapsed: number): void {
     const moved = this.rig.update(dt);
     // Each view compares the revisions it depends on; houses and trees also follow roads.
-    const roadsChanged = this.roads.sync();
-    const housesChanged = this.houses.sync();
-    const treesChanged = this.trees.sync();
-    const changed = roadsChanged || housesChanged || treesChanged;
+    // At the fastest speed houses rise every few frames, so rebuilds are batched a little.
+    this.sinceSync += dt;
+    let changed = false;
+    if (this.sinceSync >= 0.2) {
+      this.sinceSync = 0;
+      const results = [
+        this.roads.sync(),
+        this.houses.sync(),
+        this.trees.sync(),
+        this.fields.sync(),
+        this.zones.sync(),
+      ];
+      changed = results.some((r) => r);
+    }
     this.terrain.update(elapsed);
     this.applyCloseness(moved || changed);
     this.pipeline.render();

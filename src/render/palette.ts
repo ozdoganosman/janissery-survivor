@@ -35,6 +35,10 @@ export const PAL = {
   kavak: '#86ad3f',
   servi: '#2c5c36',
   fruit: '#5f9a3a',
+
+  lot: '#f3d7c6',
+  /** A zoned lot no road reaches yet. */
+  lotFar: '#e6d9c4',
 } as const;
 
 /** Fertility overlay ramp, poor to rich, in the same miniature inks. */
@@ -48,6 +52,8 @@ export const FERTILITY_RAMP = ['#c9826a', '#e6b872', '#e9d98a', '#a9c76a', '#5f9
 export const INK_CLASS = {
   ground: 0.1,
   road: 0.3,
+  zone: 0.4,
+  field: 0.6,
   water: 0.5,
   building: 0.9,
   tree: 0.7,

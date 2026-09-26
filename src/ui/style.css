@@ -129,21 +129,165 @@ body {
   letter-spacing: 0.04em;
 }
 
-.treasury {
+/* The ledger: treasury, people, grain and housing demand, like a steward's account book. */
+.ledger {
   position: absolute;
   top: 12px;
   right: 12px;
-  padding: 7px 14px;
+  padding: 8px 14px 9px;
   border-radius: 4px;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-size: 14px;
+  min-width: 250px;
+  display: grid;
+  gap: 3px;
 }
 
-.treasury .amount {
+.ledger .row {
+  display: grid;
+  grid-template-columns: 5.6em auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ledger .label {
+  font-size: 12.5px;
+  opacity: 0.75;
+}
+
+.ledger .value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.ledger .sub {
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.bad {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.ledger .demand {
+  grid-template-columns: 5.6em 1fr;
+  margin-top: 2px;
+}
+
+.ledger .track {
+  position: relative;
+  height: 9px;
+  border: 1px solid var(--ink);
+  background: var(--parchment-dark);
+}
+
+.ledger .track::after {
+  /* the zero line */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  border-left: 1px solid var(--ink);
+}
+
+.ledger .track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition:
+    width 0.4s,
+    left 0.4s;
+}
+
+.ledger .track i.up {
+  background: #5f9a3a;
+}
+
+.ledger .track i.down {
+  background: #c8312a;
+}
+
+.ledger .hint-line {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--red);
+  text-align: right;
+}
+
+.ledger .hint-line[hidden] {
+  display: none;
+}
+
+.notices {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: min(460px, 70vw);
+  pointer-events: none;
+}
+
+.notice {
+  padding: 6px 14px;
+  border-radius: 3px;
+  font-size: 13.5px;
+  text-align: center;
+  animation: notice-in 0.35s ease-out;
+}
+
+.notice.good {
+  color: #2f5a1c;
+}
+
+.notice.bad {
+  color: var(--red);
+  font-weight: 600;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none;
+  }
+}
+
+.cropbar {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 5px;
+}
+
+.cropbar[hidden] {
+  display: none;
+}
+
+.cropbar .btn {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 10px;
+  gap: 1px;
+}
+
+.cropbar small {
+  font-size: 11px;
+  opacity: 0.8;
 }
 
 .speed {
@@ -243,6 +387,41 @@ body {
   display: none;
 }
 
+.info.pinned {
+  padding-top: 12px;
+}
+
+.info .close {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.info .plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gold);
+}
+
+.info .plan .label {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-right: 2px;
+}
+
+.info .plan .btn {
+  padding: 2px 8px;
+  border-color: var(--gold);
+}
+
 .info h3 {
   font-size: 16px;
   font-style: italic;
@@ -313,16 +492,34 @@ body {
     inset: 13px;
   }
   .cartouche {
-    top: 52px;
     padding: 4px 18px 5px;
   }
   .cartouche .title {
     font-size: 17px;
   }
-  .treasury {
+  .ledger {
     top: 8px;
     right: 8px;
-    font-size: 13px;
+    min-width: 0;
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+  .ledger .row {
+    grid-template-columns: 4.6em auto;
+  }
+  .ledger .row .sub {
+    display: none;
+  }
+  .cartouche {
+    top: auto;
+    bottom: 76px;
+  }
+  .notices {
+    top: 120px;
+    width: 90vw;
+  }
+  .cropbar {
+    bottom: 136px;
   }
   .speed {
     top: 8px;
@@ -332,12 +529,12 @@ body {
     bottom: 8px;
   }
   .toolbar .btn {
-    min-width: 58px;
+    min-width: 50px;
     height: 52px;
-    font-size: 11.5px;
+    font-size: 11px;
   }
   .info {
-    bottom: 78px;
+    bottom: 140px;
     left: 8px;
     max-width: 210px;
     font-size: 12.5px;

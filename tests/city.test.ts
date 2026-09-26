@@ -1,16 +1,26 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import balanceJson from '../data/balance.json';
 import konya from '../data/konya.json';
 import { advanceCalendar, createCalendar, dateOf, formatDate } from '../src/sim/calendar';
 import { createCity, WALL, WALL_GATE, type CityState } from '../src/sim/city';
+import type { Balance } from '../src/sim/balance';
 import type { CityDef } from '../src/sim/city-def';
+import { removeField } from '../src/sim/fields';
 import { DIRS4 } from '../src/sim/grid';
 import { inspectTile } from '../src/sim/inspect';
 import { bulldoze, buildRoad, planRoad, BRIDGE_COST } from '../src/sim/roads';
 
 const def = konya as unknown as CityDef;
+const balance = balanceJson as unknown as Balance;
+/** A fresh Konya with its starting fields cleared, for tests about roads on open ground. */
+function openCity(): CityState {
+  const c = createCity(def, balance);
+  for (const id of [...c.fields.keys()]) removeField(c, id);
+  return c;
+}
 let city: CityState;
 beforeAll(() => {
-  city = createCity(def);
+  city = createCity(def, balance);
 });
 
 /** Tiles reachable from the map centre moving 4-connected over tiles that pass `open`. */
@@ -39,7 +49,7 @@ const tileAt = (c: CityState, wx: number, wz: number): number =>
 
 describe('terrain', () => {
   it('is identical for the same definition', () => {
-    const again = createCity(def);
+    const again = createCity(def, balance);
     expect(again.terrain.corner).toEqual(city.terrain.corner);
     expect(again.house).toEqual(city.house);
     expect(again.road).toEqual(city.road);
@@ -170,7 +180,7 @@ describe('initial city', () => {
 
 describe('roads', () => {
   it('prices a straight road on open ground', () => {
-    const c = createCity(def);
+    const c = openCity();
     const x = c.grid.tileOf(40);
     const z = c.grid.tileOf(10);
     const plan = planRoad(c, x, z, x + 6, z);
@@ -180,14 +190,14 @@ describe('roads', () => {
   });
 
   it('refuses to cut through the walls', () => {
-    const c = createCity(def);
+    const c = openCity();
     const plan = planRoad(c, c.grid.tileOf(0), c.grid.tileOf(-15), c.grid.tileOf(0), c.grid.tileOf(-30));
     expect(plan.problem).toBeDefined();
     expect(buildRoad(c, plan)).toBe(false);
   });
 
   it('builds a bridge over the stream and charges for it', () => {
-    const c = createCity(def);
+    const c = openCity();
     const x = c.grid.tileOf(-40);
     const plan = planRoad(c, x, c.grid.tileOf(22), x, c.grid.tileOf(38));
     expect(plan.problem).toBeUndefined();
@@ -200,7 +210,7 @@ describe('roads', () => {
   });
 
   it('will not build what the treasury cannot pay for', () => {
-    const c = createCity(def);
+    const c = openCity();
     c.treasury = 5;
     const x = c.grid.tileOf(40);
     const plan = planRoad(c, x, c.grid.tileOf(0), x, c.grid.tileOf(8));
@@ -210,7 +220,7 @@ describe('roads', () => {
   });
 
   it('bulldozes ordinary roads but not gate passages', () => {
-    const c = createCity(def);
+    const c = openCity();
     const x = c.grid.tileOf(40);
     const z = c.grid.tileOf(0);
     buildRoad(c, planRoad(c, x, z, x + 4, z));

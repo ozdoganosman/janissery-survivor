@@ -33,6 +33,7 @@ function blockReason(city: CityState, x: number, z: number): string | undefined 
   if (city.wall[i] === WALL) return 'Sur';
   if (city.structure[i] >= 0) return city.landmarks[city.structure[i]]?.name ?? 'Yapı';
   if (city.house[i] > 0) return 'Ev';
+  if (city.field[i] >= 0) return 'Tarla';
   if (city.road[i] === 1) return undefined;
   if (city.terrain.slope[i] > MAX_ROAD_SLOPE) return 'Çok dik';
   return undefined;
@@ -77,14 +78,22 @@ export function buildRoad(city: CityState, plan: RoadPlan): boolean {
   const fresh = planRoad(city, first.x, first.z, last.x, last.z);
   if (fresh.problem !== undefined) return false;
   let added = 0;
+  let unzoned = 0;
   for (const t of fresh.tiles) {
     if (t.status === 'new' || t.status === 'bridge') {
-      city.road[city.grid.index(t.x, t.z)] = 1;
+      const i = city.grid.index(t.x, t.z);
+      city.road[i] = 1;
       added++;
+      // A road through a zoned lot takes the lot.
+      if (city.zone[i] === 1) {
+        city.zone[i] = 0;
+        unzoned++;
+      }
     }
   }
   city.treasury -= fresh.cost;
   if (added > 0) city.revision.roads++;
+  if (unzoned > 0) city.revision.zones++;
   return true;
 }
 

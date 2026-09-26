@@ -117,3 +117,140 @@ export function fertilityTexture(terrain: Terrain): THREE.DataTexture {
   tex.needsUpdate = true;
   return tex;
 }
+
+export type FieldLook = 'yesil' | 'bugday' | 'arpa' | 'aniz' | 'kis' | 'surulmus' | 'nadas';
+
+/** World units covered by one repeat of a field texture. */
+export const FIELD_TEXTURE_UNITS = 2.4;
+
+/**
+ * Field motifs, one per stage of the farming year. Furrows run along the texture's v axis;
+ * the field mesh turns them to follow the long side of the field.
+ */
+export function fieldTexture(look: FieldLook): THREE.CanvasTexture {
+  const rng = createRng(101);
+  return canvasTexture(256, (g, s) => {
+    const base: Record<FieldLook, string> = {
+      yesil: '#94b85c',
+      bugday: '#e6bb52',
+      arpa: '#e9d487',
+      aniz: '#e8d8a0',
+      kis: '#d3c2a3',
+      surulmus: '#c9a071',
+      nadas: '#d7bf8e',
+    };
+    g.fillStyle = base[look];
+    g.fillRect(0, 0, s, s);
+    const furrows = (color: string, width: number, count: number, wave = 2): void => {
+      for (let i = 0; i < count; i++) {
+        const x = (i + 0.5) * (s / count);
+        const pts: Array<[number, number]> = [];
+        for (let y = 0; y <= s; y += 8) pts.push([x + Math.sin((y / s) * Math.PI * 4 + i) * wave, y]);
+        stroke(g, pts, color, width);
+      }
+    };
+    switch (look) {
+      case 'yesil':
+        furrows('rgba(95,138,58,0.55)', 2, 8, 1);
+        for (let i = 0; i < 16; i++) {
+          flower(g, rng.next() * s, rng.next() * s, 2.6, rng.chance(0.5) ? '#fbf3e3' : '#d9483e');
+        }
+        break;
+      case 'bugday':
+      case 'arpa': {
+        const ink = look === 'bugday' ? '#a9772a' : '#b3934a';
+        for (let row = 0; row < 8; row++) {
+          for (let col = 0; col < 8; col++) {
+            const x = (col + 0.5 + (row % 2) * 0.5) * (s / 8);
+            const y = (row + 0.5) * (s / 8);
+            stroke(
+              g,
+              [
+                [x - 6, y + 7],
+                [x, y - 7],
+                [x + 6, y + 7],
+              ],
+              ink,
+              2.6,
+            );
+            stroke(
+              g,
+              [
+                [x, y + 9],
+                [x, y - 7],
+              ],
+              ink,
+              2.2,
+            );
+            if (look === 'arpa')
+              stroke(
+                g,
+                [
+                  [x, y - 7],
+                  [x + 4, y - 14],
+                ],
+                ink,
+                1.4,
+              );
+          }
+        }
+        break;
+      }
+      case 'aniz':
+        for (let row = 0; row < 10; row++) {
+          for (let col = 0; col < 12; col++) {
+            const x = (col + 0.5) * (s / 12) + (row % 2) * 6;
+            const y = (row + 0.5) * (s / 10);
+            stroke(
+              g,
+              [
+                [x, y + 4],
+                [x, y - 4],
+              ],
+              '#b99d5a',
+              2,
+            );
+          }
+        }
+        break;
+      case 'kis':
+        furrows('#a8906e', 3, 9);
+        for (let i = 0; i < 60; i++) {
+          g.fillStyle = 'rgba(255,255,255,0.85)';
+          g.beginPath();
+          g.arc(rng.next() * s, rng.next() * s, 1.8, 0, Math.PI * 2);
+          g.fill();
+        }
+        break;
+      case 'surulmus':
+        furrows('#9c6f45', 3.2, 10);
+        break;
+      case 'nadas':
+        furrows('rgba(160,120,80,0.5)', 2, 6, 3);
+        for (let i = 0; i < 26; i++) {
+          const x = rng.next() * s;
+          const y = rng.next() * s;
+          stroke(
+            g,
+            [
+              [x - 4, y + 5],
+              [x, y - 4],
+            ],
+            '#7f944a',
+            2.2,
+          );
+          stroke(
+            g,
+            [
+              [x + 4, y + 5],
+              [x, y - 4],
+            ],
+            '#7f944a',
+            2.2,
+          );
+        }
+        for (let i = 0; i < 8; i++) flower(g, rng.next() * s, rng.next() * s, 2.4, '#e9c43c');
+        break;
+    }
+  });
+}

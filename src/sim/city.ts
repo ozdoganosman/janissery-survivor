@@ -1,15 +1,20 @@
 import { smoothPath, supercoverLine, type Vec2 } from '../core/geom';
 import { valueNoise } from '../core/noise';
 import { createRng, type Rng } from '../core/rng';
+import type { Balance } from './balance';
 import { createCalendar, type Calendar } from './calendar';
 import { validateCityDef, type CityDef, type LandmarkDef, type LandmarkKind } from './city-def';
 import type { Grid } from './grid';
 import { DIRS4 } from './grid';
 import { generateTerrain, type Terrain } from './terrain';
+import { roadDistance } from './distance';
+import { updateStats } from './economy';
+import { seedStartingFields } from './fields';
+import type { Field } from './fields';
 
-export const WALL_NONE = 0;
-export const WALL = 1;
-export const WALL_GATE = 2;
+import { WALL, WALL_GATE, WALL_NONE } from './constants';
+
+export { WALL, WALL_GATE, WALL_NONE };
 
 export interface Landmark {
   kind: LandmarkKind;
@@ -50,12 +55,54 @@ export interface CityState {
   structure: Int16Array;
   /** 0 = empty, otherwise the number of storeys of the house on this tile. */
   house: Uint8Array;
+  /** 1 where the player has zoned for houses. */
+  zone: Uint8Array;
+  /** Id of the field covering the tile, or -1. */
+  field: Int32Array;
+  /** Fields by id; removed fields leave no entry. */
+  fields: Map<number, Field>;
+  nextFieldId: number;
   landmarks: Landmark[];
   gates: Gate[];
+  balance: Balance;
   treasury: number;
+  /** Grain in the city granary, in kile. */
+  granary: number;
   calendar: Calendar;
+  /** State of the simulation's own random stream, so a saved city resumes identically. */
+  rngState: number;
+  /** Figures recomputed every day; the HUD reads them, nothing else writes them. */
+  stats: CityStats;
+  /** Messages for the player, oldest first; the UI drains this queue. */
+  notices: Notice[];
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number };
+  revision: { roads: number; houses: number; zones: number; fields: number };
+}
+
+export interface CityStats {
+  population: number;
+  households: number;
+  labor: number;
+  fieldJobs: number;
+  otherJobs: number;
+  unemployed: number;
+  /** Share of field work that gets done, 0..1. */
+  staffing: number;
+  /** Housing demand, -1..1. */
+  demand: number;
+  /** How long the granary lasts at today's consumption. */
+  foodMonths: number;
+  /** Zoned lots where a house could go up right now. */
+  freeLots: number;
+  incomeLastMonth: number;
+  lastHarvest: number;
+}
+
+export type NoticeKind = 'info' | 'good' | 'bad';
+export interface Notice {
+  text: string;
+  kind: NoticeKind;
+  day: number;
 }
 
 const DEG = Math.PI / 180;
@@ -64,7 +111,7 @@ const polar = (cx: number, cz: number, angle: number, r: number): Vec2 => [
   cz + Math.sin(angle) * r,
 ];
 
-export function createCity(rawDef: CityDef): CityState {
+export function createCity(rawDef: CityDef, balance: Balance): CityState {
   const def = validateCityDef(rawDef);
   const terrain = generateTerrain(def);
   const grid = terrain.grid;
@@ -77,11 +124,33 @@ export function createCity(rawDef: CityDef): CityState {
     roadLocked: new Uint8Array(grid.count),
     structure: new Int16Array(grid.count).fill(-1),
     house: new Uint8Array(grid.count),
+    zone: new Uint8Array(grid.count),
+    field: new Int32Array(grid.count).fill(-1),
+    fields: new Map(),
+    nextFieldId: 1,
     landmarks: [],
     gates: [],
+    balance,
     treasury: def.start.treasury,
+    granary: balance.food.startGranary,
     calendar: createCalendar(def.start),
-    revision: { roads: 0, houses: 0 },
+    rngState: (def.seed * 2654435761) >>> 0,
+    stats: {
+      population: 0,
+      households: 0,
+      labor: 0,
+      fieldJobs: 0,
+      otherJobs: 0,
+      unemployed: 0,
+      staffing: 1,
+      demand: 0,
+      foodMonths: 0,
+      freeLots: 0,
+      incomeLastMonth: 0,
+      lastHarvest: 0,
+    },
+    notices: [],
+    revision: { roads: 0, houses: 0, zones: 0, fields: 0 },
   };
   const rng = createRng(def.seed);
   buildWalls(city);
@@ -93,6 +162,8 @@ export function createCity(rawDef: CityDef): CityState {
   thinRoads(city);
   pruneRoadFragments(city, 4);
   fillHouses(city, rng);
+  seedStartingFields(city, rng);
+  updateStats(city);
   return city;
 }
 
@@ -429,38 +500,10 @@ function fillHouses(city: CityState, rng: Rng): void {
       const fill = d === 1 ? def.housing.frontFill : d === 2 ? def.housing.backFill : 0;
       if (!rng.chance(fill)) continue;
       city.house[i] = rng.chance(def.housing.twoStorey) ? 2 : 1;
+      // The old town counts as zoned: a house that empties there can be lived in again.
+      city.zone[i] = 1;
     }
   }
   city.revision.houses++;
-}
-
-/** Steps (4-connected) from each tile to the nearest road, up to `max`; 255 beyond that. */
-export function roadDistance(city: CityState, max: number): Uint8Array {
-  const { grid } = city;
-  const dist = new Uint8Array(grid.count).fill(255);
-  let frontier: number[] = [];
-  for (let i = 0; i < grid.count; i++) {
-    if (city.road[i] === 1) {
-      dist[i] = 0;
-      frontier.push(i);
-    }
-  }
-  for (let step = 1; step <= max; step++) {
-    const next: number[] = [];
-    for (const i of frontier) {
-      const x = i % grid.size;
-      const z = Math.floor(i / grid.size);
-      for (const [dx, dz] of DIRS4) {
-        const nx = x + dx;
-        const nz = z + dz;
-        if (!grid.inBounds(nx, nz)) continue;
-        const j = grid.index(nx, nz);
-        if (dist[j] !== 255) continue;
-        dist[j] = step;
-        next.push(j);
-      }
-    }
-    frontier = next;
-  }
-  return dist;
+  city.revision.zones++;
 }

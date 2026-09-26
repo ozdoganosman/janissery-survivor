@@ -1,8 +1,12 @@
 import * as THREE from 'three';
-import { advanceCalendar, dateOf, formatDate, type Speed } from './sim/calendar';
+import type { Crop, FieldPlan } from './sim/balance';
+import { dateOf, formatDate, type Speed } from './sim/calendar';
 import type { CityState } from './sim/city';
+import { stepTime } from './sim/economy';
+import { buildField, proposeField, setFieldPlan, type FieldProposal } from './sim/fields';
 import { inspectTile } from './sim/inspect';
-import { bulldoze, buildRoad, planRoad, type RoadPlan } from './sim/roads';
+import { buildRoad, planRoad, type RoadPlan } from './sim/roads';
+import { applyZone, clearArea, proposeZone, surveyClear, type ZoneProposal } from './sim/zoning';
 import type { PreviewTile } from './render/cursor-view';
 import { World } from './render/world';
 import { Hud, type Tool } from './ui/hud';
@@ -14,11 +18,18 @@ const PREVIEW_COLORS = {
   blocked: '#c8312a',
 } as const;
 
+type TilePos = { x: number; z: number };
+
 type Drag =
-  | { kind: 'pan'; lastX: number; lastY: number }
+  | { kind: 'pan'; lastX: number; lastY: number; startX: number; startY: number }
   | { kind: 'rotate'; lastX: number }
-  | { kind: 'road'; from: { x: number; z: number }; plan: RoadPlan | null }
-  | { kind: 'clear'; from: { x: number; z: number }; to: { x: number; z: number } };
+  | { kind: 'road'; from: TilePos; plan: RoadPlan | null }
+  | { kind: 'zone'; from: TilePos; plan: ZoneProposal | null }
+  | { kind: 'field'; from: TilePos; plan: FieldProposal | null }
+  | { kind: 'clear'; from: TilePos; to: TilePos };
+
+/** A press that moves less than this (CSS pixels) is a click, not a drag. */
+const CLICK_SLOP = 6;
 
 /**
  * Wires the city, the world view and the HUD together and turns input into actions.
@@ -32,9 +43,12 @@ export class Game {
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinch: { dist: number; angle: number; midX: number; midY: number } | null = null;
   private readonly keys = new Set<string>();
-  private hoverTile: { x: number; z: number } | null = null;
+  private hoverTile: TilePos | null = null;
+  /** Tile whose panel is pinned open by a click, if any. */
+  private selected: TilePos | null = null;
+  private crop: Crop = 'bugday';
   private lastDateText = '';
-  private lastTreasury = Number.NaN;
+  private sinceInfo = 0;
   private elapsed = 0;
   private last = performance.now();
   frames = 0;
@@ -54,8 +68,12 @@ export class Game {
       onTool: (t) => this.setTool(t),
       onSpeed: (s) => this.setSpeed(s),
       onFertility: (on) => this.setFertility(on),
+      onCrop: (c) => this.setCrop(c),
+      onFieldPlan: (id, plan) => this.setFieldPlan(id, plan),
+      onCloseInfo: () => this.select(null),
     });
     this.hud.setTool(this.tool);
+    this.hud.setCrop(this.crop);
     this.hud.setSpeed(city.calendar.speed);
     this.world.rig.setView(4, 6, 30);
     this.world.rig.snap();
@@ -77,16 +95,22 @@ export class Game {
   step(dt: number): void {
     this.elapsed += dt;
     this.applyKeys(dt);
-    advanceCalendar(this.city.calendar, dt);
+    const days = stepTime(this.city, dt);
     const date = dateOf(this.city.calendar);
     const text = `${formatDate(date)} · ${date.season}`;
     if (text !== this.lastDateText) {
       this.lastDateText = text;
       this.hud.setDate(text);
     }
-    if (this.city.treasury !== this.lastTreasury) {
-      this.lastTreasury = this.city.treasury;
-      this.hud.setTreasury(this.city.treasury);
+    this.hud.setStats(this.city.treasury, this.city.granary, this.city.stats);
+    for (const n of this.city.notices.splice(0)) this.hud.notify(n);
+    // The open panel follows its tile as the season moves on.
+    this.sinceInfo += dt;
+    if (days > 0 && this.sinceInfo > 0.5) {
+      this.sinceInfo = 0;
+      if (this.selected !== null) this.refreshSelection();
+      else if (this.hoverTile !== null && this.drag === null)
+        this.hud.showInfo(inspectTile(this.city, this.hoverTile.x, this.hoverTile.z));
     }
     this.world.frame(dt, this.elapsed);
     this.frames++;
@@ -99,6 +123,34 @@ export class Game {
     this.hud.hideTip();
     this.hud.setTool(tool);
     this.canvas.style.cursor = tool === 'incele' ? 'grab' : 'crosshair';
+  }
+
+  setCrop(crop: Crop): void {
+    this.crop = crop;
+    this.hud.setCrop(crop);
+  }
+
+  setFieldPlan(id: number, plan: FieldPlan): void {
+    setFieldPlan(this.city, id, plan);
+    this.refreshSelection();
+  }
+
+  /** Pins the info panel to a tile, or unpins it. */
+  select(tile: TilePos | null): void {
+    this.selected = tile;
+    this.world.cursor.setHover(tile ?? this.hoverTile);
+    if (tile === null) {
+      this.hud.showInfo(
+        this.hoverTile === null ? null : inspectTile(this.city, this.hoverTile.x, this.hoverTile.z),
+      );
+    } else {
+      this.refreshSelection();
+    }
+  }
+
+  private refreshSelection(): void {
+    if (this.selected === null) return;
+    this.hud.showInfo(inspectTile(this.city, this.selected.x, this.selected.z), true);
   }
 
   setSpeed(speed: Speed): void {
@@ -118,7 +170,7 @@ export class Game {
   }
 
   /** The tile under a point on the canvas, in CSS pixels. */
-  tileAt(clientX: number, clientY: number): { x: number; z: number } | null {
+  tileAt(clientX: number, clientY: number): TilePos | null {
     const rect = this.canvas.getBoundingClientRect();
     const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -180,20 +232,26 @@ export class Game {
       return;
     }
     if (e.button === 1 || this.tool === 'incele') {
-      this.drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY };
+      this.drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY };
       if (this.tool === 'incele') this.canvas.style.cursor = 'grabbing';
-      if (e.pointerType !== 'mouse') this.setHover(this.tileAt(e.clientX, e.clientY));
       return;
     }
     const tile = this.tileAt(e.clientX, e.clientY);
     if (tile === null) return;
-    if (this.tool === 'yol') {
-      this.drag = { kind: 'road', from: tile, plan: null };
-      this.updateRoadDrag(tile, e.clientX, e.clientY);
-    } else {
-      this.drag = { kind: 'clear', from: tile, to: tile };
-      this.updateClearDrag(tile, e.clientX, e.clientY);
+    switch (this.tool) {
+      case 'yol':
+        this.drag = { kind: 'road', from: tile, plan: null };
+        break;
+      case 'konut':
+        this.drag = { kind: 'zone', from: tile, plan: null };
+        break;
+      case 'tarla':
+        this.drag = { kind: 'field', from: tile, plan: null };
+        break;
+      default:
+        this.drag = { kind: 'clear', from: tile, to: tile };
     }
+    this.updateDrag(tile, e.clientX, e.clientY);
   }
 
   private onPointerMove(e: PointerEvent): void {
@@ -221,9 +279,8 @@ export class Game {
     }
     const tile = this.tileAt(e.clientX, e.clientY);
     if (e.pointerType === 'mouse') this.setHover(tile);
-    if (tile === null) return;
-    if (drag?.kind === 'road') this.updateRoadDrag(tile, e.clientX, e.clientY);
-    else if (drag?.kind === 'clear') this.updateClearDrag(tile, e.clientX, e.clientY);
+    if (tile === null || drag === null) return;
+    this.updateDrag(tile, e.clientX, e.clientY);
   }
 
   private onPointerUp(e: PointerEvent, cancelled = false): void {
@@ -240,10 +297,25 @@ export class Game {
       this.hud.hideTip();
       return;
     }
-    if (drag.kind === 'road' && drag.plan !== null) {
+    if (drag.kind === 'pan') {
+      // A press that barely moved is a click: pin the panel to that tile, or unpin it.
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP) {
+        const tile = this.tileAt(e.clientX, e.clientY);
+        const same = tile !== null && this.selected?.x === tile.x && this.selected.z === tile.z;
+        this.select(same ? null : tile);
+      }
+    } else if (drag.kind === 'road' && drag.plan !== null) {
       buildRoad(this.city, drag.plan);
+    } else if (drag.kind === 'zone' && drag.plan !== null) {
+      applyZone(this.city, drag.plan);
+    } else if (drag.kind === 'field' && drag.plan !== null && drag.plan.problem === undefined) {
+      const field = buildField(this.city, drag.plan, this.crop);
+      if (field !== null) {
+        const p = drag.plan;
+        this.select({ x: p.x0 + Math.floor(p.w / 2), z: p.z0 + Math.floor(p.d / 2) });
+      }
     } else if (drag.kind === 'clear') {
-      bulldoze(this.city, drag.from.x, drag.from.z, drag.to.x, drag.to.z);
+      clearArea(this.city, drag.from.x, drag.from.z, drag.to.x, drag.to.z);
     }
     this.world.cursor.setPreview([]);
     this.hud.hideTip();
@@ -266,46 +338,97 @@ export class Game {
     };
   }
 
-  private updateRoadDrag(tile: { x: number; z: number }, cx: number, cy: number): void {
-    if (this.drag?.kind !== 'road') return;
-    const plan = planRoad(this.city, this.drag.from.x, this.drag.from.z, tile.x, tile.z);
-    this.drag.plan = plan;
-    const preview: PreviewTile[] = plan.tiles.map((t) => ({
-      x: t.x,
-      z: t.z,
-      color: PREVIEW_COLORS[t.status],
-    }));
-    this.world.cursor.setPreview(preview);
-    const text =
-      plan.problem !== undefined
-        ? plan.problem
-        : `${plan.tiles.filter((t) => t.status === 'new' || t.status === 'bridge').length} karo · ${plan.cost.toLocaleString('tr-TR')} dirhem`;
-    this.hud.showTip(text, cx, cy, plan.problem !== undefined);
-  }
-
-  private updateClearDrag(tile: { x: number; z: number }, cx: number, cy: number): void {
-    if (this.drag?.kind !== 'clear') return;
-    this.drag.to = tile;
-    const { from } = this.drag;
-    const preview: PreviewTile[] = [];
-    let roads = 0;
-    for (let z = Math.min(from.z, tile.z); z <= Math.max(from.z, tile.z); z++) {
-      for (let x = Math.min(from.x, tile.x); x <= Math.max(from.x, tile.x); x++) {
-        const i = this.city.grid.index(x, z);
-        const removable = this.city.road[i] === 1 && this.city.roadLocked[i] === 0;
-        if (removable) roads++;
-        preview.push({ x, z, color: removable ? '#c8312a' : '#e6b872' });
+  private updateDrag(tile: TilePos, cx: number, cy: number): void {
+    const drag = this.drag;
+    if (drag === null) return;
+    const { city } = this;
+    let preview: PreviewTile[] = [];
+    let text: string;
+    let bad: boolean;
+    switch (drag.kind) {
+      case 'road': {
+        const plan = planRoad(city, drag.from.x, drag.from.z, tile.x, tile.z);
+        drag.plan = plan;
+        preview = plan.tiles.map((t) => ({ x: t.x, z: t.z, color: PREVIEW_COLORS[t.status] }));
+        const count = plan.tiles.filter((t) => t.status === 'new' || t.status === 'bridge').length;
+        bad = plan.problem !== undefined;
+        text = plan.problem ?? `${count} karo · ${plan.cost.toLocaleString('tr-TR')} dirhem`;
+        break;
       }
+      case 'zone': {
+        const plan = proposeZone(city, drag.from.x, drag.from.z, tile.x, tile.z);
+        drag.plan = plan;
+        preview = plan.tiles.map((t) => ({
+          x: t.x,
+          z: t.z,
+          color:
+            t.status === 'blocked'
+              ? '#8a6a58'
+              : t.status === 'existing'
+                ? '#f3d7c6'
+                : t.far
+                  ? '#d8b4a4'
+                  : '#e39a86',
+        }));
+        bad = plan.added === 0;
+        text = plan.added > 0 ? `${plan.added} konut arsası` : 'Arsa ayrılamaz';
+        if (plan.far > 0) text += ` · ${plan.far} tanesi yola uzak, yol gelene dek boş kalır`;
+        break;
+      }
+      case 'field': {
+        const plan = proposeField(city, drag.from.x, drag.from.z, tile.x, tile.z);
+        drag.plan = plan;
+        preview = plan.tiles.map((t) => ({
+          x: t.x,
+          z: t.z,
+          color: t.status === 'ok' ? '#a9c76a' : '#c8312a',
+        }));
+        bad = plan.problem !== undefined;
+        const crop = city.balance.fields.crops[this.crop].name;
+        text =
+          plan.problem ??
+          `${crop} · ${plan.w}×${plan.d} karo · ${plan.cost.toLocaleString('tr-TR')} dirhem · verim %${Math.round(plan.fertility * 100)}`;
+        if (plan.problem === undefined && !plan.roadAccess) text += ' · yola bağlı değil, işlenemez';
+        break;
+      }
+      case 'clear': {
+        drag.to = tile;
+        const found = surveyClear(city, drag.from.x, drag.from.z, tile.x, tile.z);
+        for (let z = Math.min(drag.from.z, tile.z); z <= Math.max(drag.from.z, tile.z); z++) {
+          for (let x = Math.min(drag.from.x, tile.x); x <= Math.max(drag.from.x, tile.x); x++) {
+            const i = city.grid.index(x, z);
+            const hit =
+              (city.road[i] === 1 && city.roadLocked[i] === 0) ||
+              city.house[i] > 0 ||
+              city.zone[i] === 1 ||
+              city.field[i] >= 0;
+            preview.push({ x, z, color: hit ? '#c8312a' : '#e6b872' });
+          }
+        }
+        const parts = [
+          found.roads > 0 ? `${found.roads} yol` : '',
+          found.houses > 0 ? `${found.houses} ev` : '',
+          found.zones > 0 ? `${found.zones} arsa` : '',
+          found.fields > 0 ? `${found.fields} tarla` : '',
+        ].filter((p) => p !== '');
+        bad = parts.length === 0;
+        text = bad ? 'Yıkılacak bir şey yok' : `Yıkılacak: ${parts.join(' · ')}`;
+        break;
+      }
+      default:
+        return;
     }
     this.world.cursor.setPreview(preview);
-    this.hud.showTip(roads > 0 ? `${roads} karo yol yıkılacak` : 'Yıkılacak yol yok', cx, cy, roads === 0);
+    this.hud.showTip(text, cx, cy, bad);
   }
 
-  private setHover(tile: { x: number; z: number } | null): void {
+  private setHover(tile: TilePos | null): void {
     const same =
       tile !== null && this.hoverTile !== null && tile.x === this.hoverTile.x && tile.z === this.hoverTile.z;
     if (same) return;
     this.hoverTile = tile;
+    // While a panel is pinned, hovering does not replace it.
+    if (this.selected !== null) return;
     this.world.cursor.setHover(tile);
     this.hud.showInfo(tile === null ? null : inspectTile(this.city, tile.x, tile.z));
   }
@@ -327,10 +450,17 @@ export class Game {
         this.setSpeed(Number(k) as Speed);
         break;
       case 'escape':
-        this.setTool('incele');
+        if (this.selected !== null) this.select(null);
+        else this.setTool('incele');
         break;
       case 'r':
         this.setTool('yol');
+        break;
+      case 'k':
+        this.setTool('konut');
+        break;
+      case 't':
+        this.setTool('tarla');
         break;
       case 'b':
         this.setTool('yik');

@@ -1,0 +1,44 @@
+{
+  "people": {
+    "perStorey": 5,
+    "laborShare": 0.42,
+    "serviceShare": 0.12,
+    "landmarkJobs": { "cami": 30, "kumbet": 2, "kosk": 25, "mescit": 6, "hamam": 12 }
+  },
+  "food": { "perPersonPerMonth": 0.6, "startGranary": 22000 },
+  "tax": { "perHouseholdPerMonth": 2 },
+  "zoning": { "maxSlope": 0.5, "roadReach": 2 },
+  "fields": {
+    "costPerTile": 4,
+    "minSide": 2,
+    "maxSide": 16,
+    "maxSlope": 0.6,
+    "workersPerTile": 1,
+    "fallowWork": 0.25,
+    "sowMonths": [2, 3],
+    "harvestMonth": 7,
+    "soil": { "drain": 0.12, "regain": 0.3, "floor": 0.55 },
+    "distance": { "free": 10, "range": 50, "maxPenalty": 0.35 },
+    "crops": {
+      "bugday": { "name": "Buğday", "yield": 48, "fertilityWeight": 1 },
+      "arpa": { "name": "Arpa", "yield": 46, "fertilityWeight": 0.45 }
+    },
+    "startTiles": 820
+  },
+  "growth": {
+    "housesPerDay": 3,
+    "abandonPerDay": 1.5,
+    "famineAbandonPerDay": 3,
+    "upgradeChancePerMonth": 0.02,
+    "buildThreshold": 0.05,
+    "abandonThreshold": 0.25
+  },
+  "demand": {
+    "jobWeight": 0.55,
+    "foodWeight": 0.45,
+    "targetUnemployment": 0.08,
+    "unemploymentSpan": 0.12,
+    "comfortMonths": 3,
+    "monthsSpan": 4
+  }
+}

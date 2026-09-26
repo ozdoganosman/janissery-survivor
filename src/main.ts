@@ -1,4 +1,5 @@
 import './ui/style.css';
+import balance from '../data/balance.json';
 import konya from '../data/konya.json';
 import { Game } from './game';
 import { createCity } from './sim/city';
@@ -28,7 +29,7 @@ declare global {
 try {
   const canvas = document.getElementById('view') as HTMLCanvasElement;
   const ui = document.getElementById('ui') as HTMLElement;
-  const city = createCity(konya as unknown as CityDef);
+  const city = createCity(konya as unknown as CityDef, balance);
   const game = new Game(canvas, ui, city);
   window.__game = game;
   game.start();

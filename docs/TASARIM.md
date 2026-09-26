@@ -55,6 +55,38 @@ Mahallelerdeki halk bu üç yerin hepsinde çalışan işgücüdür.
 - İlkbaharda ekim, yaz sonunda hasat; ürün **ambara** girer.
 - **Arklar** verimi artırır; her yıl ekilen toprak yorulur, nadas gerekir.
 
+### İlk döngü (2. aşamada kurulan)
+
+Sayılar `data/balance.json` dosyasında; burada yalnızca kurallar var.
+
+```
+Konut arsası ─► ev ─► nüfus ─► işgücü ─► tarlalar (önce), diğer işler
+                                  │
+       ambar ◄── hasat ◄──────────┘            hazine ◄── hane vergisi (aylık)
+         │
+         └──► tüketim (kişi başı aylık) ──► ambar biterse kıtlık, evler boşalır
+```
+
+- **Konut talebi** iki şeyden gelir: işsizlik hedefin altında mı (iş payı) ve ambar kaç
+  aylık yiyecek tutuyor (yiyecek payı). Talep varken evler, bir yola **en fazla 2 karo**
+  uzaklıktaki imarlı arsalarda günde birkaç tane yükselir; talep çok düşerse ya da kıtlık
+  varsa evler boşalır. Talep yüksekken bazı evlere ikinci kat çıkar.
+- **İmar ücretsizdir**, yalnızca arsayı işaretler. Yola uzak arsalar soluk çizilir ve yol
+  gelene dek boş kalır.
+- **İşgücü:** nüfusun bir payı çalışır. İşçiler önce tarlalara gider; kalan cami, hamam
+  gibi yapıların işlerine. İşçi yetmezse tarlanın bakımı ve hasadı düşer.
+- **Tarla çizmek** hazineden karo başına ücret ister (en az 2×2, en çok 16 karo kenar).
+  Tarlaya yol değmiyorsa işlenmez. Tarla evlerden uzaklaştıkça verim biraz düşer.
+- **Ekin:** buğday toprağın verimini yakından izler; arpa kötü toprakta daha iyi dayanır
+  ama iyi toprakta daha az kazandırır. Oyuncu her tarla için gelecek ekimi seçer:
+  buğday, arpa ya da **nadas**.
+- **Takvim:** Mart–Nisan ekim, Ağustos başında hasat. Ekili toprak her hasatta yorulur;
+  nadasa bırakılan toprak bir yılda gücünün bir kısmını geri alır.
+- **Başlangıç:** şehir yol boylarında hazır tarlalarla ve bir yıla yakın zahireyle gelir.
+  Hiçbir şey yapılmazsa topraklar yorulur ve üçüncü yıl ambar boşalmaya başlar; oyuncu
+  nadas düzeni kurmalı ve yeni tarla açmalıdır.
+- **Arklar** bu aşamada yok; su yolu ile birlikte 4. aşamaya kaldı.
+
 ### İmalathaneler
 
 Değirmen, Boyahane, Dökümhane, Tabakhane, Kiremithane, Taş ocağı, Maden. Tabakhane
@@ -107,8 +139,8 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
   yüzden yeni kurulan her yapı ve yol kendiliğinden çizilir.
 - **Düz renk:** ışık yok denecek kadar az; yüzler arasında yalnız hafif ton farkı.
   Yakınlaştıkça doğrudan ışık payı ve gölgeler yumuşakça gelir.
-- **Desenli dolgu:** zeminde ot öbekleri ve çiçekler, suda dalga çizgileri, ileride
-  tarlalarda başak ve saban motifleri.
+- **Desenli dolgu:** zeminde ot öbekleri ve çiçekler, suda dalga çizgileri, tarlalarda
+  mevsime göre filiz, başak, anız ve saban izi.
 - **Parşömen:** kâğıt lifi dokusu ve kenarlara doğru eskimiş ton; ekranın çevresinde
   tezhip çerçeve (altın hat, noktalı lacivert bant, kırmızı iç hat).
 - **Palet:** kerpiç okrası, tuğla kırmızısı, Selçuklu firuzesi, kobalt, kurşun mavisi,
@@ -133,7 +165,7 @@ Ana tarz **minyatür**; oyuncu yakınlaştıkça sahne **gölge ve derinlik** ka
 | #   | Aşama                                                                                                      | Durum |
 | --- | ---------------------------------------------------------------------------------------------------------- | ----- |
 | 1   | **Zemin:** arazi, verimlilik haritası, Konya'nın mevcut çekirdeği, yollar, kamera, zaman, minyatür görüntü | ✅    |
-| 2   | **Konut ve tarım:** konut imarı, nüfus, tarla çizme, hasat, ambar — ilk oynanabilir döngü                  | ⏳    |
+| 2   | **Konut ve tarım:** konut imarı, nüfus, tarla çizme, hasat, ambar — ilk oynanabilir döngü                  | ✅    |
 | 3   | **Üretim ve çarşı:** imalathaneler, çarşılar, esnaf, üretim zincirleri                                     |       |
 | 4   | **Hizmetler ve bütçe:** kamu yapıları, etki alanları, bilgi katmanları, vergi, vakıf                       |       |
 | 5   | **Olaylar ve savunma:** yangın, salgın, kıtlık, Moğol elçileri, sur, garnizon                              |       |
