@@ -42,13 +42,16 @@ const FINE_ZOOM = 24;
 const MAX_LANES = 3;
 const LANE_WIDTH = 0.22;
 
-/** Men abreast in the barracks' blocks, and in a column on the march. */
+/** Men abreast in the barracks' blocks. */
 const BLOCK_COLS = 10;
-const COLUMN_COLS = 4;
 
-/** Seconds to fall into column before a march, and to draw up after it. */
-const GATHER = 1.2;
-const DEPLOY = 1.6;
+/** Seconds a company takes to turn about, and how far ahead it looks to follow the road. */
+const TURN = 1.2;
+const LOOK = 0.6;
+/** Room left between companies filing through the barracks gate (tiles), and the longest
+ * any company waits its turn (seconds). */
+const GATE_ROOM = 0.3;
+const MAX_WAIT = 60;
 
 /** A company's block on the parade ground, in the barracks' frame. */
 interface Block {
@@ -205,6 +208,7 @@ export class ArmyView {
     const seen = new Set<number>();
     type Entry = { co: Company; live: boolean };
     const entries: Entry[] = [];
+    const fresh: March[] = [];
     for (const u of c.army.units) {
       seen.add(u.id);
       const def = c.balance.army.units[u.kind];
@@ -219,8 +223,11 @@ export class ArmyView {
       let march = this.marches.get(u.id) ?? null;
       if (before !== undefined && before.key !== station.key) {
         const from = now.get(u.id) ?? { xs: before.xs, zs: before.zs };
-        march = this.plan(u, def, from, before.home, station);
+        // It sets off facing the way it faces now, even if it was on the march.
+        const facing = march !== null && !march.done ? march.heading() : before.heading;
+        march = this.plan(u, def, from, facing, station);
         this.marches.set(u.id, march);
+        if (march.path !== null) fresh.push(march);
       }
       this.stations.set(u.id, station);
       const drilling = u.field === null && u.drill !== null;
@@ -233,6 +240,17 @@ export class ArmyView {
         this.stations.delete(id);
         this.marches.delete(id);
       }
+    }
+    // Companies sent off together march at the pace of the slowest, and so keep together.
+    const pace = Math.min(...fresh.map((m) => m.pace));
+    for (const m of fresh) m.setSpeed(pace);
+    // Through the barracks gate they go one after another, the nearest first.
+    // Each waits for the one before to clear the gate: its depth, and a little room.
+    const queue = fresh.filter((m) => m.gated).sort((p, q) => p.toGate - q.toGate);
+    let wait = 0;
+    for (const m of queue) {
+      m.t = -Math.min(wait, MAX_WAIT);
+      wait += (m.depth + GATE_ROOM) / pace;
     }
 
     // The men who move come first: they are redrawn every time.
@@ -486,7 +504,7 @@ export class ArmyView {
     u: Unit,
     def: UnitDef,
     from: { xs: Float32Array; zs: Float32Array },
-    fromHome: boolean,
+    facing: number,
     to: Station,
   ): March {
     let fx = 0;
@@ -497,33 +515,39 @@ export class ArmyView {
     }
     fx /= u.men;
     fz /= u.men;
-    const speed = def.march;
-    if (fromHome && to.home) return new March(def, u.men, from, to, null, speed);
+    // Home is where it stands, not where it was last bound: a company halted on its way
+    // back is out in the field.
+    const fromHome = this.inBarracks(fx, fz);
+    if (fromHome && to.home) return new March(def, u.men, from, facing, to, null, def.march);
     const lay = this.lay!;
     const gateIn = this.toWorld(0, lay.wall.z1 - 0.8, 0);
     const gateOut = this.toWorld(0, lay.wall.z1 + 1.4, 0);
-    const way = (
-      a: THREE.Vector3 | [number, number],
-      b: THREE.Vector3 | [number, number],
-    ): Array<[number, number]> => {
-      const p = Array.isArray(a) ? { x: a[0], z: a[1] } : { x: a.x, z: a.z };
-      const q = Array.isArray(b) ? { x: b[0], z: b[1] } : { x: b.x, z: b.z };
-      return (
-        findPath(this.city, p, q) ?? [
-          [p.x, p.z],
-          [q.x, q.z],
-        ]
-      );
-    };
+    const way = (a: [number, number], b: [number, number]): Array<[number, number]> =>
+      findPath(this.city, { x: a[0], z: a[1] }, { x: b[0], z: b[1] }) ?? [a, b];
     let pts: Array<[number, number]>;
+    let toGate = 0;
     if (fromHome) {
-      pts = [[fx, fz], [gateIn.x, gateIn.z], ...way(gateOut, [to.x, to.z])];
+      pts = [[fx, fz], [gateIn.x, gateIn.z], ...way([gateOut.x, gateOut.z], [to.x, to.z])];
+      toGate = Math.hypot(gateIn.x - fx, gateIn.z - fz);
     } else if (to.home) {
-      pts = [...way([fx, fz], gateOut), [gateIn.x, gateIn.z], [to.x, to.z]];
+      const out = way([fx, fz], [gateOut.x, gateOut.z]);
+      pts = [...out, [gateIn.x, gateIn.z], [to.x, to.z]];
+      toGate = new Path(out).length;
     } else {
       pts = way([fx, fz], [to.x, to.z]);
     }
-    return new March(def, u.men, from, to, new Path(pts), speed);
+    const m = new March(def, u.men, from, facing, to, new Path(pts), def.march);
+    m.gated = fromHome || to.home;
+    m.toGate = toGate;
+    return m;
+  }
+
+  /** Whether a point is on the barracks' own ground. */
+  private inBarracks(x: number, z: number): boolean {
+    const { grid } = this.city;
+    const tx = grid.tileOf(x);
+    const tz = grid.tileOf(z);
+    return grid.inBounds(tx, tz) && this.city.building[grid.index(tx, tz)] === this.barracksId;
   }
 
   // ---------------------------------------------------------------- drawing
@@ -565,11 +589,7 @@ export class ArmyView {
   /** The ground a man stands on: the compound's floor within the barracks, else the land. */
   private groundY(x: number, z: number): number {
     const h = sampleHeight(this.city.terrain, x, z);
-    const { grid } = this.city;
-    const tx = grid.tileOf(x);
-    const tz = grid.tileOf(z);
-    const inside = grid.inBounds(tx, tz) && this.city.building[grid.index(tx, tz)] === this.barracksId;
-    return (inside ? Math.max(this.frame.base, h) : h) + 0.045;
+    return (this.inBarracks(x, z) ? Math.max(this.frame.base, h) : h) + 0.045;
   }
 
   /** A sphere round the barracks and everywhere the army stands or marches, for culling. */
@@ -647,130 +667,175 @@ class Path {
 }
 
 /**
- * One company's march. It falls into a column at the start of the way, marches along it,
- * and at the end each man steps to his place in the new station. Between blocks of the
- * same parade ground it simply crosses over.
+ * One company's march, as a body: it turns to face the way and takes the shape of its new
+ * formation while it does, marches along the way in its ranks, turning with the road, and
+ * at the end turns to face where it was told to. Between blocks of the same parade ground
+ * it simply crosses over.
  */
 class March {
   t = 0;
-  private readonly cols: number;
-  private readonly laneGap: number;
-  private readonly rowGap: number;
-  /** Distance the head of the column goes: until the column's middle is at the end. */
-  private readonly reach: number;
-  private readonly marchTime: number;
+  /** It goes through the barracks gate, and how far it has to go to reach it. */
+  gated = false;
+  toGate = 0;
+
+  /** How deep the company is on the march, front to back. */
+  get depth(): number {
+    return this.to.d;
+  }
+  private speed = 1;
+  private turnOut = TURN;
+  private marchTime = 0;
+  private readonly fromX: number;
+  private readonly fromZ: number;
+  /** Each man's place about the company's middle, before and after: [right, forward]. */
+  private readonly startOff: Float32Array;
+  private readonly endOff: Float32Array;
   private readonly p = { x: 0, z: 0, heading: 0 };
+  private readonly q = { x: 0, z: 0, heading: 0 };
 
   constructor(
     private readonly def: UnitDef,
-    men: number,
+    private readonly men: number,
     private readonly from: { xs: Float32Array; zs: Float32Array },
+    private readonly fromHeading: number,
     private readonly to: Station,
     readonly path: Path | null,
-    private readonly speed: number,
+    /** Its own marching pace, before it is matched to its fellows'. */
+    readonly pace: number,
   ) {
-    this.cols = Math.min(COLUMN_COLS, men);
-    this.laneGap = def.file * 1.1;
-    this.rowGap = def.rank * 1.15;
-    const rows = Math.ceil(men / this.cols);
-    if (path !== null) {
-      this.reach = path.length + ((rows - 1) * this.rowGap) / 2;
-      this.marchTime = this.reach / speed;
+    let fx = 0;
+    let fz = 0;
+    for (let k = 0; k < men; k++) {
+      fx += from.xs[k];
+      fz += from.zs[k];
+    }
+    this.fromX = fx / men;
+    this.fromZ = fz / men;
+    this.startOff = new Float32Array(men * 2);
+    this.endOff = new Float32Array(men * 2);
+    const a = axes(fromHeading);
+    const b = axes(to.heading);
+    for (let k = 0; k < men; k++) {
+      const dx = from.xs[k] - this.fromX;
+      const dz = from.zs[k] - this.fromZ;
+      this.startOff[k * 2] = dx * a.rx + dz * a.rz;
+      this.startOff[k * 2 + 1] = dx * a.fx + dz * a.fz;
+      const ex = to.xs[k] - to.x;
+      const ez = to.zs[k] - to.z;
+      this.endOff[k * 2] = ex * b.rx + ez * b.rz;
+      this.endOff[k * 2 + 1] = ex * b.fx + ez * b.fz;
+    }
+    this.setSpeed(pace);
+  }
+
+  /** Marches at `speed` tiles a second: companies sent together keep together. */
+  setSpeed(speed: number): void {
+    this.speed = speed;
+    if (this.path !== null) {
+      // A big turn takes longer than a small one.
+      this.tangent(0, this.p);
+      const turn = Math.abs(angleBetween(this.fromHeading, this.p.heading));
+      this.turnOut = TURN * (0.5 + turn / Math.PI);
+      this.marchTime = this.path.length / speed;
     } else {
       // Across the parade ground: as long as the furthest man takes at a walk.
       let far = 0;
-      for (let k = 0; k < men; k++) {
-        far = Math.max(far, Math.hypot(to.xs[k] - from.xs[k], to.zs[k] - from.zs[k]));
+      for (let k = 0; k < this.men; k++) {
+        far = Math.max(far, Math.hypot(this.to.xs[k] - this.from.xs[k], this.to.zs[k] - this.from.zs[k]));
       }
-      this.reach = 0;
       this.marchTime = Math.max(0.6, far / (speed * 0.7));
     }
   }
 
   get done(): boolean {
-    return this.path === null ? this.t >= this.marchTime : this.t >= GATHER + this.marchTime + DEPLOY;
+    return this.path === null ? this.t >= this.marchTime : this.t >= this.turnOut + this.marchTime + TURN;
   }
 
-  /** The way the head of the column faces now. */
+  /** The way the company faces now. */
   heading(): number {
-    if (this.path === null) return this.to.heading;
-    const s = Math.min(this.reach, Math.max(0, (this.t - GATHER) * this.speed));
-    this.path.at(Math.min(s, this.path.length), this.p);
-    return this.p.heading;
+    this.pose();
+    return this.q.heading;
+  }
+
+  /**
+   * Where the company's middle is now and the way it faces, in `q`; returns how far its
+   * men have taken their new places (0..1) and whether it is on the move.
+   */
+  private pose(): { shape: number; moving: boolean } {
+    const path = this.path!;
+    const t = this.t;
+    const q = this.q;
+    if (t < this.turnOut) {
+      const e = ease01(t / this.turnOut);
+      this.tangent(0, this.p);
+      q.x = this.fromX + (path.points[0][0] - this.fromX) * e;
+      q.z = this.fromZ + (path.points[0][1] - this.fromZ) * e;
+      q.heading = lerpAngle(this.fromHeading, this.p.heading, e);
+      return { shape: e, moving: true };
+    }
+    if (t < this.turnOut + this.marchTime) {
+      const s = (t - this.turnOut) * this.speed;
+      path.at(s, q);
+      this.tangent(s, this.p);
+      q.heading = this.p.heading;
+      return { shape: 1, moving: true };
+    }
+    const e = ease01((t - this.turnOut - this.marchTime) / TURN);
+    this.tangent(path.length, this.p);
+    q.x = this.to.x;
+    q.z = this.to.z;
+    q.heading = lerpAngle(this.p.heading, this.to.heading, e);
+    return { shape: 1, moving: e < 1 };
+  }
+
+  /** The way along the road at `s`, looking a little ahead and behind so turns are gentle. */
+  private tangent(s: number, out: { x: number; z: number; heading: number }): void {
+    const path = this.path!;
+    path.at(Math.max(0, s - LOOK), this.p);
+    const ax = this.p.x;
+    const az = this.p.z;
+    path.at(Math.min(path.length, s + LOOK), this.p);
+    const dx = this.p.x - ax;
+    const dz = this.p.z - az;
+    out.heading = Math.hypot(dx, dz) > 1e-4 ? Math.atan2(dx, dz) : this.to.heading;
   }
 
   /** Where man `k` is now, the way he faces and what he is doing. */
   at(k: number, st: Station, rest: Anim, out: { x: number; z: number; heading: number; anim: Anim }): void {
     const horse = this.def.horse;
     const walk: Anim = horse ? 'ride' : 'march';
-    const fx = this.from.xs[k];
-    const fz = this.from.zs[k];
-    const tx = st.xs[k];
-    const tz = st.zs[k];
     if (this.path === null) {
       const e = ease01(this.t / this.marchTime);
-      this.step(fx, fz, tx, tz, e, st.headings[k], walk, rest, out);
+      const fx = this.from.xs[k];
+      const fz = this.from.zs[k];
+      const tx = st.xs[k];
+      const tz = st.zs[k];
+      out.x = fx + (tx - fx) * e;
+      out.z = fz + (tz - fz) * e;
+      const moving = Math.hypot(tx - fx, tz - fz) > 0.02 && e < 1;
+      const dir = moving ? Math.atan2(tx - fx, tz - fz) : st.headings[k];
+      out.heading = lerpAngle(dir, st.headings[k], smoothstep(0.6, 1, e));
+      out.anim = moving ? walk : rest;
       return;
     }
-    const t = this.t;
-    if (t < GATHER) {
-      this.column(k, 0);
-      this.step(fx, fz, this.p.x, this.p.z, ease01(t / GATHER), this.p.heading, walk, walk, out);
+    if (this.t < 0) {
+      // Waiting its turn at the gate.
+      out.x = this.from.xs[k];
+      out.z = this.from.zs[k];
+      out.heading = this.fromHeading;
+      out.anim = horse ? 'stand' : 'idle';
       return;
     }
-    if (t < GATHER + this.marchTime) {
-      this.column(k, (t - GATHER) * this.speed);
-      out.x = this.p.x;
-      out.z = this.p.z;
-      out.heading = this.p.heading;
-      out.anim = horse ? 'gallop' : 'march';
-      return;
-    }
-    this.column(k, this.reach);
-    this.step(
-      this.p.x,
-      this.p.z,
-      tx,
-      tz,
-      ease01((t - GATHER - this.marchTime) / DEPLOY),
-      st.headings[k],
-      walk,
-      rest,
-      out,
-    );
-  }
-
-  /** Man `k`'s place in the column when its head is `s` along the way. */
-  private column(k: number, s: number): void {
-    const row = Math.floor(k / this.cols);
-    const lane = (k % this.cols) - (this.cols - 1) / 2;
-    this.path!.at(s - row * this.rowGap, this.p);
-    const a = axes(this.p.heading);
-    this.p.x += a.rx * lane * this.laneGap;
-    this.p.z += a.rz * lane * this.laneGap;
-  }
-
-  /**
-   * A man stepping from one point to another, `e` of the way: facing where he goes, and at
-   * the end turning to face `endHeading` and falling into `endAnim`.
-   */
-  private step(
-    ax: number,
-    az: number,
-    bx: number,
-    bz: number,
-    e: number,
-    endHeading: number,
-    walk: Anim,
-    endAnim: Anim,
-    out: { x: number; z: number; heading: number; anim: Anim },
-  ): void {
-    out.x = ax + (bx - ax) * e;
-    out.z = az + (bz - az) * e;
-    const moving = Math.hypot(bx - ax, bz - az) > 0.02;
-    const dir = moving ? Math.atan2(bx - ax, bz - az) : endHeading;
-    out.heading = lerpAngle(dir, endHeading, smoothstep(0.6, 1, e));
-    out.anim = e >= 1 || !moving ? endAnim : walk;
+    const { shape, moving } = this.pose();
+    const q = this.q;
+    const r = this.startOff[k * 2] + (this.endOff[k * 2] - this.startOff[k * 2]) * shape;
+    const f = this.startOff[k * 2 + 1] + (this.endOff[k * 2 + 1] - this.startOff[k * 2 + 1]) * shape;
+    const a = axes(q.heading);
+    out.x = q.x + a.rx * r + a.fx * f;
+    out.z = q.z + a.rz * r + a.fz * f;
+    out.heading = q.heading;
+    const marching = this.t >= this.turnOut && this.t < this.turnOut + this.marchTime;
+    out.anim = !moving ? rest : marching && horse && this.speed >= 1.5 ? 'gallop' : walk;
   }
 }
 
@@ -779,11 +844,16 @@ const ease01 = (x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-function lerpAngle(a: number, b: number, t: number): number {
+/** The smaller turn from heading `a` to heading `b`, signed. */
+function angleBetween(a: number, b: number): number {
   let d = (b - a) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
+  return d;
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  return a + angleBetween(a, b) * t;
 }
 
 // ------------------------------------------------------------------ the parade ground

@@ -222,10 +222,17 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
     vardır; kışlanın panelindeki "Orduyu seç ve komuta et" bütün orduyu seçer.
   - **Yürümek:** sağ tık (telefonda boş yere dokunmak) seçili bölükleri oraya gönderir.
     Bölükler şimdiki sıralarını bozmadan soldan sağa yan yana, geldikleri yöne bakarak
-    dizilir; 28 karodan geniş ordu arka arkaya saflar kurar. Kışladan çıkan bölük dörtlü
-    kol olur, kapıdan çıkar, sokaklardan ve açık araziden yürür: evlerin, yapıların ve
-    anıtların içinden geçmez, surdan yalnız kapıdan, çaydan yalnız köprüden geçer. Varınca
-    bölük düzenine açılır. Suya yürüme emri verilemez; talimdeki bölük kışladan çıkamaz.
+    dizilir; ordu kabaca eninin yarısı derinlikte bir gövde kurar (en çok 24 karo geniş,
+    arta kalan bölükler arkada yeni saflar). Her bölüğün yeri açık mı diye bakılır: surun,
+    suyun, evlerin ve yapıların üstüne düşen, ya da gidilen noktadan ancak uzun bir
+    dolambaçla (sur ötesi gibi) varılan yer kullanılmaz; bölük en yakın açık yeri alır.
+  - **Yürüyüş:** bölük düzenini bozmadan yürür: önce yola döner (bu sırada yeni düzeninin
+    biçimini alır), sonra saflarıyla yolu izler, yol döndükçe yavaşça döner, varınca
+    emredilen yöne döner. Yol sokaklardan ve açık araziden geçer: evlerin, yapıların ve
+    anıtların içinden geçmez, surdan yalnız kapıdan, çaydan yalnız köprüden geçer; dar
+    yerlerden kaçınıp açık araziyi yeğler. Birlikte gönderilen bölükler en yavaşlarının
+    adımıyla yürür, birbirinden kopmaz. Kışlanın kapısından birer birer, kapıya en yakın
+    olan önce çıkar. Suya yürüme emri verilemez; talimdeki bölük kışladan çıkamaz.
   - **Emirler:** Dur (H), Kışlaya dön (K), sola ve sağa 45° dönüş (bölükler ortalarının
     çevresinde döner), düzen: **Saf** (20 yan yana, geniş cephe), **Kare** (10×10), **Kol**
     (4 yan yana, yürüyüş düzeni). Sahadaki her bölüğün üstünde türünü ve er sayısını
@@ -388,19 +395,19 @@ Numaralar oyunun baştan beri süren sırasıdır. 1–5 arası ayrıntılı bir
 sonra daha sade bir çekirdeğe çevrildi, görüntü, şehir ve halk o yoldan kaldı. O yolun
 kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 
-| #   | Aşama                                                                                                                                             | Durum |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                                  | ✅    |
-| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                                           | ↺     |
-| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                                             | ↺     |
-| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                                      | ↺     |
-| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                                    | ↺     |
-| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                                | ✅    |
-| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                                | ✅    |
-| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi               | ✅    |
-| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                                           |       |
-| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama               | ✅    |
-| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi               | ✅    |
-| 8c  | **Ordu komutası:** bölükleri tek tek ya da kutuyla seçme, sağ tıkla yürütme (kol düzeninde, sokaklardan, kapıdan), dur, dön, düzen, kışlaya dönüş | ✅    |
-| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                             |       |
-| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                  |       |
+| #   | Aşama                                                                                                                                                                               | Durum |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                                                                    | ✅    |
+| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                                                                             | ↺     |
+| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                                                                               | ↺     |
+| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                                                                        | ↺     |
+| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                                                                      | ↺     |
+| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                                                                  | ✅    |
+| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                                                                  | ✅    |
+| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi                                                 | ✅    |
+| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                                                                             |       |
+| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama                                                 | ✅    |
+| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi                                                 | ✅    |
+| 8c  | **Ordu komutası:** bölükleri tek tek ya da kutuyla seçme, sağ tıkla yürütme (düzen bozmadan, sokaklardan, kapıdan; sura ve evlere taşmadan dizilme), dur, dön, düzen, kışlaya dönüş | ✅    |
+| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                                                               |       |
+| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                                                    |       |

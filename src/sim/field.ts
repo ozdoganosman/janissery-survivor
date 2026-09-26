@@ -1,6 +1,8 @@
 import type { FormationKind, UnitDef } from './balance';
 import type { Unit } from './army';
 import type { CityState } from './city';
+import { reachFrom, standGround } from './paths';
+import { wallDepth } from './walls';
 
 /**
  * The army out of its barracks. A company ordered out stands somewhere on the map in a
@@ -19,7 +21,7 @@ export interface FieldPost {
 }
 
 /** Companies are laid in lines no wider than this (tiles); more stand in lines behind. */
-const LINE_WIDTH = 28;
+const LINE_WIDTH = 24;
 /** Room between companies side by side, and between lines. */
 const GAP = 0.5;
 
@@ -84,10 +86,17 @@ export function standable(city: CityState, x: number, z: number): boolean {
   return city.terrain.water[i] === 0 || city.road[i] === 1;
 }
 
+/** How far round the point ordered companies look for clear ground (tiles). */
+const SEARCH = 40;
+
 /**
  * Sends companies to stand at a point, facing `heading`: side by side from left to right in
- * the order given, in lines one behind another if they are many. Each keeps its formation,
- * or takes `formation` if one is given. Companies still at drill stay in the barracks.
+ * the order given, in lines one behind another, drawn up about twice as wide as deep. Each
+ * company stands on clear ground: not on a wall, in the water, in a house or a building,
+ * not across a wall from the point it was sent to, and not where only a long way round
+ * would bring it; where its place in the lines is not
+ * clear, it takes the nearest place that is. Each keeps its formation, or takes
+ * `formation` if one is given. Companies still at drill stay in the barracks.
  */
 export function marchOrder(
   city: CityState,
@@ -100,7 +109,8 @@ export function marchOrder(
   const units = unitsOf(city, ids);
   const ready = units.filter((u) => u.drill === null);
   const out: OrderResult = { moved: 0, drilling: units.length - ready.length };
-  if (!standable(city, x, z)) return { ...out, problem: 'Oraya yürünmez' };
+  const origin = standable(city, x, z) ? nearestGround(city, x, z) : null;
+  if (origin === null) return { ...out, problem: 'Oraya yürünmez' };
   if (ready.length === 0) {
     return out.drilling > 0 ? { ...out, problem: 'Talimdeki bölük kışladan çıkamaz' } : out;
   }
@@ -110,12 +120,13 @@ export function marchOrder(
     const size = companySize(defs[u.kind], u.men, formationCols(city, f, u.men));
     return { u, f, ...size };
   });
-  // Break the companies into lines, each as wide as it may be.
+  // Lines of about the square root of twice the companies: an army twice as wide as deep.
+  const perLine = Math.min(placed.length, Math.ceil(Math.sqrt(placed.length * 2)));
   const lines: Array<typeof placed> = [[]];
   let width = 0;
   for (const p of placed) {
     const line = lines[lines.length - 1];
-    if (line.length > 0 && width + GAP + p.w > LINE_WIDTH) {
+    if (line.length > 0 && (line.length >= perLine || width + GAP + p.w > LINE_WIDTH)) {
       lines.push([p]);
       width = p.w;
     } else {
@@ -124,27 +135,93 @@ export function marchOrder(
     }
   }
   const a = axes(heading);
+  const { grid } = city;
+  const reach = reachFrom(city, origin.x, origin.z, SEARCH);
+  // The army stands on the same side of every wall as the point it was sent to.
+  const side = wallDepth(city, origin.x, origin.z);
+  const world = (r: number, f: number): [number, number] => [
+    x + a.rx * r + a.fx * f,
+    z + a.rz * r + a.fz * f,
+  ];
+  /** Whether a company's ground is clear, and near enough by the ways troops walk. */
+  const clear = (r: number, f: number, w: number, d: number): boolean => {
+    for (const u of SAMPLES) {
+      for (const v of SAMPLES) {
+        const [px, pz] = world(r + u * w, f + v * d);
+        const tx = grid.tileOf(px);
+        const tz = grid.tileOf(pz);
+        if (!grid.inBounds(tx, tz)) return false;
+        const i = grid.index(tx, tz);
+        if (!standGround(city, i) || reach[i] === Infinity) return false;
+        if (wallDepth(city, px, pz) !== side) return false;
+      }
+    }
+    const [cx, cz] = world(r, f);
+    // Not somewhere only a long way round would reach, such as the far side of a wall.
+    return reach[grid.index(grid.tileOf(cx), grid.tileOf(cz))] <= Math.hypot(r, f) * 1.5 + 4;
+  };
+  const taken: Array<{ r: number; f: number; w: number; d: number }> = [];
+  const free = (r: number, f: number, w: number, d: number): boolean =>
+    taken.every(
+      (t) => Math.abs(t.r - r) >= (t.w + w) / 2 + GAP / 2 || Math.abs(t.f - f) >= (t.d + d) / 2 + GAP / 2,
+    );
   let back = 0;
   for (const line of lines) {
     const total = line.reduce((n, p) => n + p.w, 0) + GAP * (line.length - 1);
     const depth = Math.max(...line.map((p) => p.d));
     let across = -total / 2;
     for (const p of line) {
-      const right = across + p.w / 2;
-      // Each line's front rank is level; deeper companies reach further back.
-      const forward = -back - p.d / 2;
-      p.u.field = {
-        x: x + a.rx * right + a.fx * forward,
-        z: z + a.rz * right + a.fz * forward,
-        heading,
-        formation: p.f,
-      };
+      // Its place in the lines; each line's front rank is level.
+      const r0 = across + p.w / 2;
+      const f0 = -back - p.d / 2;
       across += p.w + GAP;
+      let spot: [number, number] | null = null;
+      for (const [i, j] of RINGS) {
+        const r = r0 + i * (p.w + GAP) * 0.5;
+        const f = f0 + j * (p.d + GAP) * 0.5;
+        if (free(r, f, p.w, p.d) && clear(r, f, p.w, p.d)) {
+          spot = [r, f];
+          break;
+        }
+      }
+      const [r, f] = spot ?? [r0, f0];
+      taken.push({ r, f, w: p.w, d: p.d });
+      const [px, pz] = world(r, f);
+      p.u.field = { x: px, z: pz, heading, formation: p.f };
     }
     back += depth + GAP;
   }
   city.revision.army++;
   return { ...out, moved: ready.length };
+}
+
+/** Points over a company's ground checked for clear footing, as shares of its size. */
+const SAMPLES = [-0.5, -0.17, 0.17, 0.5];
+
+/** Steps away from a company's place in the lines, nearest first, to look for clear ground. */
+const RINGS: Array<[number, number]> = (() => {
+  const out: Array<[number, number]> = [];
+  for (let j = -16; j <= 16; j++) for (let i = -16; i <= 16; i++) out.push([i, j]);
+  // Nearest first; at a like distance, rather behind the line than before it.
+  return out.sort((p, q) => Math.hypot(p[0], p[1]) - Math.hypot(q[0], q[1]) || p[1] - q[1]);
+})();
+
+/** The nearest tile troops can stand on to a point, within a few tiles, or null. */
+function nearestGround(city: CityState, x: number, z: number): { x: number; z: number } | null {
+  const { grid } = city;
+  const cx = grid.tileOf(x);
+  const cz = grid.tileOf(z);
+  for (let r = 0; r <= 3; r++) {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r || !grid.inBounds(cx + dx, cz + dz)) continue;
+        if (standGround(city, grid.index(cx + dx, cz + dz))) {
+          return r === 0 ? { x, z } : { x: grid.centre(cx + dx), z: grid.centre(cz + dz) };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /** Sends companies in the field back to the barracks. Returns how many were out. */

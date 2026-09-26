@@ -17,6 +17,7 @@ import {
 } from '../src/sim/field';
 import { findPath, marchCost } from '../src/sim/paths';
 import { restoreGame, saveGame } from '../src/sim/save';
+import { insideWalls } from '../src/sim/walls';
 import { balance, def, newCity, siteFor } from './helpers';
 
 const units = balance.army.units;
@@ -133,6 +134,55 @@ describe('orders', () => {
     expect(c.army.units[0].field).toBeNull();
     expect(returnOrder(c, ids)).toBe(2);
     for (const u of c.army.units) expect(u.field).toBeNull();
+  });
+
+  it('draws up hard by the city wall without standing on it, in it or over it', () => {
+    const c = withArmy(20);
+    const ids = c.army.units.map((u) => u.id);
+    // Just outside the old walls, east of the tepe, facing them.
+    const x = c.def.tepe.x + c.def.walls.radius + 3;
+    const z = c.def.tepe.z;
+    const r = marchOrder(c, ids, x, z, -Math.PI / 2);
+    expect(r.moved).toBe(20);
+    const { grid } = c;
+    for (const u of c.army.units) {
+      const f = u.field!;
+      const def = units[u.kind];
+      const { w, d } = companySize(def, u.men, formationCols(c, f.formation, u.men));
+      const a = axes(f.heading);
+      for (const su of [-0.5, 0, 0.5]) {
+        for (const sv of [-0.5, 0, 0.5]) {
+          const px = f.x + a.rx * su * w + a.fx * sv * d;
+          const pz = f.z + a.rz * su * w + a.fz * sv * d;
+          const i = grid.index(grid.tileOf(px), grid.tileOf(pz));
+          expect(c.wall[i]).not.toBe(WALL);
+          expect(c.house[i]).toBe(0);
+          expect(c.building[i]).toBe(-1);
+        }
+      }
+      // All on this side of the wall, even by a gate.
+      expect(insideWalls(c, f.x, f.z)).toBe(false);
+    }
+    // Drawn up as a body, not strung out: about twice as wide as deep, give or take.
+    const xs = c.army.units.map((u) => u.field!.x);
+    const zs = c.army.units.map((u) => u.field!.z);
+    const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+    expect(spread).toBeLessThan(30);
+  });
+
+  it('keeps outside the walls when sent to a gate, and inside when sent within', () => {
+    const c = withArmy(20);
+    const ids = c.army.units.map((u) => u.id);
+    const gate = c.gates.find((g) => g.ring === 0)!;
+    const { grid } = c;
+    const gx = gate.tiles.reduce((n, i) => n + grid.centre(i % grid.size), 0) / gate.tiles.length;
+    const gz = gate.tiles.reduce((n, i) => n + grid.centre(Math.floor(i / grid.size)), 0) / gate.tiles.length;
+    // A step outside the gate, away from the tepe.
+    const d = Math.hypot(gx - c.def.tepe.x, gz - c.def.tepe.z);
+    const ox = gx + ((gx - c.def.tepe.x) / d) * 3;
+    const oz = gz + ((gz - c.def.tepe.z) / d) * 3;
+    marchOrder(c, ids, ox, oz, 0);
+    for (const u of c.army.units) expect(insideWalls(c, u.field!.x, u.field!.z)).toBe(false);
   });
 
   it('comes back from a save where it was sent', () => {

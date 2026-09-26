@@ -25,6 +25,73 @@ function passable(city: CityState, i: number): boolean {
   return marchCost(city, i) < Infinity;
 }
 
+/** Whether a company may stand on a tile: open ground or a street, not in any building. */
+export function standGround(city: CityState, i: number): boolean {
+  return city.building[i] < 0 && passable(city, i);
+}
+
+/**
+ * Extra cost of a tile hard by something troops cannot cross: a company is a block of men
+ * a tile or two across, so the way keeps to open ground where it can and squeezes along
+ * walls and between houses only where it must.
+ */
+function crowding(city: CityState, i: number): number {
+  const n = city.grid.size;
+  const x = i % n;
+  const z = Math.floor(i / n);
+  for (const [dx, dz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]) {
+    const nx = x + dx;
+    const nz = z + dz;
+    if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
+    if (!passable(city, nz * n + nx)) return 1.2;
+  }
+  return 0;
+}
+
+/**
+ * How far a company would walk from a point to every tile within `radius` tiles of it, by
+ * the ways troops may take; Infinity where it cannot get to, or beyond the radius.
+ */
+export function reachFrom(city: CityState, x: number, z: number, radius: number): Float32Array {
+  const { grid } = city;
+  const n = grid.size;
+  const out = new Float32Array(n * n).fill(Infinity);
+  const sx = Math.max(0, Math.min(n - 1, grid.tileOf(x)));
+  const sz = Math.max(0, Math.min(n - 1, grid.tileOf(z)));
+  const start = sz * n + sx;
+  if (!passable(city, start)) return out;
+  const heap = new MinHeap();
+  out[start] = 0;
+  heap.push(start, 0);
+  while (heap.size > 0) {
+    const i = heap.pop();
+    const cx = i % n;
+    const cz = Math.floor(i / n);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dz === 0) continue;
+        const nx = cx + dx;
+        const nz = cz + dz;
+        if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
+        if (Math.abs(nx - sx) > radius || Math.abs(nz - sz) > radius) continue;
+        const j = nz * n + nx;
+        if (!passable(city, j)) continue;
+        if (dx !== 0 && dz !== 0 && (!passable(city, cz * n + nx) || !passable(city, nz * n + cx))) continue;
+        const d = out[i] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1);
+        if (d >= out[j]) continue;
+        out[j] = d;
+        heap.push(j, d);
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * The way from one point of the map to another, as world points: the start, the turns,
  * the end. Null when there is none (the end is walled in, or across water with no bridge).
@@ -43,7 +110,8 @@ export function findPath(
   const tz = clampTile(to.z);
   const start = sz * n + sx;
   const goal = tz * n + tx;
-  const cost = (i: number): number => (i === start || i === goal ? 1 : marchCost(city, i));
+  const cost = (i: number): number =>
+    i === start || i === goal ? 1 : marchCost(city, i) + crowding(city, i);
   if (start === goal)
     return [
       [from.x, from.z],
