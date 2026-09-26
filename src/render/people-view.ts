@@ -212,7 +212,7 @@ export class PeopleView {
     const netKey = String(r.roads);
     const weightKey = `${Math.floor(r.houses / 8)}:${r.buildings}`;
     const month = dateOf(c.calendar).month;
-    const placesKey = `${r.buildings}:${r.fields}:${r.walls}:${month}:${Math.round(c.population / 200)}`;
+    const placesKey = `${r.buildings}:${r.fields}:${r.walls}:${month}:${Math.round(c.population / 2000)}`;
     if (netKey === this.netKey && weightKey === this.weightKey && placesKey === this.placesKey) return false;
     const newNet = netKey !== this.netKey;
     if (newNet) this.net = buildWalkNetwork(c, busyness(c));
@@ -358,7 +358,7 @@ export class PeopleView {
   private fillWalkers(): void {
     const net = this.net;
     if (net === null || net.edges.length === 0) return;
-    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round(this.city.population / 9)));
+    const want = Math.min(MAX_WALKERS, Math.max(40, Math.round(this.city.population / 90)));
     let have = this.figures.filter((f) => f.leader === null && !f.patrol).length;
     while (have < want) {
       const f = this.person('walk');

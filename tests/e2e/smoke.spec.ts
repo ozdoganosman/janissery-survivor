@@ -52,10 +52,10 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await page.goto('/');
   await page.waitForFunction(() => (window.__game?.frames ?? 0) > 5, null, { timeout: 90_000 });
   await expect(page.locator('.cartouche .title')).toHaveText('Dârülmülk Konya');
-  await expect(page.locator('.treasury .amount')).toHaveText('3.000');
+  await expect(page.locator('.treasury .amount')).toHaveText('30.000');
   await expect(page.locator('.ledger')).toContainText('Taş');
   await expect(page.locator('#boot')).toBeHidden();
-  expect(await page.evaluate(() => window.__game!.city.population)).toBeGreaterThan(1000);
+  expect(await page.evaluate(() => window.__game!.city.population)).toBeGreaterThan(10000);
   // The townspeople are out in the streets.
   expect(await page.evaluate(() => window.__game!.world.people.count)).toBeGreaterThan(200);
 
@@ -78,7 +78,7 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await clickCentre(page);
   await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(3);
   await expect(page.locator('.info.pinned h3')).toHaveText('Taş Ocağı');
-  expect(await page.evaluate(() => window.__game!.city.treasury)).toBe(2500);
+  expect(await page.evaluate(() => window.__game!.city.treasury)).toBe(25000);
 
   // Time runs until the quarry stands.
   await page.keyboard.press('3');

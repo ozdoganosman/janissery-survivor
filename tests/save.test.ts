@@ -63,6 +63,24 @@ describe('saving', () => {
     ).toThrow(SaveError);
   });
 
+  it('counts a save from before the tenfold city ten times larger', () => {
+    const c = played();
+    const s = saveGame(c);
+    const old = {
+      ...s,
+      version: 1,
+      treasury: s.treasury / 10,
+      product: s.product / 10,
+      population: s.population / 10,
+      buildings: s.buildings.map((b) => ({ ...b, spent: b.spent / 10 })),
+    };
+    const back = restoreGame(def, balance, JSON.parse(JSON.stringify(old)));
+    expect(back.treasury).toBeCloseTo(c.treasury);
+    expect(back.population).toBeCloseTo(c.population);
+    expect(back.streetsLaid).toBe(c.streetsLaid);
+    expect(Array.from(back.house)).toEqual(Array.from(c.house));
+  });
+
   it('swaps a city in place and moves every revision on', () => {
     const c = newCity();
     const rev = { ...c.revision };

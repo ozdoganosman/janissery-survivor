@@ -58,7 +58,7 @@ describe('streets as the city grows', () => {
     nextMonth(c);
     const laid = c.streetsLaid;
     expect(laid).toBeGreaterThan(0);
-    c.population = 3000;
+    c.population = 30000;
     nextMonth(c);
     expect(c.streetsLaid).toBe(laid);
   });

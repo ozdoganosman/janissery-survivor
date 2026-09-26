@@ -4,9 +4,12 @@ import {
   armyMen,
   barracksOf,
   disband,
+  disbandKind,
   levyLimit,
   recruit,
+  recruitMany,
   recruitOffer,
+  recruitRoom,
 } from '../src/sim/army';
 import { buildBuilding, demolishBuilding, upgradeBuilding, type Building } from '../src/sim/buildings';
 import { DAYS_PER_MONTH } from '../src/sim/calendar';
@@ -93,11 +96,26 @@ describe('raising soldiers', () => {
     expect(recruitOffer(c, 'mizrakci').blockedBy).toBe('room');
     // A small town cannot spare many men, however large its barracks.
     const { c: big } = withBarracks(3);
-    big.population = 2000;
+    big.population = 20000;
     updateStats(big);
     while (recruit(big, 'mizrakci') !== null);
     expect(armyMen(big)).toBeLessThanOrEqual(levyLimit(big));
     expect(recruitOffer(big, 'mizrakci').blockedBy).toBe('levy');
+  });
+
+  it('raises many companies at once, as many as there is room, men and akçe for', () => {
+    const { c } = withBarracks(1);
+    const most = recruitRoom(c, 'mizrakci');
+    expect(most).toBeGreaterThan(10);
+    expect(recruitMany(c, 'mizrakci', 10)).toBe(10);
+    expect(armyMen(c)).toBe(10 * units.mizrakci.men);
+    expect(recruitRoom(c, 'mizrakci')).toBe(most - 10);
+    expect(recruitMany(c, 'mizrakci', 1000)).toBe(most - 10);
+    expect(recruitRoom(c, 'mizrakci')).toBe(0);
+    // Sending one home frees room for one.
+    expect(disbandKind(c, 'mizrakci')).toBe(true);
+    expect(recruitRoom(c, 'mizrakci')).toBe(1);
+    expect(disbandKind(c, 'okcu')).toBe(false);
   });
 
   it('feeds the soldiers from the city’s bread', () => {

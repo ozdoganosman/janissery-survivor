@@ -16,7 +16,31 @@ import { syncHouses } from './housing';
  * a save stays small and survives changes to how the city is drawn.
  */
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/**
+ * Brings a save of an older version up to this one, or leaves it as it is. Version 2
+ * counted the city ten times larger (people, akçe and stone alike), so a version 1 save
+ * grows by the same measure and keeps its place in the game.
+ */
+function upgradeSave(s: Partial<SaveGame>): Partial<SaveGame> {
+  if (s.version !== 1) return s;
+  const x10 = (n: number | undefined): number | undefined => (finite(n) ? n * 10 : n);
+  return {
+    ...s,
+    version: 2,
+    treasury: x10(s.treasury),
+    product: x10(s.product),
+    population: x10(s.population),
+    buildings: Array.isArray(s.buildings)
+      ? s.buildings.map((b) => ({ ...b, spent: x10(b.spent)! }))
+      : s.buildings,
+    last:
+      s.last === undefined
+        ? s.last
+        : { income: s.last.income * 10, product: s.last.product * 10, growth: s.last.growth * 10 },
+  } as Partial<SaveGame>;
+}
 
 export interface SavedBuilding {
   id: number;
@@ -115,8 +139,8 @@ const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFi
  * city or version, or one that does not fit the map.
  */
 export function restoreGame(def: CityDef, balance: Balance, data: unknown): CityState {
-  const s = data as Partial<SaveGame> | null;
-  if (s === null || typeof s !== 'object') throw new SaveError('Kayıt okunamadı.');
+  if (data === null || typeof data !== 'object') throw new SaveError('Kayıt okunamadı.');
+  const s = upgradeSave(data);
   if (s.version !== SAVE_VERSION) throw new SaveError('Bu kayıt oyunun başka bir sürümünden.');
   if (s.city !== def.id || s.seed !== def.seed)
     throw new SaveError(`Bu kayıt ${def.name} şehrine ait değil.`);

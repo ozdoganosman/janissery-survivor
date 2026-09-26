@@ -99,7 +99,7 @@
   "housing": {
     "innerRadius": 11.4,
     "twoStorey": 0.28,
-    "startPopulation": 4200
+    "startPopulation": 42000
   },
   "landmarks": [
     {
@@ -192,8 +192,8 @@
       "name": "Dış Sur",
       "radius": 34,
       "rank": 1,
-      "cost": 5000,
-      "material": 400,
+      "cost": 50000,
+      "material": 4000,
       "months": 10,
       "slots": 2,
       "order": 5,
@@ -203,8 +203,8 @@
       "name": "Varoş Suru",
       "radius": 46,
       "rank": 2,
-      "cost": 9000,
-      "material": 800,
+      "cost": 90000,
+      "material": 8000,
       "months": 14,
       "slots": 3,
       "order": 5,
@@ -213,7 +213,7 @@
   ],
   "suburbs": {
     "rings": [6, 17, 29],
-    "every": 550,
+    "every": 5500,
     "alleys": 2
   }
 }

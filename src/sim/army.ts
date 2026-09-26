@@ -24,6 +24,8 @@ export interface Army {
   nextId: number;
 }
 
+const fmt = (n: number): string => Math.round(n).toLocaleString('tr-TR');
+
 export function createArmy(): Army {
   return { units: [], nextId: 1 };
 }
@@ -79,9 +81,9 @@ export function recruitOffer(city: CityState, kind: UnitKind): RecruitOffer {
   if (b.level < def.barracks) return block('level', `Kışla ${def.barracks}. seviye olunca`);
   const men = armyMen(city);
   const room = armyCapacity(city);
-  if (men + def.men > room) return block('room', `Kışla dolu (${men}/${room})`);
+  if (men + def.men > room) return block('room', `Kışla dolu (${fmt(men)}/${fmt(room)})`);
   const levy = levyLimit(city);
-  if (men + def.men > levy) return block('levy', `Halk yetmiyor: en çok ${levy} asker`);
+  if (men + def.men > levy) return block('levy', `Halk yetmiyor: en çok ${fmt(levy)} asker`);
   if (city.treasury < def.cost) return block('akce', 'Akçe yetmiyor');
   return offer;
 }
@@ -100,6 +102,28 @@ export function recruit(city: CityState, kind: UnitKind): Unit | null {
   return unit;
 }
 
+/**
+ * How many companies of `kind` could be raised now, one after another, before the room,
+ * the men or the akçe run out.
+ */
+export function recruitRoom(city: CityState, kind: UnitKind): number {
+  if (recruitOffer(city, kind).problem !== undefined) return 0;
+  const def = city.balance.army.units[kind];
+  const men = armyMen(city);
+  // Raising a company only moves men from the town to the army, so the levy stays put.
+  const byRoom = Math.floor((armyCapacity(city) - men) / def.men);
+  const byLevy = Math.floor((levyLimit(city) - men) / def.men);
+  const byAkce = Math.floor(city.treasury / def.cost);
+  return Math.max(0, Math.min(byRoom, byLevy, byAkce));
+}
+
+/** Raises up to `n` companies of `kind`; returns how many were raised. */
+export function recruitMany(city: CityState, kind: UnitKind, n: number): number {
+  let raised = 0;
+  while (raised < n && recruit(city, kind) !== null) raised++;
+  return raised;
+}
+
 /** Sends a company home: the men go back to their households. False when there is none. */
 export function disband(city: CityState, id: number): boolean {
   const k = city.army.units.findIndex((u) => u.id === id);
@@ -111,6 +135,15 @@ export function disband(city: CityState, id: number): boolean {
   return true;
 }
 
+/** Sends home the company of `kind` raised last, the least drilled. False when there is none. */
+export function disbandKind(city: CityState, kind: UnitKind): boolean {
+  for (let k = city.army.units.length - 1; k >= 0; k--) {
+    const u = city.army.units[k];
+    if (u.kind === kind) return disband(city, u.id);
+  }
+  return false;
+}
+
 /** With the barracks gone, every company goes home. */
 export function disbandAll(city: CityState): void {
   if (city.army.units.length === 0) return;
@@ -118,38 +151,60 @@ export function disbandAll(city: CityState): void {
   city.population += men;
   city.army.units = [];
   city.revision.army++;
-  notify(city, `Kışla yıkıldı; ${men} asker evine döndü.`, 'bad');
+  notify(city, `Kışla yıkıldı; ${fmt(men)} asker evine döndü.`, 'bad');
 }
 
-/** A day of drill for every company still at it. */
+/**
+ * A day of drill for every company still at it. Companies of a kind raised together finish
+ * together, and are announced together.
+ */
 export function armyDay(city: CityState): void {
+  const done = new Map<UnitKind, { units: number; men: number }>();
   for (const u of city.army.units) {
     const d = u.drill;
     if (d === null) continue;
     d.daysLeft--;
     if (d.daysLeft > 0) continue;
     u.drill = null;
-    city.revision.army++;
-    notify(
-      city,
-      `${city.balance.army.units[u.kind].name} bölüğü talimini bitirdi (${u.men} er).`,
-      'good',
-      'works',
-    );
+    const row = done.get(u.kind) ?? { units: 0, men: 0 };
+    row.units++;
+    row.men += u.men;
+    done.set(u.kind, row);
+  }
+  if (done.size === 0) return;
+  city.revision.army++;
+  for (const [kind, { units, men }] of done) {
+    const name = city.balance.army.units[kind].name;
+    const who = units === 1 ? `${name} bölüğü` : `${units} ${name} bölüğü`;
+    notify(city, `${who} talimini bitirdi (${fmt(men)} er).`, 'good', 'works');
   }
 }
 
+/** The companies of one kind, counted together. */
+export interface KindTally {
+  men: number;
+  ready: number;
+  units: number;
+  /** Companies still at drill, and the days until the first of them is done. */
+  drilling: number;
+  soonest: number | null;
+}
+
 /** Men of each kind, for the ledger and the barracks panel. */
-export function armyByKind(city: CityState): Record<UnitKind, { men: number; ready: number; units: number }> {
-  const out = Object.fromEntries(UNIT_KINDS.map((k) => [k, { men: 0, ready: 0, units: 0 }])) as Record<
-    UnitKind,
-    { men: number; ready: number; units: number }
-  >;
+export function armyByKind(city: CityState): Record<UnitKind, KindTally> {
+  const out = Object.fromEntries(
+    UNIT_KINDS.map((k) => [k, { men: 0, ready: 0, units: 0, drilling: 0, soonest: null }]),
+  ) as Record<UnitKind, KindTally>;
   for (const u of city.army.units) {
     const row = out[u.kind];
     row.men += u.men;
     row.units++;
-    if (u.drill === null) row.ready += u.men;
+    if (u.drill === null) {
+      row.ready += u.men;
+    } else {
+      row.drilling++;
+      row.soonest = Math.min(row.soonest ?? Infinity, u.drill.daysLeft);
+    }
   }
   return out;
 }

@@ -135,8 +135,8 @@ describe('placing buildings', () => {
       finish(c, b);
     });
     expect(c.buildings.size).toBe(balance.levels[0].slots);
-    expect(() => siteFor(c, 'kisla', [12, 8], 6)).toThrow();
-    expect(openGround(c, 'kisla', [12, 8]).problem).toContain('Yapı hakkı dolu');
+    expect(() => siteFor(c, 'darussifa', [12, 8], 6)).toThrow();
+    expect(openGround(c, 'darussifa', [12, 8]).problem).toContain('Yapı hakkı dolu');
     // A great city has more room, but still only one caravanserai.
     c.population = balance.levels[1].population + 100;
     updateStats(c);
@@ -219,21 +219,21 @@ describe('the month', () => {
 
   it('loses order to crowding and wins it back with mosques', () => {
     const c = newCity();
-    c.population = 5500;
+    c.population = 55000;
     updateStats(c);
     const crowded = c.stats.order;
     expect(c.stats.orderParts.crowding).toBeCloseTo(-10);
     expect(c.stats.orderParts.food).toBe(0);
     const b = buildBuilding(c, siteFor(c, 'cami', [4, 14]))!;
     finish(c, b);
-    c.population = 5500;
+    c.population = 55000;
     updateStats(c);
     expect(c.stats.order).toBeCloseTo(crowded + balance.buildings.cami.levels[0].order!);
   });
 
   it('falls into revolt under a heavy tax in a crowded city, and people leave', () => {
     const c = newCity();
-    c.population = 12000;
+    c.population = 120000;
     c.policy.tax = 'agir';
     updateStats(c);
     expect(orderState(c)).toBe('isyan');

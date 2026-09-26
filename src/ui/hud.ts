@@ -24,8 +24,10 @@ export interface HudCallbacks {
   onSell(): void;
   onUpgrade(buildingId: number): void;
   onDemolish(buildingId: number): void;
-  onRecruit(kind: UnitKind): void;
-  onDisband(unitId: number): void;
+  /** Raise `count` companies of a kind at once. */
+  onRecruit(kind: UnitKind, count: number): void;
+  /** Send home the last company of a kind raised. */
+  onDisband(kind: UnitKind): void;
   onCloseInfo(): void;
   onSave(): void;
   onLoad(slot: SaveSlot): void;
@@ -631,8 +633,9 @@ export class Hud {
   }
 
   /**
-   * The barracks' companies and the ones it can raise. Pinned, each company can be sent
-   * home and each kind raised with a button; the reason a kind cannot be raised is shown.
+   * The barracks' companies, counted by kind, and the ones it can raise. Pinned, a kind
+   * can be raised one, five or ten companies at a time and sent home a company at a time;
+   * the reason a kind cannot be raised is shown.
    */
   private armySheet(a: ArmyPanel, pinned: boolean): HTMLElement {
     const box = el('div', 'army');
@@ -645,21 +648,21 @@ export class Hud {
       ),
     );
     box.appendChild(el('span', 'progress', `<i style="width:${share}%"></i>`));
-    if (a.units.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan bölük topla.'));
-    for (const u of a.units) {
+    if (a.kinds.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan bölük topla.'));
+    for (const k of a.kinds) {
       const row = el('div', 'unit');
-      row.appendChild(el('span', 'name', `<b>${u.name}</b> · ${fmt(u.men)} er`));
-      row.appendChild(
-        el(
-          'small',
-          u.monthsLeft === null ? 'ok' : '',
-          u.monthsLeft === null ? 'hazır' : `talimde · ${u.monthsLeft} ay`,
-        ),
-      );
+      row.appendChild(el('span', 'name', `<b>${k.name}</b> · ${fmt(k.units)} bölük · ${fmt(k.men)} er`));
+      const state =
+        k.drilling === 0
+          ? 'hazır'
+          : k.drilling === k.units
+            ? `talimde · ${k.monthsLeft} ay`
+            : `${fmt(k.ready)} hazır · ${k.drilling} bölük talimde`;
+      row.appendChild(el('small', k.drilling === 0 ? 'ok' : '', state));
       if (pinned) {
-        const home = el('button', 'btn disband', 'Terhis');
-        home.title = 'Bölüğü dağıt: askerler evlerine döner';
-        home.addEventListener('click', () => this.cb.onDisband(u.id));
+        const home = el('button', 'btn disband', '− Terhis');
+        home.title = 'Bir bölüğü dağıt (en son toplananı): askerler evlerine döner';
+        home.addEventListener('click', () => this.cb.onDisband(k.kind));
         row.appendChild(home);
       }
       box.appendChild(row);
@@ -667,18 +670,29 @@ export class Hud {
     if (!pinned) return box;
     box.appendChild(el('div', 'sub', `Asker topla · halk en çok ${fmt(a.levy)} asker verebilir`));
     for (const o of a.offers) {
+      const line = el('div', 'offer');
       const go = el(
         'button',
         'btn recruit',
         `<b>${o.name}</b><small>${fmt(o.men)} er · ${fmt(o.cost)} akçe · ${o.months} ay talim · ulufe ${fmt(o.pay)}/ay</small>` +
           (o.problem !== undefined
             ? `<small class="${o.locked ? 'need' : 'bad'}">${o.locked ? '🔒 ' : ''}${o.problem}</small>`
-            : ''),
+            : `<small class="dim">şimdi en çok ${fmt(o.most)} bölük</small>`),
       );
-      go.title = o.hint;
+      go.title = `${o.hint} · bir bölük topla`;
       go.disabled = o.problem !== undefined;
-      go.addEventListener('click', () => this.cb.onRecruit(o.kind));
-      box.appendChild(go);
+      go.addEventListener('click', () => this.cb.onRecruit(o.kind, 1));
+      line.appendChild(go);
+      if (!o.locked) {
+        for (const n of [5, 10]) {
+          const many = el('button', 'btn many', `+${n}`);
+          many.title = `${n} bölük birden topla (${fmt(n * o.men)} er, ${fmt(n * o.cost)} akçe)`;
+          many.disabled = o.most < n;
+          many.addEventListener('click', () => this.cb.onRecruit(o.kind, n));
+          line.appendChild(many);
+        }
+      }
+      box.appendChild(line);
     }
     return box;
   }

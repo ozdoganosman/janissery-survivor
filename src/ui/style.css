@@ -1335,9 +1335,13 @@ body {
 
 .info .army .unit {
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 6px;
+  grid-template-columns: 1fr auto;
+  column-gap: 6px;
   align-items: center;
+}
+
+.info .army .unit .name {
+  grid-column: 1 / -1;
 }
 
 .info .army .unit .ok {
@@ -1390,4 +1394,31 @@ body {
 
 .info .army .recruit small.need {
   opacity: 0.8;
+}
+
+.info .army .offer {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.info .army .recruit small.dim {
+  opacity: 0.75;
+}
+
+.info .army .many {
+  min-width: 34px;
+  padding: 1px 6px;
+  font-weight: 700;
+  border-color: var(--gold);
+  background: var(--lapis);
+  color: var(--parchment);
+}
+
+.info .army .many:disabled {
+  background: transparent;
+  color: var(--ink);
+  opacity: 0.45;
+  cursor: default;
 }

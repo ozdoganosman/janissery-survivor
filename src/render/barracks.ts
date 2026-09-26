@@ -82,39 +82,48 @@ const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export function barracksLayout(front: number, depth: number, level: number): BarracksLayout {
   const L = Math.max(1, Math.min(3, level)) - 1;
-  const W = front * [0.64, 0.84, 0.97][L];
-  const D = depth * [0.74, 0.88, 0.96][L];
+  const W = front * [0.56, 0.84, 0.97][L];
+  const D = depth * [0.62, 0.86, 0.96][L];
   const wall: Rect = { x0: -W / 2, z0: -D / 2, x1: W / 2, z1: D / 2 };
-  const hallD = D * 0.17;
-  const leftW = W * 0.19;
-  const rightW = W * 0.15;
+  // Quarters along the back: a camp's band is deeper, for its rows of tents.
+  const hallD = L === 0 ? D * 0.2 : Math.min(2.4, D * 0.12);
+  const leftW = W * [0.14, 0.16, 0.16][L];
+  const rightW = W * 0.12;
   const backZ = wall.z0 + hallD;
-  const hallCount = [1, 2, 3][L];
+  const hallCount = [1, 3, 4][L];
   const hallX0 = wall.x0 + leftW;
-  // A camp's single hall takes half the back; tents take the rest.
-  const hallX1 = L === 0 ? lerp(hallX0, wall.x1, 0.5) : wall.x1 - (L === 2 ? rightW : 0);
+  // A camp's single hall takes part of the back; tents take the rest. A fortress keeps the
+  // back corner of the range for its armoury.
+  const hallX1 = L === 0 ? lerp(hallX0, wall.x1, 0.4) : wall.x1 - (L === 2 ? rightW : 0);
   const halls: Rect[] = [];
-  const gap = 0.25;
+  const gap = 0.3;
   const each = (hallX1 - hallX0 - gap * (hallCount - 1)) / hallCount;
+  const hallDepth = L === 0 ? Math.min(1.6, hallD * 0.5) : hallD - 0.22;
   for (let k = 0; k < hallCount; k++) {
     const x0 = hallX0 + k * (each + gap);
-    halls.push({ x0: x0 + 0.1, z0: wall.z0 + 0.12, x1: x0 + each - 0.1, z1: backZ - 0.1 });
+    halls.push({ x0: x0 + 0.1, z0: wall.z0 + 0.12, x1: x0 + each - 0.1, z1: wall.z0 + 0.12 + hallDepth });
   }
   const tents: Array<[number, number, number]> = [];
   if (L === 0) {
-    const r = Math.min(0.42, hallD * 0.45);
-    for (let x = hallX1 + r + 0.2; x < wall.x1 - rightW * 0.3 - r; x += r * 2.4) {
-      tents.push([x, wall.z0 + hallD / 2 + 0.05, r]);
+    // Felt tents in rows behind the parade ground, and one row before the hall.
+    const r = Math.min(0.42, hallD * 0.2);
+    for (const row of [0.27, 0.73]) {
+      for (let x = hallX1 + r + 0.25; x < wall.x1 - r - 0.15; x += r * 2.5) {
+        tents.push([x, wall.z0 + hallD * row, r]);
+      }
+    }
+    for (let x = hallX0 + r + 0.15; x < hallX1 - r; x += r * 2.5) {
+      tents.push([x, wall.z0 + 0.12 + hallDepth + r + 0.3, r]);
     }
   }
-  const stableD = L === 0 ? 0 : (D - hallD) * (L === 1 ? 0.45 : 0.6);
+  const stableD = L === 0 ? 0 : (D - hallD) * (L === 1 ? 0.5 : 0.6);
   const stables: Rect[] = [];
   if (L >= 1) {
-    const n = L;
-    const each2 = (stableD - 0.2 * (n - 1)) / n;
+    const n = L + 1;
+    const each2 = (stableD - 0.25 * (n - 1)) / n;
     for (let k = 0; k < n; k++) {
-      const z0 = wall.z0 + 0.12 + k * (each2 + 0.2);
-      stables.push({ x0: wall.x0 + 0.12, z0, x1: wall.x0 + leftW * 0.55, z1: z0 + each2 });
+      const z0 = wall.z0 + 0.12 + k * (each2 + 0.25);
+      stables.push({ x0: wall.x0 + 0.12, z0, x1: wall.x0 + leftW * 0.5, z1: z0 + each2 });
     }
   }
   const paddock: Rect = {
@@ -125,7 +134,7 @@ export function barracksLayout(front: number, depth: number, level: number): Bar
   };
   const range: Rect = { x0: wall.x1 - rightW, z0: backZ + 0.3, x1: wall.x1 - 0.12, z1: wall.z1 - 0.5 };
   const targets: Array<[number, number]> = [];
-  const nt = [2, 3, 4][L];
+  const nt = [3, 5, 7][L];
   for (let k = 0; k < nt; k++)
     targets.push([wall.x1 - 0.3, lerp(range.z0 + 0.4, range.z1 - 0.4, (k + 0.5) / nt)]);
   const yard: Rect = {
@@ -134,22 +143,29 @@ export function barracksLayout(front: number, depth: number, level: number): Bar
     x1: wall.x1 - rightW - 0.15,
     z1: wall.z1 - 0.45,
   };
-  const towers: Array<[number, number]> =
-    L === 0
-      ? [[wall.x0 + 0.35, wall.z0 + 0.35]]
-      : [
-          [wall.x0, wall.z0],
-          [wall.x1, wall.z0],
-          [wall.x0, wall.z1],
-          [wall.x1, wall.z1],
-          ...(L === 2
-            ? ([
-                [wall.x0, 0],
-                [wall.x1, 0],
-                [0, wall.z0],
-              ] as Array<[number, number]>)
-            : []),
-        ];
+  // Towers at the corners, and for a walled quarter along the walls too, clear of the gate.
+  const towers: Array<[number, number]> = [
+    [wall.x0, wall.z0],
+    [wall.x1, wall.z0],
+    [wall.x0, wall.z1],
+    [wall.x1, wall.z1],
+  ];
+  if (L >= 1) {
+    const spacing = L === 1 ? 7 : 5.5;
+    const along = (ax: number, az: number, bx: number, bz: number): void => {
+      const n = Math.floor(Math.hypot(bx - ax, bz - az) / spacing);
+      for (let k = 1; k < n; k++) {
+        const x = lerp(ax, bx, k / n);
+        const z = lerp(az, bz, k / n);
+        if (z === wall.z1 && Math.abs(x) < 2.2) continue;
+        towers.push([x, z]);
+      }
+    };
+    along(wall.x0, wall.z0, wall.x1, wall.z0);
+    along(wall.x0, wall.z1, wall.x1, wall.z1);
+    along(wall.x0, wall.z0, wall.x0, wall.z1);
+    along(wall.x1, wall.z0, wall.x1, wall.z1);
+  }
   const circuit: Rect = { x0: yard.x0 - 0.2, z0: yard.z0 - 0.1, x1: yard.x1 + 0.05, z1: yard.z1 + 0.2 };
   return { level: L + 1, wall, yard, halls, tents, stables, paddock, targets, range, towers, circuit };
 }
@@ -199,23 +215,27 @@ export function drawBarracks(
 
   if (L >= 2) {
     // A well in the corner of the parade ground, and weapon racks by the halls.
-    f.part(cylinder(0.18, 0.2, 0.2, 10), PAL.stone, y.x1 - 0.3, 0, y.z0 + 0.25);
-    f.part(cylinder(0.12, 0.12, 0.03, 10), PAL.water, y.x1 - 0.3, 0.19, y.z0 + 0.25);
-    for (const h of lay.halls) rack(f, (h.x0 + h.x1) / 2, h.z1 + 0.12);
+    for (const wx of [y.x0 + 0.3, y.x1 - 0.3]) {
+      f.part(cylinder(0.18, 0.2, 0.2, 10), PAL.stone, wx, 0, y.z0 + 0.25);
+      f.part(cylinder(0.12, 0.12, 0.03, 10), PAL.water, wx, 0.19, y.z0 + 0.25);
+    }
+    for (const h of lay.halls) {
+      for (const t of [0.3, 0.7]) rack(f, lerp(h.x0, h.x1, t), h.z1 + 0.12);
+    }
   }
   if (L === 3) {
     // The armoury (cebehane) under a lead dome, and a mescit with its minaret.
-    const ax = wall.x1 - 0.95;
-    const az = wall.z0 + 0.8;
-    f.part(box(1.4, 0.9, 1.3), PAL.stone, ax, 0, az);
-    f.part(dome(0.52, 14), PAL.lead, ax, 0.9, az);
-    f.part(arch(0.36, 0.55, 0.03), PAL.door, ax, 0, az + 0.66);
-    const mx = wall.x0 + 0.9;
-    const mz = wall.z1 - 0.85;
-    f.part(box(1.1, 0.75, 1.1), PAL.plaster, mx, 0, mz);
-    f.part(dome(0.45, 14), PAL.turquoise, mx, 0.75, mz);
-    f.part(arch(0.3, 0.48, 0.03), PAL.door, mx + 0.56, 0, mz, Math.PI / 2);
-    minaret(f.sub(mx + 0.5, mz - 0.5), 0, 0, 1.6, 0.1);
+    const ax = wall.x1 - 1.4;
+    const az = wall.z0 + 1.2;
+    f.part(box(2.2, 1.1, 2.0), PAL.stone, ax, 0, az);
+    for (const dx of [-0.5, 0.5]) f.part(dome(0.48, 14), PAL.lead, ax + dx, 1.1, az);
+    f.part(arch(0.45, 0.7, 0.03), PAL.door, ax, 0, az + 1.01);
+    const mx = wall.x0 + 1.3;
+    const mz = wall.z1 - 1.25;
+    f.part(box(1.7, 0.95, 1.7), PAL.plaster, mx, 0, mz);
+    f.part(dome(0.7, 16), PAL.turquoise, mx, 0.95, mz);
+    f.part(arch(0.4, 0.62, 0.03), PAL.door, mx + 0.86, 0, mz, Math.PI / 2);
+    minaret(f.sub(mx + 0.8, mz - 0.8), 0, 0, 2.2, 0.13);
   }
   banners(f, lay);
 }

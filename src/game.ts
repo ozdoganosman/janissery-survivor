@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { BuildingKind, TaxRate, UnitKind } from './sim/balance';
-import { disband, recruit } from './sim/army';
+import { disbandKind, recruitMany } from './sim/army';
 import {
   buildBuilding,
   builders,
@@ -111,8 +111,8 @@ export class Game {
       onSell: () => this.sell(),
       onUpgrade: (id) => this.upgrade(id),
       onDemolish: (id) => this.demolish(id),
-      onRecruit: (kind) => this.recruit(kind),
-      onDisband: (id) => this.disband(id),
+      onRecruit: (kind, count) => this.recruit(kind, count),
+      onDisband: (kind) => this.disband(kind),
       onCloseInfo: () => this.select(null),
       onSave: () => this.save('kayit'),
       onLoad: (slot) => this.load(slot),
@@ -174,7 +174,7 @@ export class Game {
       closeness: this.world.rig.closeness,
       season: date.season,
       paused: this.city.calendar.speed === 0,
-      bustle: Math.min(1, this.city.population / 15000),
+      bustle: Math.min(1, this.city.population / 150000),
       works: this.city.stats.works,
     });
     // The open panel follows its building as the work moves on.
@@ -237,17 +237,17 @@ export class Game {
     return ok;
   }
 
-  /** Raises a company of soldiers at the barracks. */
-  recruit(kind: UnitKind): boolean {
-    const ok = recruit(this.city, kind) !== null;
+  /** Raises companies of soldiers at the barracks, as many as `count` if it can. */
+  recruit(kind: UnitKind, count = 1): boolean {
+    const ok = recruitMany(this.city, kind, count) > 0;
     if (ok) this.sound.play('build');
     this.changed();
     return ok;
   }
 
-  /** Sends a company home. */
-  disband(id: number): boolean {
-    const ok = disband(this.city, id);
+  /** Sends home the last company of a kind raised. */
+  disband(kind: UnitKind): boolean {
+    const ok = disbandKind(this.city, kind);
     if (ok) this.sound.play('demolish');
     this.changed();
     return ok;

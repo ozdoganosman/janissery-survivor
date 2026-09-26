@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { UnitKind } from '../sim/balance';
+import { UNIT_KINDS, type UnitKind } from '../sim/balance';
 import { hash2 } from '../core/rng';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS } from './palette';
@@ -17,20 +17,23 @@ import { INK_CLASS } from './palette';
  * them for drill; the battle layer will use them for war.
  */
 
-export type Anim =
-  | 'idle'
-  | 'march'
-  | 'charge'
-  | 'thrust'
-  | 'slash'
-  | 'shoot'
-  | 'block'
-  | 'fall'
-  | 'stand'
-  | 'ride'
-  | 'gallop'
-  | 'rideShoot'
-  | 'couch';
+export const ANIMS = [
+  'idle',
+  'march',
+  'charge',
+  'thrust',
+  'slash',
+  'shoot',
+  'block',
+  'fall',
+  'stand',
+  'ride',
+  'gallop',
+  'rideShoot',
+  'couch',
+] as const;
+
+export type Anim = (typeof ANIMS)[number];
 
 /** One man, and his horse if he has one. Positions are world coordinates. */
 export interface Soldier {
@@ -98,13 +101,18 @@ function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
-/** Every part's shape, with its pivot at the joint it hangs from. */
-function partGeometries(): Record<PartName, THREE.BufferGeometry> {
+/**
+ * Every part's shape, with its pivot at the joint it hangs from. `coarse` shapes have
+ * fewer sides, for men seen from further off.
+ */
+function partGeometries(coarse = false): Record<PartName, THREE.BufferGeometry> {
+  const round = coarse ? 5 : 8;
+  const thin = coarse ? 3 : 4;
   // A strung bow: the grip in the hand, the tips drawn back towards the archer (+y). The
   // arc of a circle through the grip and both tips, stood up along the hand's z axis.
   const bowR = 0.165;
   const bowHalf = 0.615;
-  const bow = new THREE.TorusGeometry(bowR, 0.005, 3, 12, bowHalf * 2)
+  const bow = new THREE.TorusGeometry(bowR, 0.005, coarse ? 2 : 3, coarse ? 6 : 12, bowHalf * 2)
     .rotateZ(-Math.PI / 2 - bowHalf)
     .translate(0, bowR, 0)
     .rotateY(Math.PI / 2);
@@ -115,30 +123,30 @@ function partGeometries(): Record<PartName, THREE.BufferGeometry> {
     ]),
     torso: merge([
       // The kaftan's skirt flares from the belt; the chest narrows to the shoulders.
-      new THREE.CylinderGeometry(0.036, 0.055, 0.06, 8).translate(0, 0.0, 0),
-      new THREE.CylinderGeometry(0.04, 0.036, 0.075, 8).translate(0, 0.065, 0),
+      new THREE.CylinderGeometry(0.036, 0.055, 0.06, round).translate(0, 0.0, 0),
+      new THREE.CylinderGeometry(0.04, 0.036, 0.075, round).translate(0, 0.065, 0),
       new THREE.BoxGeometry(0.11, 0.022, 0.05).translate(0, 0.095, 0),
     ]),
-    mail: new THREE.CylinderGeometry(0.043, 0.058, 0.13, 8).translate(0, 0.04, 0),
-    head: new THREE.SphereGeometry(0.031, 8, 6).translate(0, 0.036, 0.004),
+    mail: new THREE.CylinderGeometry(0.043, 0.058, 0.13, round).translate(0, 0.04, 0),
+    head: new THREE.SphereGeometry(0.031, round, coarse ? 4 : 6).translate(0, 0.036, 0.004),
     helmet: merge([
-      new THREE.ConeGeometry(0.037, 0.075, 8).translate(0, 0.088, 0),
-      new THREE.CylinderGeometry(0.037, 0.04, 0.03, 8).translate(0, 0.045, -0.004),
+      new THREE.ConeGeometry(0.037, 0.075, round).translate(0, 0.088, 0),
+      new THREE.CylinderGeometry(0.037, 0.04, 0.03, round).translate(0, 0.045, -0.004),
     ]),
     bork: merge([
-      new THREE.CylinderGeometry(0.03, 0.036, 0.075, 8).translate(0, 0.085, 0),
-      new THREE.CylinderGeometry(0.04, 0.04, 0.016, 8).translate(0, 0.052, 0),
+      new THREE.CylinderGeometry(0.03, 0.036, 0.075, round).translate(0, 0.085, 0),
+      new THREE.CylinderGeometry(0.04, 0.04, 0.016, round).translate(0, 0.052, 0),
     ]),
     arm: merge([
       new THREE.BoxGeometry(0.022, ARM, 0.024).translate(0, -ARM / 2, 0),
       new THREE.BoxGeometry(0.018, 0.018, 0.02).translate(0, -ARM - 0.006, 0.002),
     ]),
     spear: merge([
-      new THREE.CylinderGeometry(0.0045, 0.0045, 0.5, 4).translate(0, 0.14, 0),
+      new THREE.CylinderGeometry(0.0045, 0.0045, 0.5, thin).translate(0, 0.14, 0),
       new THREE.ConeGeometry(0.011, 0.05, 4).translate(0, 0.415, 0),
     ]),
     lance: merge([
-      new THREE.CylinderGeometry(0.0045, 0.0055, 0.72, 4).translate(0, 0.2, 0),
+      new THREE.CylinderGeometry(0.0045, 0.0055, 0.72, thin).translate(0, 0.2, 0),
       new THREE.ConeGeometry(0.01, 0.05, 4).translate(0, 0.585, 0),
     ]),
     pennant: new THREE.BoxGeometry(0.003, 0.05, 0.075).translate(0, 0.53, -0.04),
@@ -148,7 +156,7 @@ function partGeometries(): Record<PartName, THREE.BufferGeometry> {
       new THREE.BoxGeometry(0.008, 0.03, 0.008).translate(0, -0.008, 0),
     ]),
     bow: merge([bow, new THREE.BoxGeometry(0.002, 0.002, 0.19).translate(0, 0.03, 0)]),
-    shield: new THREE.CylinderGeometry(0.055, 0.055, 0.01, 12)
+    shield: new THREE.CylinderGeometry(0.055, 0.055, 0.01, coarse ? 7 : 12)
       .rotateZ(Math.PI / 2)
       .translate(-0.016, 0.02, 0),
     quiver: new THREE.BoxGeometry(0.026, 0.085, 0.02).translate(0, 0.02, 0),
@@ -385,15 +393,19 @@ function horseGait(p: Pose, t: number, gallop: boolean): void {
   h.tail = gallop ? -0.9 : 0.15 * Math.sin(t * 1.3);
 }
 
-/** Works out a man's pose for his animation at time `t` (seconds). */
-function pose(p: Pose, look: Look, anim: Anim, t: number, seed: number): void {
+/**
+ * Works out a man's pose for his animation at time `t` (seconds). The pose depends on
+ * nothing else, so men at the same point of the same drill share it: each man's own
+ * rhythm comes from where his time starts.
+ */
+function pose(p: Pose, look: Look, anim: Anim, t: number): void {
   resetPose(p);
   rest(p, look);
-  const breathe = Math.sin(t * 1.7 + seed * 6) * 0.004;
+  const breathe = Math.sin(t * 1.7) * 0.004;
   switch (anim) {
     case 'idle':
       p.bob = breathe;
-      p.head = Math.sin(t * 0.3 + seed * 9) * 0.25;
+      p.head = Math.sin(t * 0.3) * 0.25;
       break;
     case 'march': {
       walkLegs(p, t, 0.9, 0.5);
@@ -478,10 +490,10 @@ function pose(p: Pose, look: Look, anim: Anim, t: number, seed: number): void {
     }
     case 'stand':
       horseGait(p, 0, false);
-      p.horse.neck = -0.25 + 0.25 * Math.max(0, Math.sin(t * 0.25 + seed * 7));
-      p.horse.tail = 0.25 * Math.sin(t * 1.1 + seed * 3);
+      p.horse.neck = -0.25 + 0.25 * Math.max(0, Math.sin(t * 0.25));
+      p.horse.tail = 0.25 * Math.sin(t * 1.1);
       p.bob = breathe;
-      p.head = Math.sin(t * 0.3 + seed * 9) * 0.3;
+      p.head = Math.sin(t * 0.3) * 0.3;
       break;
     case 'ride':
       horseGait(p, t, false);
@@ -520,15 +532,61 @@ function pose(p: Pose, look: Look, anim: Anim, t: number, seed: number): void {
 // ------------------------------------------------------------------ drawing
 
 /**
+ * Poses are shared by everyone within this much time of each other (seconds): finely for
+ * men at drill, coarsely for men at ease, whose breathing and glances are slow.
+ */
+const POSE_STEP = 1 / 30;
+const EASE_STEP = 0.2;
+
+/** Small parts left out when the camera is far: they would be a pixel or less. */
+const FINE_PARTS: readonly PartName[] = ['arrow', 'quiver', 'pennant', 'tail'];
+
+/** Parts of one look, each with its place in a pose's list of matrices. */
+interface Rig {
+  look: Look;
+  /** The parts in drawing order, each part as often as the man has it. */
+  parts: PartName[];
+  /** For each part name, where its first, second… copy sits in `parts`. */
+  index: Map<PartName, number[]>;
+}
+
+function rigOf(look: Look): Rig {
+  const parts: PartName[] = [];
+  const index = new Map<PartName, number[]>();
+  for (const [part, n] of partsOf(look)) {
+    for (let k = 0; k < n; k++) {
+      const list = index.get(part) ?? [];
+      list.push(parts.length);
+      index.set(part, list);
+      parts.push(part);
+    }
+  }
+  return { look, parts, index };
+}
+
+/**
  * Everyone in a list of soldiers, drawn as instanced parts. The list is fixed for the
  * crowd's life; the soldiers' positions, animations and times may change every frame.
+ *
+ * A thousand men at the same drill are only a few dozen poses: each pose is worked out
+ * once, as the matrices of the parts about the man's feet, and every man is his pose
+ * turned, scaled and set down where he stands. The first `live` soldiers are the ones
+ * that move; they are written every update, the rest, standing at ease, only when asked.
  */
 export class SoldierCrowd {
   readonly group = new THREE.Group();
-  private readonly meshes = new Map<PartName, THREE.InstancedMesh>();
-  /** For each soldier, its slots in each part's mesh. */
-  private readonly slots: Array<Array<[PartName, number]>> = [];
-  private readonly looks: Look[] = [];
+  private readonly meshes: THREE.InstancedMesh[] = [];
+  private readonly meshOf = new Map<PartName, number>();
+  /** For each soldier, the mesh and the slot of each of its parts, in its rig's order. */
+  private readonly slotMesh: Int32Array[] = [];
+  private readonly slotAt: Int32Array[] = [];
+  private readonly rigs: Rig[] = [];
+  /** Slots of each mesh taken by the live soldiers: they come first. */
+  private readonly livePrefix: number[] = [];
+  private readonly cache = new Map<number, Float32Array>();
+  /** Lowest and highest slot of each mesh written in an update, beyond the live ones. */
+  private readonly lo: number[] = [];
+  private readonly hi: number[] = [];
   private readonly p = newPose();
   private readonly m = {
     root: new THREE.Matrix4(),
@@ -543,39 +601,66 @@ export class SoldierCrowd {
   };
   private readonly e = new THREE.Euler();
   private readonly sv = new THREE.Vector3();
-  private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+  /** Each mesh's shape in full and with fewer sides. */
+  private readonly shapes: Array<[THREE.BufferGeometry, THREE.BufferGeometry]> = [];
+  private detail = 0;
 
-  constructor(readonly soldiers: Soldier[]) {
+  constructor(
+    readonly soldiers: Soldier[],
+    readonly live = soldiers.length,
+  ) {
     setInkClass(this.group, INK_CLASS.building);
     const geoms = partGeometries();
-    const counts = new Map<PartName, number>();
-    for (const s of soldiers) {
-      const look = LOOKS[s.kind];
-      this.looks.push(look);
-      const mine: Array<[PartName, number]> = [];
-      for (const [part, n] of partsOf(look)) {
-        for (let k = 0; k < n; k++) {
-          const slot = counts.get(part) ?? 0;
-          counts.set(part, slot + 1);
-          mine.push([part, slot]);
-        }
+    const coarse = partGeometries(true);
+    const rigByKind = new Map<UnitKind, Rig>();
+    const counts: number[] = [];
+    const partNames: PartName[] = [];
+    soldiers.forEach((s, i) => {
+      let rig = rigByKind.get(s.kind);
+      if (rig === undefined) {
+        rig = rigOf(LOOKS[s.kind]);
+        rigByKind.set(s.kind, rig);
       }
-      this.slots.push(mine);
-    }
-    const color = new THREE.Color();
-    for (const [part, count] of counts) {
-      const mesh = new THREE.InstancedMesh(geoms[part], miniMaterial(), count);
+      this.rigs.push(rig);
+      const meshIds = new Int32Array(rig.parts.length);
+      const slots = new Int32Array(rig.parts.length);
+      rig.parts.forEach((part, k) => {
+        let id = this.meshOf.get(part);
+        if (id === undefined) {
+          id = partNames.length;
+          this.meshOf.set(part, id);
+          partNames.push(part);
+          counts.push(0);
+          this.livePrefix.push(0);
+          this.lo.push(0);
+          this.hi.push(0);
+        }
+        meshIds[k] = id;
+        slots[k] = counts[id]++;
+        if (i < live) this.livePrefix[id] = counts[id];
+      });
+      this.slotMesh.push(meshIds);
+      this.slotAt.push(slots);
+    });
+    partNames.forEach((part, id) => {
+      const mesh = new THREE.InstancedMesh(geoms[part], miniMaterial(), counts[id]);
       mesh.frustumCulled = false;
       mesh.receiveShadow = true;
-      this.meshes.set(part, mesh);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.shapes.push([geoms[part], coarse[part]]);
+      this.meshes.push(mesh);
       this.group.add(mesh);
+    });
+    for (const set of [geoms, coarse]) {
+      for (const [part, g] of Object.entries(set)) if (!this.meshOf.has(part as PartName)) g.dispose();
     }
+    const color = new THREE.Color();
     soldiers.forEach((s, i) => {
-      const look = this.looks[i];
+      const { look, parts } = this.rigs[i];
       const pick = (list: readonly string[], salt: number): string =>
         list[Math.floor(hash2(i, salt, s.seed * 97) * list.length) % list.length];
       const horse = pick(HORSES, 4);
-      for (const [part, slot] of this.slots[i]) {
+      parts.forEach((part, k) => {
         const c =
           part === 'torso' || part === 'arm'
             ? pick(look.coat, 1)
@@ -602,10 +687,10 @@ export class SoldierCrowd {
                               : part === 'spear' || part === 'lance' || part === 'bow' || part === 'arrow'
                                 ? WOOD
                                 : IRON;
-        this.meshes.get(part)?.setColorAt(slot, color.set(c));
-      }
+        this.meshes[this.slotMesh[i][k]].setColorAt(this.slotAt[i][k], color.set(c));
+      });
     });
-    for (const mesh of this.meshes.values()) {
+    for (const mesh of this.meshes) {
       if (mesh.instanceColor !== null) mesh.instanceColor.needsUpdate = true;
     }
   }
@@ -614,17 +699,63 @@ export class SoldierCrowd {
     return this.soldiers.length;
   }
 
+  /** Distinct poses worked out in the last update, for tuning. */
+  get poses(): number {
+    return this.cache.size;
+  }
+
   dispose(): void {
-    for (const mesh of this.meshes.values()) {
-      mesh.geometry.dispose();
-      mesh.dispose();
+    for (const mesh of this.meshes) mesh.dispose();
+    for (const [near, far] of this.shapes) {
+      near.dispose();
+      far.dispose();
     }
   }
 
-  /** Poses everyone for their animation and time, and writes the parts. */
-  update(scale: number): void {
-    this.soldiers.forEach((s, i) => this.write(i, s, scale));
-    for (const mesh of this.meshes.values()) mesh.instanceMatrix.needsUpdate = true;
+  /**
+   * How finely the men are drawn: 0 in full, 1 with fewer sides to every round part,
+   * 2 also without the smallest parts.
+   */
+  setDetail(detail: number): void {
+    if (detail === this.detail) return;
+    this.detail = detail;
+    this.meshes.forEach((mesh, id) => {
+      mesh.geometry = this.shapes[id][detail === 0 ? 0 : 1];
+    });
+    for (const part of FINE_PARTS) {
+      const id = this.meshOf.get(part);
+      if (id !== undefined) this.meshes[id].visible = detail < 2;
+    }
+  }
+
+  /**
+   * Poses the soldiers for their animation and time and writes their parts: the live ones
+   * always, and those from `from` up to `to` as well (by default everyone). Only what was
+   * written goes to the graphics card.
+   */
+  update(scale: number, from = 0, to = this.soldiers.length): void {
+    this.cache.clear();
+    const lo = this.lo.fill(Infinity);
+    const hi = this.hi.fill(-1);
+    for (let i = 0; i < this.live; i++) this.write(i, this.soldiers[i], scale, false);
+    for (let i = Math.max(from, this.live); i < Math.min(to, this.soldiers.length); i++) {
+      this.write(i, this.soldiers[i], scale, true);
+    }
+    this.meshes.forEach((mesh, id) => {
+      const attr = mesh.instanceMatrix;
+      attr.clearUpdateRanges();
+      const live = this.livePrefix[id];
+      if (hi[id] < 0) {
+        if (live === 0) return;
+        attr.addUpdateRange(0, live * 16);
+      } else if (lo[id] <= live) {
+        attr.addUpdateRange(0, (hi[id] + 1) * 16);
+      } else {
+        if (live > 0) attr.addUpdateRange(0, live * 16);
+        attr.addUpdateRange(lo[id] * 16, (hi[id] - lo[id] + 1) * 16);
+      }
+      attr.needsUpdate = true;
+    });
   }
 
   /** local = T(x, y, z) · Ry(ry) · Rx(rx) · Rz(rz); out = parent · local. */
@@ -643,24 +774,34 @@ export class SoldierCrowd {
     return out.multiplyMatrices(parent, this.m.local);
   }
 
-  private write(i: number, s: Soldier, scale: number): void {
-    const look = this.looks[i];
+  /** The pose of a rig at a time, shared by everyone of that kind at that moment. */
+  private poseOf(rig: Rig, kind: UnitKind, anim: Anim, t: number): Float32Array {
+    const step = anim === 'idle' || anim === 'stand' ? EASE_STEP : POSE_STEP;
+    const q = Math.round(t / step);
+    const key = (q * ANIMS.length + ANIMS.indexOf(anim)) * UNIT_KINDS.length + UNIT_KINDS.indexOf(kind);
+    let out = this.cache.get(key);
+    if (out === undefined) {
+      out = new Float32Array(rig.parts.length * 16 + 1);
+      this.rigPose(rig, anim, q * step, out);
+      this.cache.set(key, out);
+    }
+    return out;
+  }
+
+  /**
+   * Writes every part's matrix about the man's feet (facing +z, at unit size) into `out`,
+   * and after them how far his arrow has flown, or -1.
+   */
+  private rigPose(rig: Rig, anim: Anim, t: number, out: Float32Array): void {
+    const { look } = rig;
     const p = this.p;
-    pose(p, look, s.anim, s.t, s.seed);
+    pose(p, look, anim, t);
     const m = this.m;
-    const slots = this.slots[i];
     const put = (part: PartName, nth: number, mat: THREE.Matrix4): void => {
-      let seen = 0;
-      for (const [name, slot] of slots) {
-        if (name !== part) continue;
-        if (seen++ === nth) {
-          this.meshes.get(name)?.setMatrixAt(slot, mat);
-          return;
-        }
-      }
+      const at = rig.index.get(part)?.[nth];
+      if (at !== undefined) mat.toArray(out, at * 16);
     };
-    this.sv.set(scale, scale, scale);
-    m.root.makeRotationY(s.heading).scale(this.sv).setPosition(s.x, s.y, s.z);
+    m.root.identity();
 
     // The body: on its own feet, or in the saddle.
     if (look.horse) {
@@ -737,28 +878,65 @@ export class SoldierCrowd {
       put(look.weapon, 0, m.hand);
       if (look.weapon === 'lance') put('pennant', 0, m.hand);
     }
+    // The arrow stays out of sight here; in flight it is set in the world by itself.
+    const arrow = rig.index.get('arrow')?.[0];
+    if (arrow !== undefined) out.fill(0, arrow * 16, arrow * 16 + 16);
+    out[out.length - 1] = p.arrow;
+  }
+
+  /**
+   * Sets one man down: his pose, turned to his heading, scaled and moved to where he is.
+   * `track` notes the slots written, for the upload.
+   */
+  private write(i: number, s: Soldier, scale: number, track: boolean): void {
+    const rig = this.rigs[i];
+    const local = this.poseOf(rig, s.kind, s.anim, s.t);
+    const meshIds = this.slotMesh[i];
+    const slots = this.slotAt[i];
+    const c = Math.cos(s.heading) * scale;
+    const sn = Math.sin(s.heading) * scale;
+    for (let k = 0; k < meshIds.length; k++) {
+      const id = meshIds[k];
+      const dst = this.meshes[id].instanceMatrix.array as Float32Array;
+      const o = slots[k] * 16;
+      if (track) {
+        if (slots[k] < this.lo[id]) this.lo[id] = slots[k];
+        if (slots[k] > this.hi[id]) this.hi[id] = slots[k];
+      }
+      const a = k * 16;
+      // out = T(s) · Ry(heading) · S(scale) · local, column by column.
+      for (let col = 0; col < 16; col += 4) {
+        const lx = local[a + col];
+        const ly = local[a + col + 1];
+        const lz = local[a + col + 2];
+        dst[o + col] = c * lx + sn * lz;
+        dst[o + col + 1] = scale * ly;
+        dst[o + col + 2] = -sn * lx + c * lz;
+        dst[o + col + 3] = local[a + col + 3];
+      }
+      dst[o + 12] += s.x;
+      dst[o + 13] += s.y;
+      dst[o + 14] += s.z;
+    }
 
     // The arrow in flight, from the bow to the mark.
-    if (look.weapon === 'bow') {
-      if (p.arrow >= 0 && s.aim !== null) {
-        const u = p.arrow;
-        const sx = s.x + Math.sin(s.heading) * 0.1;
-        const sz = s.z + Math.cos(s.heading) * 0.1;
-        const sy = s.y + 0.2 * scale;
-        const x = sx + (s.aim.x - sx) * u;
-        const z = sz + (s.aim.z - sz) * u;
-        const arc = Math.hypot(s.aim.x - sx, s.aim.z - sz) * 0.25;
-        const y = sy + (s.aim.y - sy) * u + arc * 4 * u * (1 - u);
-        const pitch = -Math.atan2(
-          s.aim.y - sy + arc * 4 * (1 - 2 * u),
-          Math.hypot(s.aim.x - sx, s.aim.z - sz),
-        );
-        this.e.set(pitch, Math.atan2(s.aim.x - sx, s.aim.z - sz), 0, 'YXZ');
-        m.out.makeRotationFromEuler(this.e).scale(this.sv).setPosition(x, y, z);
-        put('arrow', 0, m.out);
-      } else {
-        put('arrow', 0, this.hidden);
-      }
+    const u = local[local.length - 1];
+    if (u >= 0 && s.aim !== null) {
+      const at = rig.index.get('arrow')?.[0];
+      if (at === undefined) return;
+      const m = this.m;
+      const sx = s.x + Math.sin(s.heading) * 0.1;
+      const sz = s.z + Math.cos(s.heading) * 0.1;
+      const sy = s.y + 0.2 * scale;
+      const x = sx + (s.aim.x - sx) * u;
+      const z = sz + (s.aim.z - sz) * u;
+      const arc = Math.hypot(s.aim.x - sx, s.aim.z - sz) * 0.25;
+      const y = sy + (s.aim.y - sy) * u + arc * 4 * u * (1 - u);
+      const pitch = -Math.atan2(s.aim.y - sy + arc * 4 * (1 - 2 * u), Math.hypot(s.aim.x - sx, s.aim.z - sz));
+      this.e.set(pitch, Math.atan2(s.aim.x - sx, s.aim.z - sz), 0, 'YXZ');
+      this.sv.set(scale, scale, scale);
+      m.out.makeRotationFromEuler(this.e).scale(this.sv).setPosition(x, y, z);
+      m.out.toArray(this.meshes[meshIds[at]].instanceMatrix.array, slots[at] * 16);
     }
   }
 }

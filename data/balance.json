@@ -1,7 +1,7 @@
 {
   "start": {
-    "treasury": 3000,
-    "product": 60
+    "treasury": 30000,
+    "product": 600
   },
   "tax": {
     "start": "orta",
@@ -25,8 +25,8 @@
   },
   "order": {
     "base": 50,
-    "crowdingFrom": 3000,
-    "crowdingPer1000": 4,
+    "crowdingFrom": 30000,
+    "crowdingPer1000": 0.4,
     "calm": 65,
     "unrest": 40,
     "revolt": 25,
@@ -39,9 +39,9 @@
     "base": 0.003
   },
   "product": {
-    "base": 4,
+    "base": 40,
     "price": 3,
-    "sellLot": 50
+    "sellLot": 500
   },
   "levels": [
     {
@@ -49,23 +49,23 @@
       "population": 0,
       "maxBuildingLevel": 2,
       "builders": 2,
-      "peoplePerHouse": 7,
+      "peoplePerHouse": 70,
       "slots": 5
     },
     {
       "name": "Büyük Şehir",
-      "population": 6000,
+      "population": 60000,
       "maxBuildingLevel": 3,
       "builders": 3,
-      "peoplePerHouse": 9,
+      "peoplePerHouse": 90,
       "slots": 8
     },
     {
       "name": "Payitaht",
-      "population": 10000,
+      "population": 100000,
       "maxBuildingLevel": 3,
       "builders": 4,
-      "peoplePerHouse": 11,
+      "peoplePerHouse": 110,
       "slots": 12
     }
   ],
@@ -80,25 +80,25 @@
       "d": 2,
       "levels": [
         {
-          "cost": 600,
+          "cost": 6000,
           "material": 0,
           "months": 2,
-          "upkeep": 5,
-          "income": 50
+          "upkeep": 50,
+          "income": 500
         },
         {
-          "cost": 1200,
-          "material": 40,
+          "cost": 12000,
+          "material": 400,
           "months": 3,
-          "upkeep": 10,
-          "income": 110
+          "upkeep": 100,
+          "income": 1100
         },
         {
-          "cost": 2200,
-          "material": 100,
+          "cost": 22000,
+          "material": 1000,
           "months": 4,
-          "upkeep": 16,
-          "income": 180
+          "upkeep": 160,
+          "income": 1800
         }
       ],
       "max": 2
@@ -111,25 +111,25 @@
       "site": true,
       "levels": [
         {
-          "cost": 500,
+          "cost": 5000,
           "material": 0,
           "months": 2,
-          "upkeep": 8,
-          "product": 20
+          "upkeep": 80,
+          "product": 200
         },
         {
-          "cost": 1000,
-          "material": 30,
+          "cost": 10000,
+          "material": 300,
           "months": 3,
-          "upkeep": 14,
-          "product": 40
+          "upkeep": 140,
+          "product": 400
         },
         {
-          "cost": 1800,
-          "material": 80,
+          "cost": 18000,
+          "material": 800,
           "months": 4,
-          "upkeep": 22,
-          "product": 70
+          "upkeep": 220,
+          "product": 700
         }
       ],
       "max": 2
@@ -141,24 +141,24 @@
       "d": 3,
       "levels": [
         {
-          "cost": 900,
-          "material": 50,
+          "cost": 9000,
+          "material": 500,
           "months": 4,
-          "upkeep": 15,
+          "upkeep": 150,
           "order": 6
         },
         {
-          "cost": 1600,
-          "material": 100,
+          "cost": 16000,
+          "material": 1000,
           "months": 5,
-          "upkeep": 25,
+          "upkeep": 250,
           "order": 10
         },
         {
-          "cost": 2600,
-          "material": 180,
+          "cost": 26000,
+          "material": 1800,
           "months": 6,
-          "upkeep": 40,
+          "upkeep": 400,
           "order": 15
         }
       ],
@@ -171,26 +171,26 @@
       "d": 2,
       "levels": [
         {
-          "cost": 700,
-          "material": 30,
+          "cost": 7000,
+          "material": 300,
           "months": 3,
-          "upkeep": 10,
+          "upkeep": 100,
           "order": 3,
           "growth": 0.0005
         },
         {
-          "cost": 1300,
-          "material": 60,
+          "cost": 13000,
+          "material": 600,
           "months": 4,
-          "upkeep": 18,
+          "upkeep": 180,
           "order": 5,
           "growth": 0.001
         },
         {
-          "cost": 2100,
-          "material": 120,
+          "cost": 21000,
+          "material": 1200,
           "months": 5,
-          "upkeep": 28,
+          "upkeep": 280,
           "order": 8,
           "growth": 0.0015
         }
@@ -205,25 +205,25 @@
       "outside": true,
       "levels": [
         {
-          "cost": 1000,
-          "material": 60,
+          "cost": 10000,
+          "material": 600,
           "months": 4,
-          "upkeep": 10,
-          "income": 80
+          "upkeep": 100,
+          "income": 800
         },
         {
-          "cost": 1800,
-          "material": 100,
+          "cost": 18000,
+          "material": 1000,
           "months": 5,
-          "upkeep": 18,
-          "income": 160
+          "upkeep": 180,
+          "income": 1600
         },
         {
-          "cost": 3000,
-          "material": 180,
+          "cost": 30000,
+          "material": 1800,
           "months": 6,
-          "upkeep": 30,
-          "income": 260
+          "upkeep": 300,
+          "income": 2600
         }
       ],
       "max": 1
@@ -235,27 +235,27 @@
       "d": 2,
       "levels": [
         {
-          "cost": 500,
+          "cost": 5000,
           "material": 0,
           "months": 2,
-          "upkeep": 8,
-          "food": 1500,
+          "upkeep": 80,
+          "food": 15000,
           "growth": 0.0015
         },
         {
-          "cost": 900,
-          "material": 30,
+          "cost": 9000,
+          "material": 300,
           "months": 3,
-          "upkeep": 14,
-          "food": 3000,
+          "upkeep": 140,
+          "food": 30000,
           "growth": 0.0025
         },
         {
-          "cost": 1500,
-          "material": 70,
+          "cost": 15000,
+          "material": 700,
           "months": 4,
-          "upkeep": 22,
-          "food": 5000,
+          "upkeep": 220,
+          "food": 50000,
           "growth": 0.004
         }
       ],
@@ -264,33 +264,33 @@
     "kisla": {
       "name": "Kışla",
       "hint": "Ordugâh: asker toplar, talim ettirir ve konaklatır; sur dışına kurulur",
-      "w": 14,
-      "d": 10,
+      "w": 26,
+      "d": 22,
       "outside": true,
       "levels": [
         {
-          "cost": 1200,
-          "material": 60,
+          "cost": 12000,
+          "material": 600,
           "months": 4,
-          "upkeep": 20,
+          "upkeep": 200,
           "order": 3,
-          "capacity": 200
+          "capacity": 2000
         },
         {
-          "cost": 2400,
-          "material": 160,
+          "cost": 24000,
+          "material": 1600,
           "months": 6,
-          "upkeep": 35,
+          "upkeep": 350,
           "order": 6,
-          "capacity": 500
+          "capacity": 5000
         },
         {
-          "cost": 4200,
-          "material": 320,
+          "cost": 42000,
+          "material": 3200,
           "months": 8,
-          "upkeep": 55,
+          "upkeep": 550,
           "order": 10,
-          "capacity": 1000
+          "capacity": 10000
         }
       ],
       "max": 1
@@ -302,26 +302,26 @@
       "d": 3,
       "levels": [
         {
-          "cost": 1100,
-          "material": 60,
+          "cost": 11000,
+          "material": 600,
           "months": 4,
-          "upkeep": 18,
+          "upkeep": 180,
           "incomePct": 0.05,
           "order": 1
         },
         {
-          "cost": 1900,
-          "material": 120,
+          "cost": 19000,
+          "material": 1200,
           "months": 5,
-          "upkeep": 30,
+          "upkeep": 300,
           "incomePct": 0.1,
           "order": 2
         },
         {
-          "cost": 3000,
-          "material": 200,
+          "cost": 30000,
+          "material": 2000,
           "months": 6,
-          "upkeep": 45,
+          "upkeep": 450,
           "incomePct": 0.15,
           "order": 3
         }
@@ -335,26 +335,26 @@
       "d": 2,
       "levels": [
         {
-          "cost": 1000,
-          "material": 50,
+          "cost": 10000,
+          "material": 500,
           "months": 4,
-          "upkeep": 15,
+          "upkeep": 150,
           "growth": 0.001,
           "order": 2
         },
         {
-          "cost": 1700,
-          "material": 100,
+          "cost": 17000,
+          "material": 1000,
           "months": 5,
-          "upkeep": 25,
+          "upkeep": 250,
           "growth": 0.002,
           "order": 3
         },
         {
-          "cost": 2800,
-          "material": 180,
+          "cost": 28000,
+          "material": 1800,
           "months": 6,
-          "upkeep": 40,
+          "upkeep": 400,
           "growth": 0.003,
           "order": 5
         }
@@ -363,8 +363,8 @@
     }
   },
   "food": {
-    "base": 2500,
-    "perFieldTile": 3,
+    "base": 25000,
+    "perFieldTile": 30,
     "starve": 0.04,
     "orderPer10Pct": -6
   },
@@ -378,9 +378,9 @@
         "name": "Mızraklı yaya",
         "hint": "Kalkanlı, mızraklı piyade; safın belkemiği",
         "men": 100,
-        "cost": 300,
+        "cost": 1000,
         "months": 2,
-        "pay": 20,
+        "pay": 40,
         "barracks": 1,
         "horse": false,
         "weapon": "spear",
@@ -393,10 +393,10 @@
       "okcu": {
         "name": "Yaya okçu",
         "hint": "Yaylı okçular; düşmanı yaklaşmadan yıpratır",
-        "men": 80,
-        "cost": 360,
+        "men": 100,
+        "cost": 1200,
         "months": 2,
-        "pay": 22,
+        "pay": 45,
         "barracks": 1,
         "horse": false,
         "weapon": "bow",
@@ -409,10 +409,10 @@
       "atli_okcu": {
         "name": "Türkmen atlı okçusu",
         "hint": "Hafif atlı okçular; vur-kaç, kuşatma, takip",
-        "men": 60,
-        "cost": 600,
+        "men": 100,
+        "cost": 2500,
         "months": 3,
-        "pay": 36,
+        "pay": 90,
         "barracks": 2,
         "horse": true,
         "weapon": "bow",
@@ -425,10 +425,10 @@
       "gulam": {
         "name": "Gulam süvarisi",
         "hint": "Sultanın zırhlı hassa atlıları; mızrakla hücum",
-        "men": 40,
-        "cost": 900,
+        "men": 50,
+        "cost": 3000,
         "months": 4,
-        "pay": 48,
+        "pay": 110,
         "barracks": 3,
         "horse": true,
         "weapon": "lance",

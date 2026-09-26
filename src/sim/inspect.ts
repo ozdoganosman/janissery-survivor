@@ -1,5 +1,5 @@
 import { UNIT_KINDS, type LevelDef, type UnitKind } from './balance';
-import { armyCapacity, armyMen, armyPay, levyLimit, recruitOffer } from './army';
+import { armyByKind, armyCapacity, armyMen, armyPay, levyLimit, recruitOffer, recruitRoom } from './army';
 import { demolishRefund, kindName, upgradeOffer, type Building, type UpgradeOffer } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
@@ -23,7 +23,17 @@ export interface ArmyPanel {
   room: number;
   levy: number;
   pay: number;
-  units: Array<{ id: number; name: string; men: number; monthsLeft: number | null; progress: number }>;
+  /** The companies quartered, a row for each kind there are any of. */
+  kinds: Array<{
+    kind: UnitKind;
+    name: string;
+    units: number;
+    men: number;
+    ready: number;
+    drilling: number;
+    /** Months until the next company at drill is ready. */
+    monthsLeft: number | null;
+  }>;
   offers: Array<{
     kind: UnitKind;
     name: string;
@@ -32,6 +42,8 @@ export interface ArmyPanel {
     cost: number;
     months: number;
     pay: number;
+    /** Companies that could be raised now, one after another. */
+    most: number;
     problem?: string;
     /** It needs a greater barracks; the others only wait for akçe, room or men. */
     locked: boolean;
@@ -40,19 +52,25 @@ export interface ArmyPanel {
 
 export function armyPanel(city: CityState): ArmyPanel {
   const defs = city.balance.army.units;
+  const tally = armyByKind(city);
   return {
     men: armyMen(city),
     ready: armyMen(city, true),
     room: armyCapacity(city),
     levy: levyLimit(city),
     pay: armyPay(city),
-    units: city.army.units.map((u) => ({
-      id: u.id,
-      name: defs[u.kind].name,
-      men: u.men,
-      monthsLeft: u.drill === null ? null : Math.ceil(u.drill.daysLeft / DAYS_PER_MONTH),
-      progress: u.drill === null ? 1 : 1 - u.drill.daysLeft / u.drill.days,
-    })),
+    kinds: UNIT_KINDS.filter((kind) => tally[kind].units > 0).map((kind) => {
+      const t = tally[kind];
+      return {
+        kind,
+        name: defs[kind].name,
+        units: t.units,
+        men: t.men,
+        ready: t.ready,
+        drilling: t.drilling,
+        monthsLeft: t.soonest === null ? null : Math.ceil(t.soonest / DAYS_PER_MONTH),
+      };
+    }),
     offers: UNIT_KINDS.map((kind) => {
       const o = recruitOffer(city, kind);
       const d = defs[kind];
@@ -64,6 +82,7 @@ export function armyPanel(city: CityState): ArmyPanel {
         cost: d.cost,
         months: d.months,
         pay: d.pay,
+        most: recruitRoom(city, kind),
         locked: o.blockedBy === 'level' || o.blockedBy === 'barracks',
       };
       if (o.problem !== undefined) row.problem = o.problem;
