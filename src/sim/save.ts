@@ -1,0 +1,326 @@
+import type { Balance, BuildingKind, TaxRate, UnitKind } from './balance';
+import { ECHELON_LEVELS, FORMATION_KINDS, TAX_RATES, UNIT_KINDS } from './balance';
+import { refitBuilding, type Building, type Work } from './buildings';
+import type { Speed } from './calendar';
+import { createCity, type CityState } from './city';
+import type { CityDef } from './city-def';
+import { removeField } from './countryside';
+import { organize, type Echelon } from './echelons';
+import { DAYS_PER_MONTH } from './calendar';
+import type { Fighter, Foe, RaidClock, War } from './war';
+import { updateStats, type OrderState } from './economy';
+import type { FieldPost } from './field';
+import { replayGrowth } from './growth';
+import { syncHouses } from './housing';
+
+/**
+ * Saving and loading. A save holds only what play has changed: the date, the treasury and
+ * the store, the people, the tax, the buildings and which fields are left. Everything else
+ * (the land, the walls, the streets, the lots) is generated again from the city's seed, so
+ * a save stays small and survives changes to how the city is drawn.
+ */
+
+export const SAVE_VERSION = 2;
+
+/**
+ * Brings a save of an older version up to this one, or leaves it as it is. Version 2
+ * counted the city ten times larger (people, akçe and stone alike), so a version 1 save
+ * grows by the same measure and keeps its place in the game.
+ */
+function upgradeSave(s: Partial<SaveGame>): Partial<SaveGame> {
+  if (s.version !== 1) return s;
+  const x10 = (n: number | undefined): number | undefined => (finite(n) ? n * 10 : n);
+  return {
+    ...s,
+    version: 2,
+    treasury: x10(s.treasury),
+    product: x10(s.product),
+    population: x10(s.population),
+    buildings: Array.isArray(s.buildings)
+      ? s.buildings.map((b) => ({ ...b, spent: x10(b.spent)! }))
+      : s.buildings,
+    last:
+      s.last === undefined
+        ? s.last
+        : { income: s.last.income * 10, product: s.last.product * 10, growth: s.last.growth * 10 },
+  } as Partial<SaveGame>;
+}
+
+export interface SavedBuilding {
+  id: number;
+  kind: BuildingKind;
+  name: string;
+  x0: number;
+  z0: number;
+  w: number;
+  d: number;
+  facing: number;
+  level: number;
+  work: Work | null;
+  spent: number;
+}
+
+export interface SaveGame {
+  version: number;
+  /** The city definition it belongs to, and its seed. */
+  city: string;
+  seed: number;
+  day: number;
+  fraction: number;
+  speed: Speed;
+  treasury: number;
+  product: number;
+  population: number;
+  tax: TaxRate;
+  buildings: SavedBuilding[];
+  nextBuildingId: number;
+  /** Ids of the fields still standing. */
+  fields: number[];
+  announced: { level: number; order: OrderState };
+  last: { income: number; product: number; growth: number };
+  /** Rings of walls raised, the one going up, and the suburb streets opened. */
+  expansion: { built: number; work: { days: number; daysLeft: number } | null };
+  streetsLaid: number;
+  /** The companies under arms. Older saves have none. */
+  army?: { units: SavedUnit[]; nextId: number; echelons?: Echelon[]; nextEchelon?: number };
+  /** The raid being fought, and when the next is due. Older saves have neither. */
+  war?: War | null;
+  raids?: RaidClock;
+}
+
+export interface SavedUnit {
+  id: number;
+  kind: UnitKind;
+  men: number;
+  drill: { days: number; daysLeft: number } | null;
+  /** Where it stands out of the barracks. Older saves have none. */
+  field?: FieldPost | null;
+  /** The tugay it serves in. Older saves have none; the army is organized on loading. */
+  tugay?: number | null;
+}
+
+export function saveGame(city: CityState): SaveGame {
+  return {
+    version: SAVE_VERSION,
+    city: city.def.id,
+    seed: city.def.seed,
+    day: city.calendar.day,
+    fraction: city.calendar.fraction,
+    speed: city.calendar.speed,
+    treasury: city.treasury,
+    product: city.product,
+    population: city.population,
+    tax: city.policy.tax,
+    buildings: [...city.buildings.values()].map((b) => ({
+      id: b.id,
+      kind: b.kind,
+      name: b.name,
+      x0: b.x0,
+      z0: b.z0,
+      w: b.w,
+      d: b.d,
+      facing: b.facing,
+      level: b.level,
+      work: b.work === null ? null : { ...b.work },
+      spent: b.spent,
+    })),
+    nextBuildingId: city.nextBuildingId,
+    fields: [...city.fields.keys()],
+    announced: { ...city.announced },
+    expansion: {
+      built: city.expansion.built,
+      work: city.expansion.work === null ? null : { ...city.expansion.work },
+    },
+    streetsLaid: city.streetsLaid,
+    last: { ...city.stats.last },
+    army: {
+      units: city.army.units.map((u) => ({
+        ...u,
+        drill: u.drill === null ? null : { ...u.drill },
+        field: u.field === null ? null : { ...u.field },
+      })),
+      nextId: city.army.nextId,
+      echelons: city.army.echelons.map((e) => ({ ...e })),
+      nextEchelon: city.army.nextEchelon,
+    },
+    war: city.war === null ? null : saveWar(city.war),
+    raids: { ...city.raids },
+  };
+}
+
+/** Why a save cannot be loaded, in words for the player. */
+export class SaveError extends Error {}
+
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+
+/**
+ * Builds the city a save describes. Throws a SaveError, in Turkish, for a save of another
+ * city or version, or one that does not fit the map.
+ */
+export function restoreGame(def: CityDef, balance: Balance, data: unknown): CityState {
+  if (data === null || typeof data !== 'object') throw new SaveError('Kayıt okunamadı.');
+  const s = upgradeSave(data);
+  if (s.version !== SAVE_VERSION) throw new SaveError('Bu kayıt oyunun başka bir sürümünden.');
+  if (s.city !== def.id || s.seed !== def.seed)
+    throw new SaveError(`Bu kayıt ${def.name} şehrine ait değil.`);
+  const numbers = [s.day, s.fraction, s.treasury, s.product, s.population, s.nextBuildingId];
+  if (!numbers.every(finite) || !Array.isArray(s.buildings) || !Array.isArray(s.fields)) {
+    throw new SaveError('Kayıt bozuk.');
+  }
+  if (s.tax === undefined || !TAX_RATES.includes(s.tax)) throw new SaveError('Kayıt bozuk.');
+  const city = createCity(def, balance);
+  const { grid } = city;
+  // The city as generated has its starting buildings; the save says what stands now.
+  for (const b of city.buildings.values()) for (const i of b.tiles) city.building[i] = -1;
+  city.buildings.clear();
+  for (const sb of s.buildings) {
+    const kind = balance.buildings[sb.kind] as Balance['buildings'][BuildingKind] | undefined;
+    if (kind === undefined) throw new SaveError('Kayıtta bilinmeyen bir yapı var.');
+    const tiles: number[] = [];
+    for (let z = sb.z0; z < sb.z0 + sb.d; z++) {
+      for (let x = sb.x0; x < sb.x0 + sb.w; x++) {
+        if (!grid.inBounds(x, z)) throw new SaveError('Kayıttaki bir yapı haritanın dışında.');
+        tiles.push(grid.index(x, z));
+      }
+    }
+    const b: Building = {
+      id: sb.id,
+      kind: sb.kind,
+      name: sb.name,
+      x0: sb.x0,
+      z0: sb.z0,
+      w: sb.w,
+      d: sb.d,
+      tiles,
+      facing: sb.facing,
+      level: Math.max(0, Math.min(kind.levels.length, sb.level)),
+      work: sb.work === null ? null : { ...sb.work },
+      spent: sb.spent,
+    };
+    for (const i of tiles) city.building[i] = b.id;
+    city.buildings.set(b.id, b);
+  }
+  for (const u of s.army?.units ?? []) {
+    if (!UNIT_KINDS.includes(u.kind) || !finite(u.men) || u.men <= 0) throw new SaveError('Kayıt bozuk.');
+    const f = u.field ?? null;
+    const fieldOk =
+      f === null ||
+      ([f.x, f.z, f.heading].every(finite) && FORMATION_KINDS.includes(f.formation) && u.drill === null);
+    city.army.units.push({
+      id: u.id,
+      kind: u.kind,
+      men: u.men,
+      drill: u.drill === null ? null : { ...u.drill },
+      field: f !== null && fieldOk ? { ...f } : null,
+      tugay: finite(u.tugay) ? u.tugay : null,
+    });
+  }
+  for (const e of s.army?.echelons ?? []) {
+    if (!finite(e.id) || !finite(e.no) || !ECHELON_LEVELS.includes(e.level)) continue;
+    city.army.echelons.push({
+      id: e.id,
+      level: e.level,
+      no: e.no,
+      parent: finite(e.parent) ? e.parent : null,
+    });
+  }
+  city.army.nextEchelon = city.army.echelons.reduce(
+    (n, e) => Math.max(n, e.id + 1),
+    finite(s.army?.nextEchelon) ? s.army.nextEchelon : 1,
+  );
+  // Links to echelons that are not there are dropped, and taburs without one find one.
+  organize(city);
+  city.war = restoreWar(city, s.war);
+  const r = s.raids;
+  city.raids =
+    r !== undefined && finite(r.next) && finite(r.count)
+      ? { next: r.next, warned: r.warned === true, count: r.count }
+      : // A save from before raids: the first comes as long after loading as after a start.
+        { next: s.day! + balance.army.war.raids.first * DAYS_PER_MONTH, warned: false, count: 0 };
+  city.army.nextId = s.army?.nextId ?? city.army.units.reduce((n, u) => Math.max(n, u.id + 1), 1);
+  const keep = new Set(s.fields);
+  for (const id of [...city.fields.keys()]) if (!keep.has(id)) removeField(city, id);
+  city.calendar.day = s.day!;
+  city.calendar.fraction = s.fraction!;
+  city.calendar.speed = s.speed ?? 1;
+  city.treasury = s.treasury!;
+  city.product = s.product!;
+  city.population = s.population!;
+  city.policy.tax = s.tax;
+  city.nextBuildingId = s.nextBuildingId!;
+  // The rank the city held carries over, so it is not lost to a thin month on loading.
+  city.stats.level = Math.max(0, Math.min(balance.levels.length - 1, s.announced?.level ?? 0));
+  updateStats(city);
+  if (s.last !== undefined) city.stats.last = { ...s.last };
+  city.announced = s.announced !== undefined ? { ...s.announced } : city.announced;
+  // Walls and streets are laid again from the plan, up to where the save had them.
+  replayGrowth(city, s.expansion?.built ?? 0, s.streetsLaid ?? 0);
+  city.expansion.work = s.expansion?.work != null ? { ...s.expansion.work } : null;
+  // A building saved when its kind was smaller (the barracks, before the tenfold city)
+  // takes the ground its kind needs now.
+  for (const b of city.buildings.values()) refitBuilding(city, b);
+  updateStats(city);
+  syncHouses(city);
+  city.revision.buildings++;
+  return city;
+}
+
+/**
+ * Makes `city` into `next` in place, so that everything holding the city (the views, the
+ * HUD) carries on with the new one. Every revision moves on, so every view rebuilds.
+ */
+export function replaceCity(city: CityState, next: CityState): void {
+  const rev = city.revision;
+  Object.assign(city, next);
+  city.revision = {
+    roads: rev.roads + 1,
+    houses: rev.houses + 1,
+    buildings: rev.buildings + 1,
+    fields: rev.fields + 1,
+    walls: rev.walls + 1,
+    army: rev.army + 1,
+  };
+}
+
+/** A raid as it is saved: all of it but the raiders' own ways off the map, found again. */
+function saveWar(war: War): War {
+  return {
+    ...war,
+    foes: war.foes.map((f) => {
+      const { way: _way, ...rest } = f;
+      return { ...rest, slot: [f.slot[0], f.slot[1]] };
+    }),
+    fighters: Object.fromEntries(Object.entries(war.fighters).map(([id, f]) => [id, { ...f }])),
+    target: { ...war.target },
+    exit: { ...war.exit },
+    way: war.way.map(([x, z]) => [x, z]),
+    taken: { ...war.taken },
+  };
+}
+
+/** The raid a save was made during, as far as it makes sense; else none. */
+function restoreWar(city: CityState, w: War | null | undefined): War | null {
+  if (w === null || w === undefined || !Array.isArray(w.foes) || !Array.isArray(w.way)) return null;
+  const kinds = city.balance.army.war.enemies;
+  const foes: Foe[] = w.foes
+    .filter(
+      (f) => f.kind in kinds && [f.x, f.z, f.heading, f.men, f.start, f.morale].every(finite) && f.men > 0,
+    )
+    .map((f) => ({ ...f, slot: [f.slot[0], f.slot[1]], target: null }));
+  if (foes.length === 0 || w.way.length < 2) return null;
+  const units = new Set(city.army.units.map((u) => u.id));
+  const fighters: Record<number, Fighter> = {};
+  for (const [id, f] of Object.entries(w.fighters)) {
+    if (!units.has(Number(id))) continue;
+    const at = f.pos as Fighter['pos'] | undefined;
+    const pos = at != null && [at.x, at.z, at.heading].every(finite) ? { ...at } : null;
+    fighters[Number(id)] = { ...f, target: null, pos, moving: false, stuck: 0 };
+  }
+  return {
+    ...w,
+    foes,
+    fighters,
+    nextFoe: Math.max(w.nextFoe, ...foes.map((f) => f.id + 1)),
+    way: w.way.map(([x, z]) => [x, z]),
+  };
+}
