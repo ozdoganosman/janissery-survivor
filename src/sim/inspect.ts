@@ -1,4 +1,5 @@
-import type { LevelDef } from './balance';
+import { UNIT_KINDS, type LevelDef, type UnitKind } from './balance';
+import { armyCapacity, armyMen, armyPay, levyLimit, recruitOffer } from './army';
 import { demolishRefund, kindName, upgradeOffer, type Building, type UpgradeOffer } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
@@ -11,6 +12,64 @@ export interface TileInfo {
   rows: Array<[string, string]>;
   /** A building the panel can raise or pull down. */
   building?: BuildingSummary;
+  /** For the barracks: the companies it quarters and those it can raise. */
+  army?: ArmyPanel;
+}
+
+/** The barracks' side of the panel: who is quartered there and who can be raised. */
+export interface ArmyPanel {
+  men: number;
+  ready: number;
+  room: number;
+  levy: number;
+  pay: number;
+  units: Array<{ id: number; name: string; men: number; monthsLeft: number | null; progress: number }>;
+  offers: Array<{
+    kind: UnitKind;
+    name: string;
+    hint: string;
+    men: number;
+    cost: number;
+    months: number;
+    pay: number;
+    problem?: string;
+    /** It needs a greater barracks; the others only wait for akçe, room or men. */
+    locked: boolean;
+  }>;
+}
+
+export function armyPanel(city: CityState): ArmyPanel {
+  const defs = city.balance.army.units;
+  return {
+    men: armyMen(city),
+    ready: armyMen(city, true),
+    room: armyCapacity(city),
+    levy: levyLimit(city),
+    pay: armyPay(city),
+    units: city.army.units.map((u) => ({
+      id: u.id,
+      name: defs[u.kind].name,
+      men: u.men,
+      monthsLeft: u.drill === null ? null : Math.ceil(u.drill.daysLeft / DAYS_PER_MONTH),
+      progress: u.drill === null ? 1 : 1 - u.drill.daysLeft / u.drill.days,
+    })),
+    offers: UNIT_KINDS.map((kind) => {
+      const o = recruitOffer(city, kind);
+      const d = defs[kind];
+      const row: ArmyPanel['offers'][number] = {
+        kind,
+        name: d.name,
+        hint: d.hint,
+        men: d.men,
+        cost: d.cost,
+        months: d.months,
+        pay: d.pay,
+        locked: o.blockedBy === 'level' || o.blockedBy === 'barracks',
+      };
+      if (o.problem !== undefined) row.problem = o.problem;
+      return row;
+    }),
+  };
 }
 
 /**
@@ -137,6 +196,7 @@ const pct = (n: number): string => `%${(n * 100).toLocaleString('tr-TR', { maxim
 /** One level's gifts, in a line: "+50 akçe · +6 huzur". */
 export function effectText(city: CityState, lv: LevelDef): string {
   const parts: string[] = [];
+  if (lv.capacity !== undefined) parts.push(`${fmt(lv.capacity)} asker yeri`);
   if (lv.income !== undefined) parts.push(`+${fmt(lv.income)} akçe`);
   if (lv.incomePct !== undefined) parts.push(`vergi +${pct(lv.incomePct)}`);
   if (lv.product !== undefined) parts.push(`+${fmt(lv.product)} ${city.def.resource.good.toLowerCase()}`);
@@ -166,6 +226,11 @@ export function inspectTile(city: CityState, x: number, z: number): TileInfo | n
       if (summary.effect !== null) rows.push(['Getirisi', summary.effect]);
       if (summary.work !== null) {
         rows.push(['İnşaat', `${summary.work.toLevel}. seviye · ${summary.work.monthsLeft} ay kaldı`]);
+      }
+      if (b.kind === 'kisla') {
+        const army = armyPanel(city);
+        rows.push(['Ordu', `${fmt(army.men)} / ${fmt(army.room)} asker`]);
+        return { title: b.name, rows, building: summary, army };
       }
       return { title: b.name, rows, building: summary };
     }

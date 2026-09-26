@@ -263,30 +263,34 @@
     },
     "kisla": {
       "name": "Kışla",
-      "hint": "Asker ve asayiş; huzur",
-      "w": 3,
-      "d": 2,
+      "hint": "Ordugâh: asker toplar, talim ettirir ve konaklatır; sur dışına kurulur",
+      "w": 14,
+      "d": 10,
+      "outside": true,
       "levels": [
         {
-          "cost": 800,
-          "material": 40,
-          "months": 3,
-          "upkeep": 22,
-          "order": 5
-        },
-        {
-          "cost": 1400,
-          "material": 80,
+          "cost": 1200,
+          "material": 60,
           "months": 4,
-          "upkeep": 36,
-          "order": 9
+          "upkeep": 20,
+          "order": 3,
+          "capacity": 200
         },
         {
           "cost": 2400,
-          "material": 150,
-          "months": 5,
+          "material": 160,
+          "months": 6,
+          "upkeep": 35,
+          "order": 6,
+          "capacity": 500
+        },
+        {
+          "cost": 4200,
+          "material": 320,
+          "months": 8,
           "upkeep": 55,
-          "order": 14
+          "order": 10,
+          "capacity": 1000
         }
       ],
       "max": 1
@@ -366,5 +370,74 @@
   },
   "debt": {
     "order": -15
+  },
+  "army": {
+    "levy": 0.15,
+    "units": {
+      "mizrakci": {
+        "name": "Mızraklı yaya",
+        "hint": "Kalkanlı, mızraklı piyade; safın belkemiği",
+        "men": 100,
+        "cost": 300,
+        "months": 2,
+        "pay": 20,
+        "barracks": 1,
+        "horse": false,
+        "weapon": "spear",
+        "melee": 6,
+        "defense": 8,
+        "missile": 0,
+        "speed": 3,
+        "morale": 6
+      },
+      "okcu": {
+        "name": "Yaya okçu",
+        "hint": "Yaylı okçular; düşmanı yaklaşmadan yıpratır",
+        "men": 80,
+        "cost": 360,
+        "months": 2,
+        "pay": 22,
+        "barracks": 1,
+        "horse": false,
+        "weapon": "bow",
+        "melee": 3,
+        "defense": 3,
+        "missile": 8,
+        "speed": 3,
+        "morale": 5
+      },
+      "atli_okcu": {
+        "name": "Türkmen atlı okçusu",
+        "hint": "Hafif atlı okçular; vur-kaç, kuşatma, takip",
+        "men": 60,
+        "cost": 600,
+        "months": 3,
+        "pay": 36,
+        "barracks": 2,
+        "horse": true,
+        "weapon": "bow",
+        "melee": 4,
+        "defense": 4,
+        "missile": 7,
+        "speed": 9,
+        "morale": 6
+      },
+      "gulam": {
+        "name": "Gulam süvarisi",
+        "hint": "Sultanın zırhlı hassa atlıları; mızrakla hücum",
+        "men": 40,
+        "cost": 900,
+        "months": 4,
+        "pay": 48,
+        "barracks": 3,
+        "horse": true,
+        "weapon": "lance",
+        "melee": 9,
+        "defense": 9,
+        "missile": 0,
+        "speed": 7,
+        "morale": 9
+      }
+    }
   }
 }

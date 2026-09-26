@@ -4,6 +4,7 @@ import { FACING_DIRS, type Building } from '../sim/buildings';
 import type { CityState } from '../sim/city';
 import { sampleHeight } from '../sim/terrain';
 import { arch, box, cone, cylinder, dome, PartBatch, type Frame } from './builder';
+import { drawBarracks } from './barracks';
 import { drawHamam, minaret, tackapi } from './buildings-view';
 import { miniMaterial, setInkClass } from './materials';
 import { INK_CLASS, PAL } from './palette';
@@ -72,25 +73,8 @@ export class WorksView {
   }
 
   private buildOne(b: Building, batch: PartBatch): void {
-    const { terrain, grid } = this.city;
-    const cx = grid.centre(b.x0) + (b.w - 1) / 2;
-    const cz = grid.centre(b.z0) + (b.d - 1) / 2;
-    let base = Infinity;
-    for (const [dx, dz] of [
-      [-b.w / 2, -b.d / 2],
-      [b.w / 2, -b.d / 2],
-      [-b.w / 2, b.d / 2],
-      [b.w / 2, b.d / 2],
-      [0, 0],
-    ]) {
-      base = Math.min(base, sampleHeight(terrain, cx + dx, cz + dz));
-    }
-    const [fx, fz] = FACING_DIRS[b.facing];
-    const rot = Math.atan2(fx, fz);
+    const { cx, cz, base, rot, front, depth } = buildingFrame(this.city, b);
     const f = batch.frame(cx, base, cz, rot);
-    // In the local frame the front is +z; `front` runs along x, `depth` along z.
-    const front = b.facing % 2 === 0 ? b.w : b.d;
-    const depth = b.facing % 2 === 0 ? b.d : b.w;
     if (b.level === 0) {
       const done = b.work === null ? 0 : 1 - b.work.daysLeft / b.work.days;
       scaffold(f, front, depth, done, b.id);
@@ -129,9 +113,15 @@ export class WorksView {
       case 'ambar':
         granary(f, front, depth, level, b.id);
         break;
-      case 'kisla':
-        guardPost(f, front, depth, level);
+      case 'kisla': {
+        const cr = Math.cos(rot);
+        const sr = Math.sin(rot);
+        const { terrain } = this.city;
+        drawBarracks(f, front, depth, level, b.id, (lx, lz) =>
+          Math.max(0, sampleHeight(terrain, cx + lx * cr + lz * sr, cz - lx * sr + lz * cr) - base),
+        );
         break;
+      }
       case 'medrese':
         medrese(f, front, depth, level);
         break;
@@ -154,6 +144,39 @@ export class WorksView {
     }
     this.chimneys.push({ top, puffs, seed });
   }
+}
+
+/**
+ * Where a building's model stands: its centre, the ground it sits on (the lowest of its
+ * corners), and its turn. In the local frame the front is +z; `front` runs along x,
+ * `depth` along z.
+ */
+export function buildingFrame(
+  city: CityState,
+  b: Building,
+): { cx: number; cz: number; base: number; rot: number; front: number; depth: number } {
+  const { terrain, grid } = city;
+  const cx = grid.centre(b.x0) + (b.w - 1) / 2;
+  const cz = grid.centre(b.z0) + (b.d - 1) / 2;
+  let base = Infinity;
+  for (const [dx, dz] of [
+    [-b.w / 2, -b.d / 2],
+    [b.w / 2, -b.d / 2],
+    [-b.w / 2, b.d / 2],
+    [b.w / 2, b.d / 2],
+    [0, 0],
+  ]) {
+    base = Math.min(base, sampleHeight(terrain, cx + dx, cz + dz));
+  }
+  const [fx, fz] = FACING_DIRS[b.facing];
+  return {
+    cx,
+    cz,
+    base,
+    rot: Math.atan2(fx, fz),
+    front: b.facing % 2 === 0 ? b.w : b.d,
+    depth: b.facing % 2 === 0 ? b.d : b.w,
+  };
 }
 
 /**
@@ -467,45 +490,6 @@ function hospital(f: Frame, front: number, depth: number, id: number, level: num
  * A barracks: a walled block with a crenellated parapet, a gate on the street, square
  * watchtowers flying the red banner (one more at each level), and a tethered horse.
  */
-function guardPost(f: Frame, front: number, depth: number, level: number): void {
-  const w = front - 0.3;
-  const d = depth - 0.3;
-  const h = 0.95;
-  f.part(box(w, h + 0.5, d), PAL.stone, 0, -0.5, 0);
-  f.part(box(w + 0.06, 0.07, d + 0.06), PAL.stoneDark, 0, h, 0);
-  // Merlons round the parapet.
-  const n = 5;
-  for (let k = 0; k < n; k++) {
-    const t = -w / 2 + 0.08 + (k * (w - 0.16)) / (n - 1);
-    f.part(box(0.12, 0.14, 0.08), PAL.stone, t, h + 0.07, d / 2 - 0.02);
-    f.part(box(0.12, 0.14, 0.08), PAL.stone, t, h + 0.07, -d / 2 + 0.02);
-    f.part(box(0.08, 0.14, 0.12), PAL.stone, w / 2 - 0.02, h + 0.07, t * (d / w));
-    f.part(box(0.08, 0.14, 0.12), PAL.stone, -w / 2 + 0.02, h + 0.07, t * (d / w));
-  }
-  f.part(arch(0.42, 0.66, 0.04), PAL.door, 0, 0, d / 2);
-  f.part(box(0.5, 0.06, 0.05), PAL.stoneDark, 0, 0.72, d / 2 + 0.01);
-  // The watchtowers and their banners.
-  const corners: Array<[number, number]> = [
-    [w / 2 - 0.3, -d / 2 + 0.3],
-    [-w / 2 + 0.3, -d / 2 + 0.3],
-    [0, -d / 2 + 0.3],
-  ];
-  for (const [tx, tz] of corners.slice(0, level)) {
-    f.part(box(0.55, 1.9, 0.55), PAL.stone, tx, h, tz);
-    f.part(box(0.63, 0.07, 0.63), PAL.stoneDark, tx, h + 1.9, tz);
-    f.part(cone(0.42, 0.4, 4).rotateY(Math.PI / 4), PAL.roofs[3], tx, h + 1.97, tz);
-    f.part(box(0.12, 0.2, 0.02), PAL.ink, tx, h + 1.2, tz + 0.28);
-    f.part(cylinder(0.02, 0.02, 0.8, 5), PAL.timberDark, tx, h + 2.3, tz);
-    f.part(box(0.4, 0.24, 0.015), PAL.banner, tx + 0.21, h + 2.82, tz);
-  }
-  // A horse tied at the gate.
-  const hx = -w * 0.3;
-  const hz = d / 2 + 0.22;
-  f.part(box(0.36, 0.16, 0.12), PAL.horse, hx, 0.2, hz);
-  for (const lx of [-0.13, 0.13]) f.part(box(0.04, 0.2, 0.1), PAL.horse, hx + lx, 0, hz);
-  f.part(box(0.1, 0.18, 0.08), PAL.horse, hx + 0.2, 0.3, hz);
-}
-
 /** Loose rocks over the city's resource sites, so the seam shows before anyone cuts it. */
 function siteRocks(city: CityState, batch: PartBatch): void {
   const { grid, terrain } = city;

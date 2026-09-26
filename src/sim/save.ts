@@ -1,5 +1,5 @@
-import type { Balance, BuildingKind, TaxRate } from './balance';
-import { TAX_RATES } from './balance';
+import type { Balance, BuildingKind, TaxRate, UnitKind } from './balance';
+import { TAX_RATES, UNIT_KINDS } from './balance';
 import type { Building, Work } from './buildings';
 import type { Speed } from './calendar';
 import { createCity, type CityState } from './city';
@@ -53,6 +53,15 @@ export interface SaveGame {
   /** Rings of walls raised, the one going up, and the suburb streets opened. */
   expansion: { built: number; work: { days: number; daysLeft: number } | null };
   streetsLaid: number;
+  /** The companies under arms. Older saves have none. */
+  army?: { units: SavedUnit[]; nextId: number };
+}
+
+export interface SavedUnit {
+  id: number;
+  kind: UnitKind;
+  men: number;
+  drill: { days: number; daysLeft: number } | null;
 }
 
 export function saveGame(city: CityState): SaveGame {
@@ -89,6 +98,10 @@ export function saveGame(city: CityState): SaveGame {
     },
     streetsLaid: city.streetsLaid,
     last: { ...city.stats.last },
+    army: {
+      units: city.army.units.map((u) => ({ ...u, drill: u.drill === null ? null : { ...u.drill } })),
+      nextId: city.army.nextId,
+    },
   };
 }
 
@@ -144,6 +157,16 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
     for (const i of tiles) city.building[i] = b.id;
     city.buildings.set(b.id, b);
   }
+  for (const u of s.army?.units ?? []) {
+    if (!UNIT_KINDS.includes(u.kind) || !finite(u.men) || u.men <= 0) throw new SaveError('Kayıt bozuk.');
+    city.army.units.push({
+      id: u.id,
+      kind: u.kind,
+      men: u.men,
+      drill: u.drill === null ? null : { ...u.drill },
+    });
+  }
+  city.army.nextId = s.army?.nextId ?? city.army.units.reduce((n, u) => Math.max(n, u.id + 1), 1);
   const keep = new Set(s.fields);
   for (const id of [...city.fields.keys()]) if (!keep.has(id)) removeField(city, id);
   city.calendar.day = s.day!;
@@ -181,5 +204,6 @@ export function replaceCity(city: CityState, next: CityState): void {
     buildings: rev.buildings + 1,
     fields: rev.fields + 1,
     walls: rev.walls + 1,
+    army: rev.army + 1,
   };
 }

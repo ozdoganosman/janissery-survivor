@@ -19,6 +19,37 @@ export const BUILDING_KINDS: readonly BuildingKind[] = [
   'kisla',
 ];
 
+export type UnitKind = 'mizrakci' | 'okcu' | 'atli_okcu' | 'gulam';
+
+/** In the order the barracks offers them. */
+export const UNIT_KINDS: readonly UnitKind[] = ['mizrakci', 'okcu', 'atli_okcu', 'gulam'];
+
+/**
+ * One company (bölük) of soldiers as the barracks raises it. The fighting figures are kept
+ * for the battles to come; the city only pays, feeds and quarters the men.
+ */
+export interface UnitDef {
+  name: string;
+  hint: string;
+  /** Men in a company. */
+  men: number;
+  /** Akçe to raise and arm it. */
+  cost: number;
+  /** Months of drill before it is ready. */
+  months: number;
+  /** Akçe a month for the whole company. */
+  pay: number;
+  /** Level of barracks it needs. */
+  barracks: number;
+  horse: boolean;
+  weapon: 'spear' | 'bow' | 'lance' | 'sword';
+  melee: number;
+  defense: number;
+  missile: number;
+  speed: number;
+  morale: number;
+}
+
 export type TaxRate = 'hafif' | 'orta' | 'agir';
 export const TAX_RATES: readonly TaxRate[] = ['hafif', 'orta', 'agir'];
 
@@ -44,6 +75,8 @@ export interface LevelDef {
   order?: number;
   /** Added to the monthly growth rate. */
   growth?: number;
+  /** Soldiers the building can quarter: the barracks. */
+  capacity?: number;
 }
 
 export interface BuildingDef {
@@ -112,5 +145,10 @@ export interface Balance {
   rankSlack: number;
   demolishRefund: number;
   maxSlope: number;
+  army: {
+    /** Share of the townspeople that may be under arms at once. */
+    levy: number;
+    units: Record<UnitKind, UnitDef>;
+  };
   buildings: Record<BuildingKind, BuildingDef>;
 }

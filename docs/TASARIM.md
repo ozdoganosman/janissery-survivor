@@ -116,12 +116,58 @@ Değerler sırasıyla 1., 2. ve 3. seviye içindir; bedeller akçe + ürün, bak
 | Hamam       | 2      | +3 / +5 / +8 huzur; büyüme +%0,05 / +%0,1 / +%0,15             | 700+30 · 1.300+60 · 2.100+120    | 10 / 18 / 28 |
 | Kervansaray | 1      | +80 / +160 / +260 akçe; sur dışında                            | 1.000+60 · 1.800+100 · 3.000+180 | 10 / 18 / 30 |
 | Ambar       | 2      | erzak +1.500 / +3.000 / +5.000; büyüme +%0,15 / +%0,25 / +%0,4 | 500 · 900+30 · 1.500+70          | 8 / 14 / 22  |
-| Kışla       | 1      | +5 / +9 / +14 huzur; askerler                                  | 800+40 · 1.400+80 · 2.400+150    | 22 / 36 / 55 |
+| Kışla       | 1      | 200 / 500 / 1.000 asker yeri; +3 / +6 / +10 huzur; sur dışında | 1.200+60 · 2.400+160 · 4.200+320 | 20 / 35 / 55 |
 | Medrese     | 1      | vergi +%5 / +%10 / +%15; huzur +1 / +2 / +3                    | 1.100+60 · 1.900+120 · 3.000+200 | 18 / 30 / 45 |
 | Darüşşifa   | 1      | büyüme +%0,1 / +%0,2 / +%0,3; huzur +2 / +3 / +5               | 1.000+50 · 1.700+100 · 2.800+180 | 15 / 25 / 40 |
 
 Yıkılan yapı, son seviyesinin akçe bedelinin dörtte birini geri verir. Kesin sayılar
 `data/balance.json` içindedir.
+
+### Ordu (8. aşama)
+
+Kışla şehrin ordugâhıdır: askeri halktan toplar, talim ettirir ve konaklatır. Ordu
+ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şehir onu besler,
+öder ve barındırır.
+
+- **Kışla sur dışına kurulur ve büyüktür:** 14×10 karo (≈140×100 m). Yer ilk seviyede
+  bütünüyle ayrılır, yerleşke seviyeyle o yerin içinde büyür:
+  - **I, ordugâh:** kazıklı çit, bir ahşap koğuş, keçe otağlar, ahşap gözcü kulesi, at
+    bağlama direği, iki hedefli ok menzili.
+  - **II, kışla:** mazgallı taş duvar ve dört köşe kulesi, kemerli kapı, iki taş koğuş,
+    ahır ve çitli ağıl, kuyu, silah sehpaları, üç hedef.
+  - **III, ribat:** yüksek sur, altı kule, iki yuvarlak kuleli taç kapı, kurşun kubbeli
+    koğuşlar, iki ahır, kubbeli cebehane, minareli mescit, dört hedef.
+    Yerleşke eğimli arazide toprağı izler.
+- **Birlikler bölük bölük toplanır.** Bölük büyüklükleri dönemin gerçeğine yakındır:
+
+  | Birlik              | Er  | Bedel | Talim | Ulufe/ay | Kışla | Yakın / Savunma / Ok / Hız / Moral |
+  | ------------------- | --- | ----- | ----- | -------- | ----- | ---------------------------------- |
+  | Mızraklı yaya       | 100 | 300   | 2 ay  | 20       | I     | 6 / 8 / 0 / 3 / 6                  |
+  | Yaya okçu           | 80  | 360   | 2 ay  | 22       | I     | 3 / 3 / 8 / 3 / 5                  |
+  | Türkmen atlı okçusu | 60  | 600   | 3 ay  | 36       | II    | 4 / 4 / 7 / 9 / 6                  |
+  | Gulam süvarisi      | 40  | 900   | 4 ay  | 48       | III   | 9 / 9 / 0 / 7 / 9                  |
+
+  Savaş değerleri şimdilik yalnız veridedir; savaş katmanı onları kullanacak.
+
+- **Askerler halktan gelir.** Bölük toplanınca o kadar kişi nüfustan çıkar ve kışlaya
+  girer; terhis edilince evine döner. Kışla yıkılırsa bütün bölükler terhis olur.
+- **Sınırlar:** ordu kışlanın yerini (200 / 500 / 1.000) ve halkın verebileceğini
+  (herkesin, askerler dahil, %15'i) aşamaz.
+- **Ordu şehre yüktür:** her bölük her ay ulufe alır (Hesap'ta ayrı satır), askerler
+  şehrin erzağından yer, vergi vermez. Şehir düzeyi hesaplanırken garnizon şehrin
+  nüfusuna sayılır.
+- **Askerler kışlada tek tek görünür.** Her er bir figürdür: bin kişilik ordu bin figür.
+  Bölükler meydanda saf saf durur; talimdeki mızrakçılar sıra sıra hamle yapar,
+  okçular hedeflere ok atar ve oklar havada uçar, atlılar meydanın çevresinde tur atar
+  (Türkmenler atın üstünden yana ok atar, gulamlar kargıyı indirip hücum eder). Hazır
+  bölükler saflarında bekler.
+- **Savaşa hazır figürler:** her asker gövde, baş, miğfer ya da börk, iki kol, iki
+  bacak, silah (mızrak, kılıç, yay, flamalı kargı), kalkan ve sadaktan oluşan eklemli
+  bir düzenektir; at da gövde, boyun, dört bacak ve kuyruktan. Hareketler: bekleme,
+  yürüyüş, hücum, mızrak hamlesi, kılıç çalma, ok atma, kalkanla karşılama, düşme; at
+  için adım, dörtnala, üstünden ok atma ve kargıyla hücum. Hepsi tek tek parça olarak
+  çizilir; bin asker birkaç düzine çizim çağrısıdır (`src/render/soldiers.ts`).
+- Kamera askerleri seçebilmek için eskisinden daha yakına iner.
 
 ### Surlar ve sokaklar
 
@@ -284,5 +330,6 @@ kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 | 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                  | ✅    |
 | 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi | ✅    |
 | 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                             |       |
-| 8   | **Savunma:** kışladan garnizon, sur bakımı, kuşatmaya hazırlık                                                                      |       |
+| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama | ✅    |
+| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                               |       |
 | 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                    |       |

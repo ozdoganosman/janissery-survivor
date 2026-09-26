@@ -8,6 +8,7 @@ import { CursorView } from './cursor-view';
 import { FieldsView } from './fields-view';
 import { HousesView } from './houses-view';
 import { shading } from './materials';
+import { ArmyView } from './army-view';
 import { PeopleView } from './people-view';
 import { MiniPipeline } from './pipeline';
 import { RoadsView } from './roads-view';
@@ -35,6 +36,7 @@ export class World {
   private readonly works: WorksView;
   private readonly walls: WallsView;
   readonly people: PeopleView;
+  readonly army: ArmyView;
   private readonly pipeline: MiniPipeline;
   /** Seconds since the city layers were last compared with the simulation. */
   private sinceSync = Infinity;
@@ -64,6 +66,7 @@ export class World {
     this.works = new WorksView(city);
     this.walls = new WallsView(city);
     this.people = new PeopleView(city);
+    this.army = new ArmyView(city);
     this.cursor = new CursorView(city);
     this.scene.add(
       this.terrain.group,
@@ -75,6 +78,7 @@ export class World {
       this.walls.group,
       this.works.group,
       this.people.group,
+      this.army.group,
       this.cursor.group,
     );
 
@@ -123,11 +127,13 @@ export class World {
         this.walls.sync(),
       ];
       this.people.sync();
+      this.army.sync();
       changed = results.some((r) => r);
     }
     this.terrain.update(elapsed);
     this.works.update(elapsed);
     this.people.update(dt, this.rig.zoom);
+    this.army.update(dt, this.rig.zoom, this.rig.camera);
     this.applyCloseness(moved || changed);
     this.pipeline.render();
   }

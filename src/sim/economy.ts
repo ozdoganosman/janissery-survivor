@@ -1,3 +1,4 @@
+import { armyCapacity, armyDay, armyMen, armyPay } from './army';
 import { buildDay, builders, levelEffects } from './buildings';
 import { expansionDay, growStreets, wallGifts } from './growth';
 import { DAYS_PER_MONTH, DAYS_PER_SECOND } from './calendar';
@@ -54,6 +55,7 @@ export function simulateDays(city: CityState, days: number): void {
 
 export function simulateDay(city: CityState): void {
   buildDay(city);
+  armyDay(city);
   expansionDay(city);
   if (city.calendar.day % DAYS_PER_MONTH === 0) closeMonth(city);
   updateStats(city);
@@ -98,7 +100,9 @@ export function updateStats(city: CityState): void {
     growthRate += e.growth ?? 0;
   }
   s.food = foodCapacity(city);
-  const fullness = city.population / Math.max(1, s.food);
+  const soldiers = armyMen(city);
+  // Soldiers eat the city's bread like everyone else.
+  const fullness = (city.population + soldiers) / Math.max(1, s.food);
   const rate = b.tax.rates[city.policy.tax];
   const crowding = (-Math.max(0, city.population - b.order.crowdingFrom) / 1000) * b.order.crowdingPer1000;
   // Hunger costs order for every tenth the city is over what it can feed.
@@ -122,11 +126,13 @@ export function updateStats(city: CityState): void {
   const incomeFactor =
     state === 'isyan' ? b.order.revoltIncome : state === 'huzursuz' ? b.order.unrestIncome : 1;
   const tax = city.population * rate.perHead * (1 + incomePct);
+  const pay = armyPay(city);
   s.income = {
     tax: Math.round(tax * incomeFactor),
     buildings: Math.round(income * incomeFactor),
     upkeep: Math.round(upkeep),
-    total: Math.round((tax + income) * incomeFactor - upkeep),
+    army: pay,
+    total: Math.round((tax + income) * incomeFactor - upkeep - pay),
   };
   s.product = Math.round(product * (state === 'isyan' ? b.order.revoltIncome : 1));
   if (fullness > 1) {
@@ -143,6 +149,7 @@ export function updateStats(city: CityState): void {
       city.population * growthRate * (state === 'huzurlu' ? b.order.calmGrowth : 1) * Math.min(1, room * 4);
   }
   s.works = builders(city).busy;
+  s.army = { men: soldiers, ready: armyMen(city, true), room: armyCapacity(city) };
   s.level = cityRank(city, s.level);
 }
 
@@ -152,12 +159,14 @@ export function updateStats(city: CityState): void {
  */
 export function cityRank(city: CityState, held: number): number {
   const { levels, rankSlack } = city.balance;
+  // The garrison is part of the city it holds.
+  const people = city.population + armyMen(city);
   let level = 0;
   levels.forEach((l, k) => {
-    if (city.population >= l.population) level = k;
+    if (people >= l.population) level = k;
   });
   for (let k = Math.min(held, levels.length - 1); k > level; k--) {
-    if (city.population >= levels[k].population * (1 - rankSlack)) return k;
+    if (people >= levels[k].population * (1 - rankSlack)) return k;
   }
   return level;
 }

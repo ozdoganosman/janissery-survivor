@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { smoothstep } from '../core/geom';
 
-export const ZOOM_MIN = 5;
+export const ZOOM_MIN = 2.5;
 export const ZOOM_MAX = 80;
 /** Camera elevation. Steep enough to read the plan like a miniature, low enough to see façades. */
 const PITCH = (55 * Math.PI) / 180;

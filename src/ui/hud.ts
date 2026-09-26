@@ -1,11 +1,18 @@
-import type { Balance, BuildingKind, TaxRate } from '../sim/balance';
+import type { Balance, BuildingKind, TaxRate, UnitKind } from '../sim/balance';
 import { BUILDING_KINDS, TAX_RATES } from '../sim/balance';
 import { builders, kindCount, kindName, slots, startBlock } from '../sim/buildings';
 import type { ExpansionOffer } from '../sim/growth';
 import type { Speed } from '../sim/calendar';
 import type { CityState, Notice } from '../sim/city';
 import { ORDER_NAMES, orderState, rankFloor } from '../sim/economy';
-import { effectText, priceText, type BuildingSummary, type Readiness, type TileInfo } from '../sim/inspect';
+import {
+  effectText,
+  priceText,
+  type ArmyPanel,
+  type BuildingSummary,
+  type Readiness,
+  type TileInfo,
+} from '../sim/inspect';
 
 export type Tool = 'incele' | 'insa' | 'yik';
 
@@ -17,6 +24,8 @@ export interface HudCallbacks {
   onSell(): void;
   onUpgrade(buildingId: number): void;
   onDemolish(buildingId: number): void;
+  onRecruit(kind: UnitKind): void;
+  onDisband(unitId: number): void;
   onCloseInfo(): void;
   onSave(): void;
   onLoad(slot: SaveSlot): void;
@@ -110,6 +119,8 @@ export class Hud {
   private readonly works: HTMLElement;
   private readonly crews: HTMLElement;
   private readonly crewsNote: HTMLElement;
+  private readonly troops: HTMLElement;
+  private readonly troopsNote: HTMLElement;
   private readonly food: HTMLElement;
   private readonly foodShare: HTMLElement;
   private readonly accounts: HTMLElement;
@@ -204,6 +215,10 @@ export class Hud {
     this.crews = crews;
     this.crewsNote = crewsNote;
     crewsRow.title = 'Ustalar: aynı anda kaç inşaat ya da yükseltme yürüyebileceği';
+    const [troops, troopsNote, troopsRow] = row('Ordu');
+    this.troops = troops;
+    this.troopsNote = troopsNote;
+    troopsRow.title = 'Kışlada konaklayan askerler; kışlanın panelinden asker toplanır';
 
     const tax = el('div', 'policy', '<span class="label">Vergi</span>');
     for (const rate of TAX_RATES) {
@@ -440,6 +455,14 @@ export class Hud {
     this.crewsNote.textContent =
       crew.busy >= crew.max ? 'ustalar dolu' : `${crew.max - crew.busy} usta boşta`;
     this.crewsNote.classList.toggle('bad', crew.busy >= crew.max);
+    const army = s.army;
+    this.troops.textContent = army.room === 0 && army.men === 0 ? '—' : `${fmt(army.men)} er`;
+    this.troopsNote.textContent =
+      army.room === 0 && army.men === 0
+        ? 'kışla yok'
+        : army.men === army.ready
+          ? `yer ${fmt(army.room)}`
+          : `${fmt(army.men - army.ready)} talimde`;
     this.food.textContent = `${fmt(s.food)} kişi`;
     const full = city.population / Math.max(1, s.food);
     this.foodShare.textContent = full > 1 ? 'kıtlık' : `%${Math.round(full * 100)} dolu`;
@@ -462,6 +485,7 @@ export class Hud {
       line('Hane vergisi', s.income.tax) +
       line('Yapılar', s.income.buildings) +
       line('Bakım', -s.income.upkeep) +
+      (s.income.army !== 0 ? line('Ulufe', -s.income.army) : '') +
       line('Toplam', s.income.total, 'total') +
       `<span class="head">${good}</span><span class="head n">${city.def.resource.unit}</span>` +
       line('Şehir ve ocaklar', s.product, 'total') +
@@ -588,6 +612,7 @@ export class Hud {
     this.info.innerHTML = `<h3>${info.title}</h3><dl>${rows.join('')}</dl>`;
     const b = info.building;
     if (b !== undefined) this.info.appendChild(this.ladder(b, pinned));
+    if (info.army !== undefined) this.info.appendChild(this.armySheet(info.army, pinned));
     if (pinned) {
       const close = el('button', 'close btn', '×');
       close.title = 'Kapat (Esc)';
@@ -603,6 +628,59 @@ export class Hud {
     }
     this.info.classList.toggle('pinned', pinned);
     this.info.hidden = false;
+  }
+
+  /**
+   * The barracks' companies and the ones it can raise. Pinned, each company can be sent
+   * home and each kind raised with a button; the reason a kind cannot be raised is shown.
+   */
+  private armySheet(a: ArmyPanel, pinned: boolean): HTMLElement {
+    const box = el('div', 'army');
+    const share = a.room > 0 ? Math.min(100, Math.round((a.men / a.room) * 100)) : 0;
+    box.appendChild(
+      el(
+        'div',
+        'head',
+        `<b>Ordu</b><span>${fmt(a.men)} / ${fmt(a.room)} er${a.pay > 0 ? ` · ulufe ${fmt(a.pay)}/ay` : ''}</span>`,
+      ),
+    );
+    box.appendChild(el('span', 'progress', `<i style="width:${share}%"></i>`));
+    if (a.units.length === 0) box.appendChild(el('div', 'dim', 'Kışla boş: aşağıdan bölük topla.'));
+    for (const u of a.units) {
+      const row = el('div', 'unit');
+      row.appendChild(el('span', 'name', `<b>${u.name}</b> · ${fmt(u.men)} er`));
+      row.appendChild(
+        el(
+          'small',
+          u.monthsLeft === null ? 'ok' : '',
+          u.monthsLeft === null ? 'hazır' : `talimde · ${u.monthsLeft} ay`,
+        ),
+      );
+      if (pinned) {
+        const home = el('button', 'btn disband', 'Terhis');
+        home.title = 'Bölüğü dağıt: askerler evlerine döner';
+        home.addEventListener('click', () => this.cb.onDisband(u.id));
+        row.appendChild(home);
+      }
+      box.appendChild(row);
+    }
+    if (!pinned) return box;
+    box.appendChild(el('div', 'sub', `Asker topla · halk en çok ${fmt(a.levy)} asker verebilir`));
+    for (const o of a.offers) {
+      const go = el(
+        'button',
+        'btn recruit',
+        `<b>${o.name}</b><small>${fmt(o.men)} er · ${fmt(o.cost)} akçe · ${o.months} ay talim · ulufe ${fmt(o.pay)}/ay</small>` +
+          (o.problem !== undefined
+            ? `<small class="${o.locked ? 'need' : 'bad'}">${o.locked ? '🔒 ' : ''}${o.problem}</small>`
+            : ''),
+      );
+      go.title = o.hint;
+      go.disabled = o.problem !== undefined;
+      go.addEventListener('click', () => this.cb.onRecruit(o.kind));
+      box.appendChild(go);
+    }
+    return box;
   }
 
   /**

@@ -6,6 +6,7 @@ import { removeField } from './countryside';
 import { syncHouses } from './housing';
 import { notify } from './notices';
 import { insideWalls } from './walls';
+import { disbandAll } from './army';
 
 /**
  * The buildings the player puts up: anywhere in the city that is free, each with three
@@ -341,6 +342,7 @@ export function demolishBuilding(city: CityState, id: number): number {
   if (b === undefined) return -1;
   const refund = demolishRefund(city, b);
   city.treasury += refund;
+  if (b.kind === 'kisla') disbandAll(city);
   for (const i of b.tiles) city.building[i] = -1;
   city.buildings.delete(id);
   city.revision.buildings++;

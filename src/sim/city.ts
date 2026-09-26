@@ -12,6 +12,7 @@ import { DIRS4 } from './grid';
 import { layLots, syncHouses } from './housing';
 import { generateTerrain, type Terrain } from './terrain';
 import { circleRing, type WallRing } from './walls';
+import { createArmy, type Army } from './army';
 
 import { WALL, WALL_GATE, WALL_NONE } from './constants';
 
@@ -82,6 +83,8 @@ export interface CityState {
   expansion: { built: number; work: { days: number; daysLeft: number } | null };
   /** Streets laid outside the walls as the people spilled out, in the planned order. */
   streetsLaid: number;
+  /** The soldiers the barracks has raised. */
+  army: Army;
   balance: Balance;
   /** Akçe in the treasury. */
   treasury: number;
@@ -98,7 +101,14 @@ export interface CityState {
   /** The rank and the mood last told to the player, so each change is told once. */
   announced: { level: number; order: OrderState };
   /** Bumped whenever a layer changes, so views know to rebuild. */
-  revision: { roads: number; houses: number; buildings: number; fields: number; walls: number };
+  revision: {
+    roads: number;
+    houses: number;
+    buildings: number;
+    fields: number;
+    walls: number;
+    army: number;
+  };
 }
 
 export interface CityStats {
@@ -116,7 +126,7 @@ export interface CityStats {
   /** Index into `balance.levels`. */
   level: number;
   /** What a month brings at today's figures; `total` is after upkeep. */
-  income: { tax: number; buildings: number; upkeep: number; total: number };
+  income: { tax: number; buildings: number; upkeep: number; army: number; total: number };
   /** People the city can feed. */
   food: number;
   product: number;
@@ -125,6 +135,8 @@ export interface CityStats {
   last: { income: number; product: number; growth: number };
   /** Building works under way. */
   works: number;
+  /** Men under arms, those of them ready, and what the barracks can quarter. */
+  army: { men: number; ready: number; room: number };
 }
 
 export type NoticeKind = 'info' | 'good' | 'bad';
@@ -173,6 +185,7 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
     gates: [],
     rings: [circleRing('Sur', def.tepe.x, def.tepe.z, def.walls.radius, def.walls.height)],
     expansion: { built: 0, work: null },
+    army: createArmy(),
     streetsLaid: 0,
     balance,
     treasury: balance.start.treasury,
@@ -184,16 +197,17 @@ export function createCity(rawDef: CityDef, balance: Balance): CityState {
       order: 0,
       orderParts: { base: 0, tax: 0, buildings: 0, walls: 0, crowding: 0, food: 0, debt: 0 },
       level: 0,
-      income: { tax: 0, buildings: 0, upkeep: 0, total: 0 },
+      income: { tax: 0, buildings: 0, upkeep: 0, army: 0, total: 0 },
       food: 0,
       product: 0,
       growth: 0,
       last: { income: 0, product: 0, growth: 0 },
       works: 0,
+      army: { men: 0, ready: 0, room: 0 },
     },
     notices: [],
     announced: { level: 0, order: 'sakin' },
-    revision: { roads: 0, houses: 0, buildings: 0, fields: 0, walls: 0 },
+    revision: { roads: 0, houses: 0, buildings: 0, fields: 0, walls: 0, army: 0 },
   };
   const rng = createRng(def.seed);
   // Gate passages and the streets are generated once; nothing in play removes them.

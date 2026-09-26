@@ -142,12 +142,43 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await clickCentre(page);
   await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(2);
 
+  // A barracks outside the walls raises a company from its panel, and the men are drawn
+  // in its ranks, one figure for every man.
+  await page.locator('.toolbar button[data-tool="insa"]').click();
+  await page.locator('.buildbar button[data-kind="kisla"]').click();
+  await page.evaluate(() => {
+    const c = window.__game!.city;
+    c.treasury = 1e5;
+    c.product = 1e4;
+  });
+  await lookAtSite(page, [44, 6]);
+  await clickCentre(page);
+  await expect.poll(() => page.evaluate(() => window.__game!.city.buildings.size)).toBe(3);
+  const barracks = await page.evaluate(() => {
+    const g = window.__game!;
+    const b = [...g.city.buildings.values()].find((x) => x.kind === 'kisla')!;
+    g.fastForward(b.work!.daysLeft);
+    g.select({ x: b.x0 + 1, z: b.z0 + 1 });
+    return { x: g.city.grid.centre(b.x0) + b.w / 2, z: g.city.grid.centre(b.z0) + b.d / 2 };
+  });
+  await expect(page.locator('.info.pinned .army')).toBeVisible();
+  await page.locator('.info .army .recruit').first().click();
+  await expect.poll(() => page.evaluate(() => window.__game!.city.army.units.length)).toBe(1);
+  await page.evaluate((p) => {
+    const rig = window.__game!.world.rig;
+    rig.setView(p.x, p.z, 8, 0.5);
+    rig.snap();
+  }, barracks);
+  await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(100);
+  await expect(page.locator('.ledger')).toContainText('100 er');
+
   // The menu keeps the city and brings it back.
   await page.getByRole('button', { name: 'Menü' }).click();
   await page.locator('.menu [data-action="kaydet"]').click();
   const kept = await page.evaluate(() => ({
     akce: window.__game!.city.treasury,
     buildings: window.__game!.city.buildings.size,
+    army: window.__game!.city.army.units.length,
   }));
   await page.evaluate(() => {
     window.__game!.city.treasury = 1;
@@ -155,6 +186,7 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await page.locator('.menu [data-action="yukle"]').click();
   await expect.poll(() => page.evaluate(() => window.__game!.city.treasury)).toBe(kept.akce);
   expect(await page.evaluate(() => window.__game!.city.buildings.size)).toBe(kept.buildings);
+  expect(await page.evaluate(() => window.__game!.city.army.units.length)).toBe(kept.army);
   // The save also leaves as a file.
   await page.getByRole('button', { name: 'Menü' }).click();
   const [file] = await Promise.all([

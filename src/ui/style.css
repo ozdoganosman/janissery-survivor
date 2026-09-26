@@ -514,6 +514,8 @@ body {
 /* The menu under the clock: saves, a new game, music. */
 .menu {
   position: absolute;
+  /* Above a tall pinned panel, which may reach up beside it. */
+  z-index: 6;
   top: 58px;
   left: 12px;
   display: grid;
@@ -608,6 +610,9 @@ body {
 
 .info.pinned {
   padding-top: 12px;
+  /* A barracks full of companies makes a long panel; it scrolls rather than overflow. */
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
 }
 
 .info .close {
@@ -1297,4 +1302,92 @@ body {
     font-size: 11px;
     padding: 0 5px 1px;
   }
+}
+
+/* The barracks' companies in its panel, and the buttons that raise them. */
+.info .army {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gold);
+  font-size: 12.5px;
+}
+
+.info .army .head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.info .army .progress {
+  display: block;
+  height: 6px;
+  border: 1px solid var(--ink);
+  background: var(--parchment-dark);
+}
+
+.info .army .progress i {
+  display: block;
+  height: 100%;
+  background: var(--banner, #a8261c);
+}
+
+.info .army .unit {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.info .army .unit .ok {
+  color: #2f5a1c;
+  font-weight: 600;
+}
+
+.info .army .disband {
+  padding: 1px 6px;
+  font-size: 11.5px;
+}
+
+.info .army .sub {
+  margin-top: 4px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.info .army .recruit {
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+  padding: 3px 8px;
+  text-align: left;
+  border-color: var(--gold);
+  background: var(--lapis);
+  color: var(--parchment);
+}
+
+.info .army .recruit small {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.info .army .recruit:disabled {
+  background: transparent;
+  color: var(--ink);
+  cursor: default;
+}
+
+.info .army .recruit:disabled > b,
+.info .army .recruit:disabled > small:first-of-type {
+  opacity: 0.55;
+}
+
+.info .army .recruit small.bad {
+  color: var(--red);
+  opacity: 1;
+}
+
+.info .army .recruit small.need {
+  opacity: 0.8;
 }

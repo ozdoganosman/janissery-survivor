@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { BuildingKind, TaxRate } from './sim/balance';
+import type { BuildingKind, TaxRate, UnitKind } from './sim/balance';
+import { disband, recruit } from './sim/army';
 import {
   buildBuilding,
   builders,
@@ -110,6 +111,8 @@ export class Game {
       onSell: () => this.sell(),
       onUpgrade: (id) => this.upgrade(id),
       onDemolish: (id) => this.demolish(id),
+      onRecruit: (kind) => this.recruit(kind),
+      onDisband: (id) => this.disband(id),
       onCloseInfo: () => this.select(null),
       onSave: () => this.save('kayit'),
       onLoad: (slot) => this.load(slot),
@@ -230,6 +233,22 @@ export class Game {
   upgrade(id: number): boolean {
     const ok = upgradeBuilding(this.city, id);
     if (ok) this.sound.play('upgrade');
+    this.changed();
+    return ok;
+  }
+
+  /** Raises a company of soldiers at the barracks. */
+  recruit(kind: UnitKind): boolean {
+    const ok = recruit(this.city, kind) !== null;
+    if (ok) this.sound.play('build');
+    this.changed();
+    return ok;
+  }
+
+  /** Sends a company home. */
+  disband(id: number): boolean {
+    const ok = disband(this.city, id);
+    if (ok) this.sound.play('demolish');
     this.changed();
     return ok;
   }
