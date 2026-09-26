@@ -87,6 +87,7 @@ export class Game {
   private last = performance.now();
   /** Months since the calendar began, to notice a month turning. */
   private month = -1;
+  private battleFault = false;
   /** On a touch screen the first tap shows what would happen; a second tap there does it. */
   private pendingTap: { x: number; z: number; tool: Tool } | null = null;
   private settings: Settings;
@@ -181,7 +182,13 @@ export class Game {
     this.elapsed += dt;
     this.applyKeys(dt);
     const days = stepTime(this.city, dt);
-    this.battle(dt);
+    // A fault in the battle must not stop the city from being drawn: it is told, once.
+    try {
+      this.battle(dt);
+    } catch (e) {
+      if (!this.battleFault) console.error(e);
+      this.battleFault = true;
+    }
     const month = Math.floor(this.city.calendar.day / DAYS_PER_MONTH);
     if (month !== this.month) {
       // A month has closed: the treasury rings, and the game keeps its own save.

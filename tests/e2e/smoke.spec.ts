@@ -171,6 +171,23 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   }, barracks);
   await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(100);
   await expect(page.locator('.ledger')).toContainText('100 er');
+  // More taburs: those already in the barracks shift over to make room for them, and the
+  // game goes on drawing all the while; sent home again, the rest shift back.
+  await page.evaluate(() => window.__game!.recruit('okcu', 1));
+  await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(200);
+  // Spearmen stand before archers: the archers step aside for the new tabur.
+  await page.evaluate(() => window.__game!.recruit('mizrakci', 1));
+  await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(300);
+  expect(await page.evaluate(() => window.__game!.world.army.marching)).toBeGreaterThan(0);
+  const moved = await page.evaluate(() => window.__game!.frames);
+  await expect
+    .poll(() => page.evaluate(() => window.__game!.frames), { timeout: 30_000 })
+    .toBeGreaterThan(moved + 3);
+  await page.evaluate(() => {
+    window.__game!.disband('mizrakci');
+    window.__game!.disband('okcu');
+  });
+  await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(100);
 
   // Drilled, the company is chosen from the barracks panel and a right click on the map
   // sends it marching out of the gate.

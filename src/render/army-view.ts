@@ -1005,6 +1005,9 @@ class March {
 
   /** The way the company faces now. */
   heading(): number {
+    // Crossing the parade ground, or a step or two in the field: it turns as it goes.
+    if (this.path === null)
+      return lerpAngle(this.fromHeading, this.to.heading, ease01(this.t / this.marchTime));
     this.pose();
     return this.q.heading;
   }

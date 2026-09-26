@@ -703,7 +703,16 @@ export class SoldierCrowd {
     for (const set of [geoms, coarse]) {
       for (const [part, g] of Object.entries(set)) if (!this.meshOf.has(part as PartName)) g.dispose();
     }
-    const color = new THREE.Color();
+    // Colours are parsed once each, not once for every part of every man.
+    const colors = new Map<string, THREE.Color>();
+    const colorOf = (hex: string): THREE.Color => {
+      let c = colors.get(hex);
+      if (c === undefined) {
+        c = new THREE.Color(hex);
+        colors.set(hex, c);
+      }
+      return c;
+    };
     soldiers.forEach((s, i) => {
       const { look, parts } = this.rigs[i];
       const pick = (list: readonly string[], salt: number): string =>
@@ -736,7 +745,7 @@ export class SoldierCrowd {
                               : part === 'spear' || part === 'lance' || part === 'bow' || part === 'arrow'
                                 ? WOOD
                                 : IRON;
-        this.meshes[this.slotMesh[i][k]].setColorAt(this.slotAt[i][k], color.set(c));
+        this.meshes[this.slotMesh[i][k]].setColorAt(this.slotAt[i][k], colorOf(c));
       });
     });
     for (const mesh of this.meshes) {
