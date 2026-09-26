@@ -3,9 +3,9 @@ import { destroyUnit, type Unit } from './army';
 import type { EnemyDef, EnemyKind, FighterDef, FormationKind } from './balance';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
-import { axes, companySize, formationCols, haltOrder, marchOrder, returnOrder } from './field';
+import { axes, companySize, formationCols, marchOrder, returnOrder } from './field';
 import { notify } from './notices';
-import { findPath } from './paths';
+import { findPath, standGround } from './paths';
 import { wallDepth } from './walls';
 
 /**
@@ -71,10 +71,15 @@ export interface Fighter {
   contact: number;
   charged: boolean;
   wound: number;
-  /** It has been halted, or turned, for the fight it is in. */
-  halted: boolean;
-  faced: boolean;
   shot: boolean;
+  /**
+   * Where it stands while the battle moves it itself, stepping after its foe or pressing
+   * into the fight, rather than marching where it was sent; null while it marches.
+   */
+  pos: { x: number; z: number; heading: number } | null;
+  /** It moved this step; seconds it has got no nearer where it is going. */
+  moving: boolean;
+  stuck: number;
 }
 
 export interface War {
@@ -134,6 +139,10 @@ const CONTACT = 0.45;
 const TURN = 2.2;
 /** Seconds raiders on their way off take at most before they are gone. */
 const FLEE_MOST = 90;
+/** How near its foe a tabur marching against it is taken in hand by the battle (tiles). */
+const TAKE = 24;
+/** Seconds a tabur in hand may make no headway before it goes the long way round. */
+const STUCK = 2;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
@@ -440,7 +449,7 @@ function blockOfUnit(city: CityState, u: Unit, at: Whereabouts): Block {
 }
 
 /** How far a point is from a block's ground (0 inside it). */
-function gapTo(b: Block, x: number, z: number): number {
+export function gapTo(b: Block, x: number, z: number): number {
   const a = axes(b.heading);
   const dx = x - b.x;
   const dz = z - b.z;
@@ -515,26 +524,12 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
 
   // Our taburs in the field join the battle; those back in the barracks leave it.
   const ours: Array<{ u: Unit; f: Fighter; at: Whereabouts; b: Block }> = [];
-  for (const [id, at] of where) {
+  for (const [id, seen] of where) {
     const u = units.get(id);
     if (u === undefined || u.drill !== null) continue;
-    let f = war.fighters[id] as Fighter | undefined;
-    if (f === undefined) {
-      f = {
-        morale: maxMorale(city, city.balance.army.units[u.kind]),
-        state: 'idle',
-        target: null,
-        order: null,
-        sent: null,
-        contact: -1,
-        charged: false,
-        wound: 0,
-        halted: false,
-        faced: false,
-        shot: false,
-      };
-      war.fighters[id] = f;
-    }
+    const f = (war.fighters[id] ??= newFighter(city, u));
+    // Taburs the battle moves itself are where it has them; the rest where they are seen.
+    const at: Whereabouts = f.pos !== null ? { ...f.pos, moving: f.moving } : seen;
     ours.push({ u, f, at, b: blockOfUnit(city, u, at) });
   }
   for (const key of Object.keys(war.fighters)) {
@@ -546,6 +541,7 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
   const standing = ours.filter((o) => o.f.state !== 'rout');
 
   // --- the raiders' minds and feet
+  let searches = 1;
   const raidPace = Math.min(
     ...war.foes.filter((f) => f.state === 'advance').map((f) => wd.enemies[f.kind].march),
     Infinity,
@@ -565,11 +561,13 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
     foe.shot = false;
     if (foe.state === 'rout' || foe.state === 'withdraw') {
       const speed = def.march * (foe.state === 'rout' ? wd.combat.routSpeed : 1);
-      foe.way ??= findPath(city, foe, war.exit, { gates: false }) ?? [
-        [foe.x, foe.z],
-        [war.exit.x, war.exit.z],
-      ];
-      followWay(city, foe, foe.way, speed * dt, TURN * dt);
+      // Straight off where the land allows; else the way round, one search a step.
+      if (foe.way === undefined && clearLine(city, foe, war.exit)) foe.way = [[war.exit.x, war.exit.z]];
+      else if (foe.way === undefined && searches-- > 0) {
+        foe.way = findPath(city, foe, war.exit, { gates: false }) ?? [[war.exit.x, war.exit.z]];
+      }
+      if (foe.way === undefined) stepToward(city, foe, war.exit.x, war.exit.z, speed * dt, TURN * dt);
+      else followWay(city, foe, foe.way, speed * dt, TURN * dt);
       foe.target = null;
       foe.fleeing += dt;
       continue;
@@ -658,20 +656,21 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
     }
   }
 
-  // --- our taburs: what they do where the army view has them
-  const chases = new Map<number, Array<(typeof ours)[number]>>();
+  // --- our taburs: those at blows or sent against a raider are moved by the battle itself,
+  // step by step, the rest march as the army view has them
   for (const o of ours) {
-    const { u, f, at, b } = o;
+    const { u, f } = o;
     const def = city.balance.army.units[u.kind];
     f.shot = false;
+    f.moving = false;
     if (f.state === 'rout') continue;
     if (f.order !== null && !foeById.has(f.order.foe)) f.order = null;
-    // At blows with a raider: fight it, stopped where it stands, and turned to face it.
+    // At blows with a raider: stopped in its march, it presses in and turns to face it.
     let blow: Foe | null = null;
     let blowD = Infinity;
     for (const foe of war.foes) {
-      const d = Math.hypot(foe.x - at.x, foe.z - at.z);
-      if (d < blowD && touching(b, blocks.get(foe.id)!)) {
+      const d = Math.hypot(foe.x - o.at.x, foe.z - o.at.z);
+      if (d < blowD && touching(o.b, blocks.get(foe.id)!)) {
         blow = foe;
         blowD = d;
       }
@@ -679,33 +678,23 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
     if (blow !== null) {
       if (f.state !== 'fight') {
         f.contact = 0;
-        f.charged = at.moving;
-        f.halted = false;
-        f.faced = false;
+        f.charged = o.at.moving;
       }
       f.state = 'fight';
       f.target = blow.id;
-      if (at.moving && !f.halted) {
-        f.halted = true;
-        haltOrder(city, new Map([[u.id, at]]));
-      } else if (!at.moving && !f.faced && f.contact > 1.5) {
-        f.faced = true;
-        const face = angleTo(at.x, at.z, blow.x, blow.z);
-        if (Math.abs(turnToward(at.heading, face, Math.PI) - at.heading) > 0.8 && u.field !== null) {
-          u.field = { ...u.field, heading: face };
-          city.revision.army++;
-        }
-      }
+      const pos = take(city, o);
+      const p = contactPoint(blocks.get(blow.id)!, pos.x, pos.z, o.b.d);
+      steer(city, o, p.x, p.z, def.march * 0.4 * dt, TURN * dt, angleTo(pos.x, pos.z, blow.x, blow.z));
       continue;
     }
     f.contact = -1;
     const reach = range(city, def);
     // Archers shoot at the foe they were sent against if it is in range, else the nearest.
-    if (reach > 0 && !at.moving) {
+    if (reach > 0 && (!o.at.moving || f.pos !== null)) {
       let aim: Foe | null = null;
       let aimD = Infinity;
       for (const foe of war.foes) {
-        const d = Math.hypot(foe.x - at.x, foe.z - at.z);
+        const d = Math.hypot(foe.x - o.at.x, foe.z - o.at.z);
         if (d > reach) continue;
         const pref = f.order?.foe === foe.id ? -1000 : foe.state === 'rout' ? 50 : 0;
         if (d + pref < aimD) {
@@ -716,17 +705,22 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
       if (aim !== null) {
         f.state = 'shoot';
         f.target = aim.id;
+        if (f.pos !== null)
+          steer(city, o, f.pos.x, f.pos.z, 0, TURN * dt, angleTo(o.at.x, o.at.z, aim.x, aim.z));
         continue;
       }
     }
-    // Men at ease go for raiders who come near; those sent against one go after it.
-    if (f.order === null && !at.moving && reach === 0) {
+    // Men at ease go for raiders who come near, and for those shooting at them that they
+    // could catch: footmen go for footmen, riders for anyone.
+    if (f.order === null && !o.at.moving && reach === 0) {
       let near: Foe | null = null;
-      let nearD = wd.combat.guard;
+      let nearD = Infinity;
       for (const foe of war.foes) {
         if (foe.state === 'rout') continue;
-        const d = Math.hypot(foe.x - at.x, foe.z - at.z);
-        if (d < nearD) {
+        const d = Math.hypot(foe.x - o.at.x, foe.z - o.at.z);
+        const shooting = foe.state === 'shoot' && foe.target === u.id && d < wd.combat.aware;
+        const catchable = def.horse || !wd.enemies[foe.kind].horse;
+        if ((d < wd.combat.guard || (shooting && catchable)) && d < nearD) {
           nearD = d;
           near = foe;
         }
@@ -734,45 +728,56 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
       if (near !== null) f.order = { foe: near.id, auto: true };
     }
     f.target = null;
-    f.state = at.moving ? 'move' : 'idle';
-    if (f.order !== null) {
-      const list = chases.get(f.order.foe) ?? [];
-      list.push(o);
-      chases.set(f.order.foe, list);
+    f.state = o.at.moving ? 'move' : 'idle';
+    if (f.order === null) continue;
+    // Sent against a raider: from afar by the march, the long way round if need be; near
+    // it, straight at it, at a run for the last stretch, until the two are at blows.
+    const foe = foeById.get(f.order.foe)!;
+    const d = Math.hypot(foe.x - o.at.x, foe.z - o.at.z);
+    if (f.pos === null && d > TAKE) {
+      const last = f.sent;
+      const moved = last === null || Math.hypot(last.x - foe.x, last.z - foe.z) > 6;
+      if (!o.at.moving && moved && (last === null || war.time - last.time > 3)) {
+        marchOrder(city, [u.id], foe.x, foe.z, angleTo(o.at.x, o.at.z, foe.x, foe.z));
+        f.sent = { x: foe.x, z: foe.z, time: war.time };
+      }
+      continue;
+    }
+    const pos = take(city, o);
+    let to: { x: number; z: number };
+    if (reach > 0) {
+      const face = angleTo(pos.x, pos.z, foe.x, foe.z);
+      const stand = Math.max(0, d - reach * 0.8);
+      to = { x: pos.x + Math.sin(face) * stand, z: pos.z + Math.cos(face) * stand };
+    } else to = contactPoint(blocks.get(foe.id)!, pos.x, pos.z, o.b.d);
+    const before = Math.hypot(to.x - pos.x, to.z - pos.z);
+    const fast = reach === 0 && d < 8 ? wd.combat.chargeSpeed : 1;
+    steer(
+      city,
+      o,
+      to.x,
+      to.z,
+      def.march * fast * dt,
+      TURN * dt,
+      before < 1.5 ? angleTo(pos.x, pos.z, foe.x, foe.z) : null,
+    );
+    if (f.moving) f.state = 'move';
+    // Walled off from it: the way round, by a march; the battle takes it again when near.
+    f.stuck = before > 1 && Math.hypot(to.x - pos.x, to.z - pos.z) > before - 0.02 * dt ? f.stuck + dt : 0;
+    if (f.stuck > STUCK) {
+      f.stuck = 0;
+      f.pos = null;
+      marchOrder(city, [u.id], to.x, to.z, angleTo(to.x, to.z, foe.x, foe.z));
+      f.sent = { x: foe.x, z: foe.z, time: war.time };
     }
   }
-  // Those sent against one raider go together, drawn up to meet it.
-  for (const [foeId, list] of chases) {
-    const foe = foeById.get(foeId)!;
-    const fb = blocks.get(foeId)!;
-    let cx = 0;
-    let cz = 0;
-    for (const o of list) {
-      cx += o.at.x;
-      cz += o.at.z;
-    }
-    cx /= list.length;
-    cz /= list.length;
-    const shooters = list.every((o) => city.balance.army.units[o.u.kind].missile > 0);
-    let to: { x: number; z: number; heading: number };
-    if (shooters) {
-      const reach = Math.min(...list.map((o) => range(city, city.balance.army.units[o.u.kind])));
-      const d = Math.hypot(cx - foe.x, cz - foe.z);
-      const face = angleTo(cx, cz, foe.x, foe.z);
-      const stand = Math.max(0, d - reach * 0.75);
-      to = { x: cx + Math.sin(face) * stand, z: cz + Math.cos(face) * stand, heading: face };
-    } else {
-      const depth = Math.max(...list.map((o) => o.b.d));
-      to = contactPoint(fb, cx, cz, depth);
-      to.heading = angleTo(to.x, to.z, foe.x, foe.z);
-    }
-    const last = list[0].f.sent;
-    const stale = last === null || Math.hypot(last.x - to.x, last.z - to.z) > 1.5 || war.time - last.time > 4;
-    if (!stale) continue;
-    if (last !== null && war.time - last.time < 1) continue;
-    const ids = list.map((o) => o.u.id);
-    marchOrder(city, ids, to.x, to.z, to.heading);
-    for (const o of list) o.f.sent = { x: to.x, z: to.z, time: war.time };
+  // Blocks the battle moves do not stand in one another: those that crowd are eased apart.
+  const held = ours.filter((o) => o.f.pos !== null);
+  for (let i = 0; i < held.length; i++) {
+    for (let j = i + 1; j < held.length; j++) ease(city, held[i], held[j], dt);
+  }
+  for (let i = 0; i < war.foes.length; i++) {
+    for (let j = i + 1; j < war.foes.length; j++) easeFoes(city, war.foes[i], war.foes[j], blocks, dt);
   }
 
   // --- blows and arrows
@@ -884,6 +889,7 @@ export function warStep(city: CityState, dt: number, where: ReadonlyMap<number, 
     f.state = 'rout';
     f.target = null;
     f.order = null;
+    f.pos = null;
     returnOrder(city, [o.u.id]);
     notify(city, `${city.balance.army.units[o.u.kind].name} taburu bozguna uğradı, kışlaya kaçıyor.`, 'bad');
     for (const other of ours) {
@@ -944,47 +950,177 @@ function endWar(city: CityState): void {
   } else {
     notify(city, `Zafer! ${war.name} püskürtüldü. ${tally}; ganimet ${fmt(loot)} akçe.`, 'good');
   }
-  // Our taburs out in the field stand down.
+  // Our taburs out in the field stand down where the battle left them.
   city.war = null;
   city.revision.army++;
 }
 
-/** Sends our taburs against a raider tabur. */
+function newFighter(city: CityState, u: Unit): Fighter {
+  return {
+    morale: maxMorale(city, city.balance.army.units[u.kind]),
+    state: 'idle',
+    target: null,
+    order: null,
+    sent: null,
+    contact: -1,
+    charged: false,
+    wound: 0,
+    shot: false,
+    pos: null,
+    moving: false,
+    stuck: 0,
+  };
+}
+
+interface Ours {
+  u: Unit;
+  f: Fighter;
+  at: Whereabouts;
+  b: Block;
+}
+
+/**
+ * Takes one of our taburs in hand: from now the battle moves it, from where it is seen,
+ * and whatever march it was on is over.
+ */
+function take(city: CityState, o: Ours): { x: number; z: number; heading: number } {
+  const f = o.f;
+  if (f.pos !== null) return f.pos;
+  f.pos = { x: o.at.x, z: o.at.z, heading: o.at.heading };
+  o.u.field = { x: o.at.x, z: o.at.z, heading: o.at.heading, formation: o.u.field?.formation ?? 'kare' };
+  city.revision.army++;
+  return f.pos;
+}
+
+/**
+ * Moves a tabur in hand up to `most` tiles toward a point, round what is in the way, and
+ * turns it by up to `turn` radians: toward `face` if given, else the way it goes. Its post
+ * in the field follows it, without a march.
+ */
+function steer(
+  city: CityState,
+  o: Ours,
+  x: number,
+  z: number,
+  most: number,
+  turn: number,
+  face: number | null,
+): void {
+  const pos = o.f.pos!;
+  const d = Math.hypot(x - pos.x, z - pos.z);
+  let heading = face;
+  if (d > 0.03 && most > 0) {
+    const want = angleTo(pos.x, pos.z, x, z);
+    const step = Math.min(d, most);
+    for (const aside of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+      const h = want + aside;
+      const nx = pos.x + Math.sin(h) * step;
+      const nz = pos.z + Math.cos(h) * step;
+      if (!ourGround(city, nx, nz)) continue;
+      pos.x = nx;
+      pos.z = nz;
+      o.f.moving = step > 1e-3;
+      heading ??= h;
+      break;
+    }
+  }
+  if (heading !== null) pos.heading = turnToward(pos.heading, heading, turn);
+  const field = o.u.field;
+  if (field !== null) {
+    field.x = pos.x;
+    field.z = pos.z;
+    field.heading = pos.heading;
+  }
+  o.at = { ...pos, moving: o.f.moving };
+}
+
+/** Whether our taburs may stand at a point: open ground or a street, gates and all. */
+function ourGround(city: CityState, x: number, z: number): boolean {
+  const { grid } = city;
+  const tx = grid.tileOf(x);
+  const tz = grid.tileOf(z);
+  return grid.inBounds(tx, tz) && standGround(city, grid.index(tx, tz));
+}
+
+/** Whether raiders could go straight from one point to another. */
+function clearLine(city: CityState, a: { x: number; z: number }, b: { x: number; z: number }): boolean {
+  const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z));
+  for (let k = 1; k <= n; k++) {
+    if (!foeGround(city, a.x + ((b.x - a.x) * k) / n, a.z + ((b.z - a.z) * k) / n)) return false;
+  }
+  return true;
+}
+
+/** Eases apart two of our blocks in hand when either stands in the other. */
+function ease(city: CityState, a: Ours, b: Ours, dt: number): void {
+  const pa = a.f.pos!;
+  const pb = b.f.pos!;
+  const inside = gapTo(b.b, pa.x, pa.z) < 0.05 || gapTo(a.b, pb.x, pb.z) < 0.05;
+  if (!inside) return;
+  const d = Math.hypot(pa.x - pb.x, pa.z - pb.z) || 0.01;
+  const push = Math.min(0.6 * dt, 0.3);
+  const ux = (pa.x - pb.x) / d;
+  const uz = (pa.z - pb.z) / d;
+  if (ourGround(city, pa.x + ux * push, pa.z + uz * push)) {
+    pa.x += ux * push;
+    pa.z += uz * push;
+  }
+  if (ourGround(city, pb.x - ux * push, pb.z - uz * push)) {
+    pb.x -= ux * push;
+    pb.z -= uz * push;
+  }
+  for (const o of [a, b]) {
+    const field = o.u.field;
+    if (field === null) continue;
+    field.x = o.f.pos!.x;
+    field.z = o.f.pos!.z;
+  }
+}
+
+/** Eases apart two raider blocks when either stands in the other. */
+function easeFoes(city: CityState, a: Foe, b: Foe, blocks: Map<number, Block>, dt: number): void {
+  const ba = blocks.get(a.id);
+  const bb = blocks.get(b.id);
+  if (ba === undefined || bb === undefined) return;
+  if (gapTo(bb, a.x, a.z) >= 0.05 && gapTo(ba, b.x, b.z) >= 0.05) return;
+  const d = Math.hypot(a.x - b.x, a.z - b.z) || 0.01;
+  const push = Math.min(0.6 * dt, 0.3);
+  const ux = (a.x - b.x) / d;
+  const uz = (a.z - b.z) / d;
+  if (foeGround(city, a.x + ux * push, a.z + uz * push)) {
+    a.x += ux * push;
+    a.z += uz * push;
+  }
+  if (foeGround(city, b.x - ux * push, b.z - uz * push)) {
+    b.x -= ux * push;
+    b.z -= uz * push;
+  }
+}
+
+/**
+ * Sends our taburs against a raider tabur: they march toward it, and the battle takes them
+ * in hand when they are near.
+ */
 export function attackOrder(city: CityState, ids: readonly number[], foe: number): number {
   const war = city.war;
-  if (war === null || !war.foes.some((f) => f.id === foe)) return 0;
-  let n = 0;
+  const target = war?.foes.find((f) => f.id === foe);
+  if (war === null || target === undefined) return 0;
+  const sent: number[] = [];
   for (const id of ids) {
     const u = city.army.units.find((x) => x.id === id);
     if (u === undefined || u.drill !== null) continue;
-    const f = war.fighters[id] as Fighter | undefined;
-    if (f?.state === 'rout') continue;
-    if (f !== undefined) {
-      f.order = { foe, auto: false };
-      f.sent = null;
-    } else {
-      // Not yet in the battle: it will be as soon as it leaves the barracks.
-      war.fighters[id] = {
-        morale: maxMorale(city, city.balance.army.units[u.kind]),
-        state: 'idle',
-        target: null,
-        order: { foe, auto: false },
-        sent: null,
-        contact: -1,
-        charged: false,
-        wound: 0,
-        halted: false,
-        faced: false,
-        shot: false,
-      };
-    }
-    n++;
+    const f = (war.fighters[id] ??= newFighter(city, u));
+    if (f.state === 'rout') continue;
+    f.order = { foe, auto: false };
+    f.sent = { x: target.x, z: target.z, time: war.time };
+    f.stuck = 0;
+    // Those the battle already has in hand go straight at it; the rest march toward it.
+    if (f.pos === null) sent.push(id);
   }
-  // Out of the barracks towards it, at once.
-  const target = war.foes.find((f) => f.id === foe)!;
-  const home = ids.filter((id) => city.army.units.find((u) => u.id === id)?.field === null);
-  if (home.length > 0) marchOrder(city, home, target.x, target.z, angleTo(0, 0, target.x, target.z));
-  return n;
+  if (sent.length > 0) {
+    marchOrder(city, sent, target.x, target.z, angleTo(0, 0, target.x, target.z));
+  }
+  return ids.filter((id) => war.fighters[id]?.order?.foe === foe).length;
 }
 
 /** Our taburs given other orders stop going after whatever they were sent against. */
@@ -996,6 +1132,11 @@ export function dropAttack(city: CityState, ids: readonly number[]): void {
     if (f === undefined) continue;
     f.order = null;
     f.sent = null;
+    // Out of the battle's hands: it marches again where it is sent.
+    if (f.pos !== null) {
+      f.pos = null;
+      city.revision.army++;
+    }
   }
 }
 

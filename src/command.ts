@@ -428,12 +428,14 @@ export class Commander {
   }
 
   turn(by: number): number {
+    dropAttack(this.city, this.chosen());
     const n = faceOrder(this.city, this.chosen(), by);
     if (n > 0) this.play('click');
     return n;
   }
 
   formation(f: FormationKind): number {
+    dropAttack(this.city, this.chosen());
     const n = formationOrder(this.city, this.chosen(), f);
     if (n === 0) this.say('Önce taburları sahaya çıkar.', 'info');
     else this.play('click');

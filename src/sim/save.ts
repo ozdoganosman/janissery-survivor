@@ -310,8 +310,12 @@ function restoreWar(city: CityState, w: War | null | undefined): War | null {
   if (foes.length === 0 || w.way.length < 2) return null;
   const units = new Set(city.army.units.map((u) => u.id));
   const fighters: Record<number, Fighter> = {};
-  for (const [id, f] of Object.entries(w.fighters))
-    if (units.has(Number(id))) fighters[Number(id)] = { ...f, target: null };
+  for (const [id, f] of Object.entries(w.fighters)) {
+    if (!units.has(Number(id))) continue;
+    const at = f.pos as Fighter['pos'] | undefined;
+    const pos = at != null && [at.x, at.z, at.heading].every(finite) ? { ...at } : null;
+    fighters[Number(id)] = { ...f, target: null, pos, moving: false, stuck: 0 };
+  }
   return {
     ...w,
     foes,

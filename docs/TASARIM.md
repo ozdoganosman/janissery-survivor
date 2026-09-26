@@ -307,10 +307,21 @@ hızın yirmide biri), oyun hızlıysa normal hıza iner. Kurallar `src/sim/war.
   - biriyle göğüs göğüse gelen durur ve ona döner.
 - **Bizim taburlar:** sahadaki her tabur savaşa girer. Okçular menzildeki (yaya 12, atlı
   10 karo) en yakın düşmana, gönderildikleri düşman menzildeyse ona ok atar. Boşta duran
-  yakın dövüşçüler 6 karodan yakına gelen düşmana kendiliğinden saldırır. **Düşmana sağ
+  yakın dövüşçüler 6 karodan yakına gelen düşmana, ayrıca kendilerine ok atan ve
+  yetişebilecekleri düşmana (yaya yayaya, atlı herkese) kendiliğinden saldırır. **Düşmana sağ
   tık** (ya da düşman sancağına tık) seçili taburları ona gönderir: yakın dövüşçüler onun
   yanına varıp çarpışır, okçular menzile girip durur. Yürüyen tabura düşman değerse tabur
   durup dövüşür, bir süre sonra ona döner. Başka bir emir saldırı emrini kaldırır.
+- **Savaşta hareket:** düşmana gönderilen tabur ona yaklaşınca (24 karo), düşmanla göğüs
+  göğüse gelen tabur da hemen **savaşın elinde** yürür: her adımda düşmanın o anki yerine
+  doğru, yeniden emir, yol arama ya da "dön, biçim al, yürü" animasyonu olmadan. Uzaktaki
+  düşmana önce yürüyüşle (gerekirse dolanarak) gidilir; önü kapanan tabur iki saniye yol
+  alamazsa dolanmak için yine yürüyüşe geçer. Savaşın elindeki bloklar ve düşman blokları
+  birbirinin içine girmez, itişerek ayrılır. Oyuncunun verdiği her yürüme, durma, dönme ya
+  da düzen emri taburu savaşın elinden alır.
+- **Erler kalıp gibi değil:** savaşta her er bloktaki yerine kendi hızıyla yetişir; blok
+  yürürken eğilip bükülür, durunca toparlanır. Çarpışmada düşmana yakın erler ona dalar
+  ve ileri geri dalgalanır, ön saflar iç içe girer; geridekiler düşmana döner.
 - **Çarpışma:** her tabur bir bloktur. Ok: saniyede atıcı sayısı × ok değeri × 0,0025 ×
   uzaklık payı (menzilin sonunda %60) ÷ (1 + savunma × 0,15); kalkanlı yayaya önden gelen
   okun %60'ı işler. Yakın dövüş: saniyede en çok 30 er × yakın dövüş × 0,009 ÷ (1 + savunma

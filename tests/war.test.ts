@@ -136,6 +136,30 @@ describe('battle', () => {
     expect(foeAt(c, foe.x, foe.z, 0.1)?.id).toBe(foe.id);
   });
 
+  it('moves taburs near their foe itself, step by step, without new marches, until they are at blows', () => {
+    const c = withArmy({ mizrakci: 2 });
+    const w = raid(c, 1, 1, 0);
+    fight(c, 20);
+    const foe = w.foes[0];
+    const ids = c.army.units.map((u) => u.id);
+    attackOrder(c, ids, foe.id);
+    // Out of the barracks, near it: taken in hand.
+    warStep(c, 0.1, where(c));
+    expect(ids.every((id) => c.war!.fighters[id].pos !== null)).toBe(true);
+    const revision = c.revision.army;
+    let met = false;
+    fight(c, 30, (city) => {
+      if (ids.some((id) => city.war?.fighters[id]?.state === 'fight')) met = true;
+    });
+    expect(met).toBe(true);
+    // No march was ordered for each step of the way: only a few changes of state.
+    expect(c.revision.army - revision).toBeLessThan(6);
+    // Held where the battle has them: the post in the field follows.
+    const u = c.army.units[0];
+    const f = c.war?.fighters[u.id];
+    if (f?.pos != null) expect(Math.hypot(u.field!.x - f.pos.x, u.field!.z - f.pos.z)).toBeLessThan(1e-6);
+  });
+
   it('breaks the morale of the outnumbered, who run for the barracks', () => {
     const c = withArmy({ mizrakci: 1 });
     const w = raid(c, 8, 1, 0);

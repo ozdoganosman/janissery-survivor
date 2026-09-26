@@ -3,7 +3,7 @@ import { smoothstep } from '../core/geom';
 import { hash2 } from '../core/rng';
 import { barracksOf, type Unit } from '../sim/army';
 import { UNIT_KINDS, type UnitDef } from '../sim/balance';
-import { BATTLE_PACE } from '../sim/war';
+import { BATTLE_PACE, foeGroundOf, gapTo, type Fighter, type Foe } from '../sim/war';
 import type { CityState } from '../sim/city';
 import { axes, companySize, fieldPoint, formationCols, slotOf } from '../sim/field';
 import { findPath } from '../sim/paths';
@@ -133,11 +133,14 @@ export class ArmyView {
   /** Men of the crowd who have fallen, and the fallen of earlier crowds, lying where they fell. */
   private dead = new Uint8Array(0);
   private corpses: Soldier[] = [];
-  private corpseCrowd: SoldierCrowd | null = null;
+  /** The fallen are drawn in a few batches, each laid down once, merged when there are many. */
+  private corpseCrowds: SoldierCrowd[] = [];
   /** Seconds since the last battle ended. */
   private peace = 0;
   /** Where each archer shooting at a raider aims, per soldier. */
   private aims: Array<THREE.Vector3 | undefined> = [];
+  /** Seconds of battle drawn, for the surge of men at blows. */
+  private clock = 0;
 
   constructor(private readonly city: CityState) {
     this.sync();
@@ -236,7 +239,12 @@ export class ArmyView {
             : this.blockStation(u, def, blockOf.get(u.id)!);
       const before = this.stations.get(u.id);
       let march = this.marches.get(u.id) ?? null;
-      if (before !== undefined && before.key !== station.key) {
+      // A company the battle moves itself marches nowhere: its men follow it step by step.
+      const held = c.war?.fighters[u.id]?.pos != null;
+      if (held) {
+        march = null;
+        this.marches.delete(u.id);
+      } else if (before !== undefined && before.key !== station.key) {
         const from = now.get(u.id) ?? { xs: before.xs, zs: before.zs };
         // It sets off facing the way it faces now, even if it was on the march.
         const facing = march !== null && !march.done ? march.heading() : before.heading;
@@ -259,7 +267,7 @@ export class ArmyView {
         fighting: false,
       };
       // In a battle every company out of the barracks may fight at any moment.
-      const war = c.war !== null && u.field !== null;
+      const war = c.war !== null && (u.field !== null || march !== null);
       entries.push({ co, live: march !== null || lane >= 0 || (drilling && isLive(rest)) || war });
     }
     for (const id of [...this.stations.keys()]) {
@@ -354,17 +362,12 @@ export class ArmyView {
     const crowd = this.crowd;
     this.lastScale = -1;
     if (crowd === null) return;
-    let fell = false;
+    const fell: Soldier[] = [];
     for (let i = 0; i < crowd.soldiers.length; i++) {
       if (this.dead[i] !== 1) continue;
-      const s = crowd.soldiers[i];
-      this.corpses.push({ ...s, anim: 'fall', t: 5, aim: null });
-      fell = true;
+      fell.push({ ...crowd.soldiers[i], anim: 'fall', t: 5, aim: null });
     }
-    if (fell) {
-      if (this.corpses.length > MOST_CORPSES) this.corpses.splice(0, this.corpses.length - MOST_CORPSES);
-      this.layCorpses();
-    }
+    if (fell.length > 0) this.addCorpses(fell);
     this.group.remove(crowd.group);
     crowd.dispose();
     this.crowd = null;
@@ -372,17 +375,32 @@ export class ArmyView {
     this.byId.clear();
   }
 
-  /** Draws the fallen again, all lying still. */
-  private layCorpses(): void {
-    if (this.corpseCrowd !== null) {
-      this.group.remove(this.corpseCrowd.group);
-      this.corpseCrowd.dispose();
-      this.corpseCrowd = null;
+  /** Lays newly fallen men on the field: a batch of their own, or all in one if many. */
+  private addCorpses(fell: Soldier[]): void {
+    this.corpses.push(...fell);
+    if (this.corpses.length > MOST_CORPSES) this.corpses.splice(0, this.corpses.length - MOST_CORPSES);
+    if (this.corpseCrowds.length >= 6) {
+      this.layCorpses();
+      return;
     }
+    const batch = new SoldierCrowd(fell, 0);
+    this.group.add(batch.group);
+    batch.update(Math.max(1, this.lastScale));
+    this.corpseCrowds.push(batch);
+  }
+
+  /** Draws all the fallen again in one batch, or none. */
+  private layCorpses(): void {
+    for (const c of this.corpseCrowds) {
+      this.group.remove(c.group);
+      c.dispose();
+    }
+    this.corpseCrowds = [];
     if (this.corpses.length === 0) return;
-    this.corpseCrowd = new SoldierCrowd(this.corpses, 0);
-    this.group.add(this.corpseCrowd.group);
-    this.corpseCrowd.update(Math.max(1, this.lastScale));
+    const all = new SoldierCrowd(this.corpses, 0);
+    this.group.add(all.group);
+    all.update(Math.max(1, this.lastScale));
+    this.corpseCrowds.push(all);
   }
 
   /** Moves the drill and the marches on and redraws the men, when they are in sight. */
@@ -390,6 +408,7 @@ export class ArmyView {
     const crowd = this.crowd;
     const pace = BATTLE_PACE[this.city.calendar.speed];
     const step = Math.min(dt, 0.1) * pace;
+    this.clock += step;
     // The fallen are taken off the field a while after the battle.
     if (this.city.war !== null) this.peace = 0;
     else if (this.corpses.length > 0 && (this.peace += dt) > CORPSES_STAY) {
@@ -426,7 +445,7 @@ export class ArmyView {
     this.lastScale = scale;
     if (rescaled) {
       crowd.update(scale);
-      this.corpseCrowd?.update(scale);
+      for (const c of this.corpseCrowds) c.update(scale);
       return;
     }
     // Everyone who moves, and one slice of the men at ease.
@@ -619,6 +638,11 @@ export class ArmyView {
     // back is out in the field.
     const fromHome = this.inBarracks(fx, fz);
     if (fromHome && to.home) return new March(def, u.men, from, facing, to, null, def.march);
+    // A step or two in the field, as when a battle leaves a company where it stands: the
+    // men just walk to their places.
+    if (!fromHome && !to.home && Math.hypot(to.x - fx, to.z - fz) < 1.2) {
+      return new March(def, u.men, from, facing, to, null, def.march);
+    }
     const lay = this.lay!;
     // Through the gate, and out past the edge of the barracks' ground, where the way begins.
     const gateIn = this.toWorld(0, lay.wall.z1 - 0.8, 0);
@@ -678,6 +702,11 @@ export class ArmyView {
       }
       const f = war?.fighters[co.unit.id];
       const foe = f?.target != null ? foes?.get(f.target) : undefined;
+      if (f?.pos != null) {
+        this.follow(co, f, f.pos, foe, alive, step);
+        co.fighting = true;
+        continue;
+      }
       const fighting = m === null && foe !== undefined && (f?.state === 'fight' || f?.state === 'shoot');
       const shooting = fighting && f?.state === 'shoot';
       const blow = fighting ? fightAnim(co.def, shooting) : co.rest;
@@ -722,6 +751,90 @@ export class ArmyView {
         }
       }
       co.fighting = fighting;
+    }
+  }
+
+  /**
+   * A company the battle moves itself: each man makes for his place in the ranks about
+   * where it stands now, at his own pace, so the block bends and ripples as it goes and
+   * closes up again when it stops. At blows the men nearest the foe press into it and
+   * surge back and forth; the rest face it. Archers loose from where they stand.
+   */
+  private follow(
+    co: Company,
+    f: Fighter,
+    pos: { x: number; z: number; heading: number },
+    foe: Foe | undefined,
+    alive: number,
+    step: number,
+  ): void {
+    const crowd = this.crowd!;
+    const def = co.def;
+    const cols = formationCols(this.city, co.unit.field?.formation ?? 'kare', co.drawn);
+    const a = axes(pos.heading);
+    const fighting = f.state === 'fight' && foe !== undefined;
+    const shooting = f.state === 'shoot' && foe !== undefined;
+    const ground = fighting ? foeGroundOf(this.city, foe) : null;
+    const walk: Anim = def.horse
+      ? f.moving && def.march >= 1.5
+        ? 'gallop'
+        : 'ride'
+      : f.moving && f.order !== null
+        ? 'charge'
+        : 'march';
+    const blow = fighting || shooting ? fightAnim(def, shooting) : co.rest;
+    const most = def.march * 2.4 * step;
+    for (let k = 0; k < alive; k++) {
+      const i = co.start + k;
+      const s = crowd.soldiers[i];
+      const [r, fw] = slotOf(def, co.drawn, cols, k);
+      const jr = (s.seed - 0.5) * def.file * 0.3;
+      let tx = pos.x + a.rx * (r + jr) + a.fx * fw;
+      let tz = pos.z + a.rz * (r + jr) + a.fz * fw;
+      if (ground !== null && foe !== undefined) {
+        // The men nearest the foe press into it.
+        const gap = gapTo(ground, tx, tz);
+        if (gap < 1.4) {
+          const dx = foe.x - tx;
+          const dz = foe.z - tz;
+          const len = Math.hypot(dx, dz) || 1;
+          const press =
+            (0.25 + 0.25 * s.seed) * (1 - gap / 1.4) + Math.sin(this.clock * 2.6 + s.seed * 6.28) * 0.08;
+          tx += (dx / len) * press;
+          tz += (dz / len) * press;
+        }
+      }
+      const dx = tx - s.x;
+      const dz = tz - s.z;
+      const d = Math.hypot(dx, dz);
+      const reach = most * (0.8 + 0.4 * hash2(i, 9, 37));
+      if (d > reach) {
+        s.x += (dx / d) * reach;
+        s.z += (dz / d) * reach;
+      } else {
+        s.x = tx;
+        s.z = tz;
+      }
+      s.y = this.groundY(s.x, s.z);
+      if ((fighting || shooting) && foe !== undefined) {
+        s.anim = d > 0.35 ? walk : blow;
+        s.heading = Math.atan2(foe.x - s.x, foe.z - s.z) + (s.seed - 0.5) * 0.35;
+        if (shooting) {
+          const aim = (this.aims[i] ??= new THREE.Vector3());
+          const jx = (hash2(i, 3, 41) - 0.5) * 1.6;
+          const jz = (hash2(i, 5, 43) - 0.5) * 1.6;
+          aim.set(foe.x + jx, this.groundY(foe.x + jx, foe.z + jz) + 0.1, foe.z + jz);
+          s.aim = aim;
+        } else s.aim = null;
+      } else if (d > 0.08) {
+        s.anim = walk;
+        s.heading = lerpAngle(s.heading, Math.atan2(dx, dz), 0.35);
+        s.aim = null;
+      } else {
+        s.anim = co.rest;
+        s.heading = lerpAngle(s.heading, pos.heading, 0.25);
+        s.aim = null;
+      }
     }
   }
 
