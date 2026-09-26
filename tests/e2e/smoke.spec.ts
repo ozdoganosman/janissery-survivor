@@ -197,6 +197,18 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   await page.mouse.click(view.x + view.width / 2, view.y + view.height / 2, { button: 'right' });
   await expect.poll(() => page.evaluate(() => window.__game!.city.army.units[0].field !== null)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__game!.world.army.marching)).toBe(1);
+  // Dragged with the right button, the front is drawn: the company turns square to it.
+  const sent = await page.evaluate(() => window.__game!.city.army.units[0].field!.heading);
+  await page.mouse.move(view.x + view.width * 0.4, view.y + view.height * 0.55);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(view.x + view.width * 0.5, view.y + view.height * 0.35, { steps: 4 });
+  await page.mouse.move(view.x + view.width * 0.6, view.y + view.height * 0.15, { steps: 4 });
+  await page.mouse.up({ button: 'right' });
+  await expect
+    .poll(() =>
+      page.evaluate((h) => Math.abs(window.__game!.city.army.units[0].field!.heading - h) > 0.2, sent),
+    )
+    .toBe(true);
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 

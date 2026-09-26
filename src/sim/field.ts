@@ -22,6 +22,9 @@ export interface FieldPost {
 
 /** Companies are laid in lines no wider than this (tiles); more stand in lines behind. */
 const LINE_WIDTH = 24;
+/** The widest front a player may draw, and the most room left between companies in it. */
+const MAX_FRONT = 60;
+const MAX_SPREAD = 3;
 /** Room between companies side by side, and between lines. */
 const GAP = 0.5;
 
@@ -104,15 +107,63 @@ export function marchOrder(
   x: number,
   z: number,
   heading: number,
-  formation?: FormationKind,
+  opts: MarchOptions = {},
 ): OrderResult {
+  const r = planMarch(city, ids, x, z, heading, opts);
+  const byId = new Map(city.army.units.map((u) => [u.id, u]));
+  for (const p of r.plan) {
+    byId.get(p.id)!.field = { x: p.x, z: p.z, heading: p.heading, formation: p.formation };
+  }
+  if (r.plan.length > 0) city.revision.army++;
+  return {
+    moved: r.plan.length,
+    drilling: r.drilling,
+    ...(r.problem !== undefined ? { problem: r.problem } : {}),
+  };
+}
+
+/** How an army is to be drawn up: the companies' formation, and the width of its front. */
+export interface MarchOptions {
+  formation?: FormationKind;
+  /**
+   * Width of the front line, in tiles, as the player drew it: as many companies as fit
+   * stand in it, spread out along it if there are few. Unset, the army is drawn up about
+   * twice as wide as deep.
+   */
+  width?: number;
+}
+
+/** Where one company of an order would stand, and the ground it would cover. */
+export interface MarchPlace {
+  id: number;
+  x: number;
+  z: number;
+  heading: number;
+  formation: FormationKind;
+  w: number;
+  d: number;
+}
+
+/** The places an order would give the companies, without giving it. */
+export function planMarch(
+  city: CityState,
+  ids: readonly number[],
+  x: number,
+  z: number,
+  heading: number,
+  opts: MarchOptions = {},
+): { plan: MarchPlace[]; drilling: number; problem?: string } {
+  const formation = opts.formation;
   const units = unitsOf(city, ids);
   const ready = units.filter((u) => u.drill === null);
-  const out: OrderResult = { moved: 0, drilling: units.length - ready.length };
+  const drilling = units.length - ready.length;
+  const plan: MarchPlace[] = [];
   const origin = standable(city, x, z) ? nearestGround(city, x, z) : null;
-  if (origin === null) return { ...out, problem: 'Oraya yürünmez' };
+  if (origin === null) return { plan, drilling, problem: 'Oraya yürünmez' };
   if (ready.length === 0) {
-    return out.drilling > 0 ? { ...out, problem: 'Talimdeki bölük kışladan çıkamaz' } : out;
+    return drilling > 0
+      ? { plan, drilling, problem: 'Talimdeki bölük kışladan çıkamaz' }
+      : { plan, drilling };
   }
   const defs = city.balance.army.units;
   const placed = ready.map((u) => {
@@ -120,13 +171,18 @@ export function marchOrder(
     const size = companySize(defs[u.kind], u.men, formationCols(city, f, u.men));
     return { u, f, ...size };
   });
-  // Lines of about the square root of twice the companies: an army twice as wide as deep.
-  const perLine = Math.min(placed.length, Math.ceil(Math.sqrt(placed.length * 2)));
+  // Lines as wide as the player drew the front; else of about the square root of twice the
+  // companies, an army twice as wide as deep.
+  const front = opts.width === undefined ? LINE_WIDTH : Math.max(0, Math.min(MAX_FRONT, opts.width));
+  const perLine =
+    opts.width === undefined
+      ? Math.min(placed.length, Math.ceil(Math.sqrt(placed.length * 2)))
+      : placed.length;
   const lines: Array<typeof placed> = [[]];
   let width = 0;
   for (const p of placed) {
     const line = lines[lines.length - 1];
-    if (line.length > 0 && (line.length >= perLine || width + GAP + p.w > LINE_WIDTH)) {
+    if (line.length > 0 && (line.length >= perLine || width + GAP + p.w > front)) {
       lines.push([p]);
       width = p.w;
     } else {
@@ -167,14 +223,20 @@ export function marchOrder(
     );
   let back = 0;
   for (const line of lines) {
-    const total = line.reduce((n, p) => n + p.w, 0) + GAP * (line.length - 1);
+    const sum = line.reduce((n, p) => n + p.w, 0);
+    // A front drawn wider than the line needs: the companies spread out along it.
+    const gap =
+      opts.width !== undefined && line.length > 1
+        ? Math.min(MAX_SPREAD, Math.max(GAP, (front - sum) / (line.length - 1)))
+        : GAP;
+    const total = sum + gap * (line.length - 1);
     const depth = Math.max(...line.map((p) => p.d));
     let across = -total / 2;
     for (const p of line) {
       // Its place in the lines; each line's front rank is level.
       const r0 = across + p.w / 2;
       const f0 = -back - p.d / 2;
-      across += p.w + GAP;
+      across += p.w + gap;
       let spot: [number, number] | null = null;
       for (const [i, j] of RINGS) {
         const r = r0 + i * (p.w + GAP) * 0.5;
@@ -187,12 +249,11 @@ export function marchOrder(
       const [r, f] = spot ?? [r0, f0];
       taken.push({ r, f, w: p.w, d: p.d });
       const [px, pz] = world(r, f);
-      p.u.field = { x: px, z: pz, heading, formation: p.f };
+      plan.push({ id: p.u.id, x: px, z: pz, heading, formation: p.f, w: p.w, d: p.d });
     }
     back += depth + GAP;
   }
-  city.revision.army++;
-  return { ...out, moved: ready.length };
+  return { plan, drilling };
 }
 
 /** Points over a company's ground checked for clear footing, as shares of its size. */
@@ -280,7 +341,7 @@ export function formationOrder(city: CityState, ids: readonly number[], formatio
     fx,
     fz,
     centre.heading,
-    formation,
+    { formation },
   ).moved;
 }
 

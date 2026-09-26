@@ -3,9 +3,11 @@ import { WALL } from './constants';
 
 /**
  * Ways across the map for troops on the march. A company keeps to the streets and the open
- * country: it does not walk through houses, buildings or monuments, crosses a wall only at
- * a gate and the stream only where a road bridges it. The ground a march starts and ends
- * on is always allowed, so a company can leave the barracks and stand anywhere dry.
+ * country: it does not walk through houses, buildings (its own barracks included, which it
+ * leaves and enters by the gate) or monuments, crosses a wall only at a gate and the stream
+ * only where a road bridges it. A company is a block of men a tile or more across, so the
+ * way keeps a couple of tiles clear of all of these wherever the land allows. The ground a
+ * march starts and ends on is always allowed.
  */
 
 /** What stepping onto a tile costs, or Infinity where troops cannot go. */
@@ -14,8 +16,7 @@ export function marchCost(city: CityState, i: number): number {
   if (city.terrain.water[i] === 1) return Infinity;
   if (city.wall[i] === WALL) return Infinity;
   if (city.structure[i] >= 0) return Infinity;
-  const b = city.building[i];
-  if (b >= 0) return city.buildings.get(b)?.kind === 'kisla' ? 3 : Infinity;
+  if (city.building[i] >= 0) return Infinity;
   if (city.house[i] > 0) return Infinity;
   return city.field[i] >= 0 ? 1.6 : 1.3;
 }
@@ -30,27 +31,59 @@ export function standGround(city: CityState, i: number): boolean {
   return city.building[i] < 0 && passable(city, i);
 }
 
+/** Tiles from each tile to the nearest one troops cannot cross, counted up to this many. */
+const CLEAR_MAX = 4;
+/** The clearance a march keeps where it can, and what each tile short of it costs. */
+const CLEAR_WANT = 2.5;
+const CLEAR_COST = 1.5;
+
+const clearances = new WeakMap<CityState, { key: string; field: Uint8Array }>();
+
 /**
- * Extra cost of a tile hard by something troops cannot cross: a company is a block of men
- * a tile or two across, so the way keeps to open ground where it can and squeezes along
- * walls and between houses only where it must.
+ * For every tile, how many tiles away the nearest ground troops cannot cross is (1 beside
+ * it), up to CLEAR_MAX. Worked out again whenever the city's buildings, houses, roads or
+ * walls change.
  */
-function crowding(city: CityState, i: number): number {
+export function clearance(city: CityState): Uint8Array {
+  const r = city.revision;
+  const key = `${r.buildings}:${r.houses}:${r.roads}:${r.walls}`;
+  const known = clearances.get(city);
+  if (known !== undefined && known.key === key) return known.field;
   const n = city.grid.size;
-  const x = i % n;
-  const z = Math.floor(i / n);
-  for (const [dx, dz] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ]) {
-    const nx = x + dx;
-    const nz = z + dz;
-    if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
-    if (!passable(city, nz * n + nx)) return 1.2;
+  const field = new Uint8Array(n * n).fill(CLEAR_MAX);
+  let front: number[] = [];
+  for (let i = 0; i < n * n; i++) {
+    if (!passable(city, i)) {
+      field[i] = 0;
+      front.push(i);
+    }
   }
-  return 0;
+  for (let d = 1; d < CLEAR_MAX && front.length > 0; d++) {
+    const next: number[] = [];
+    for (const i of front) {
+      const x = i % n;
+      const z = Math.floor(i / n);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const nz = z + dz;
+          if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
+          const j = nz * n + nx;
+          if (field[j] <= d) continue;
+          field[j] = d;
+          next.push(j);
+        }
+      }
+    }
+    front = next;
+  }
+  clearances.set(city, { key, field });
+  return field;
+}
+
+/** Extra cost of a tile too close to something a block of men cannot pass. */
+function crowding(clear: Uint8Array, i: number): number {
+  return Math.max(0, CLEAR_WANT - clear[i]) * CLEAR_COST;
 }
 
 /**
@@ -110,8 +143,9 @@ export function findPath(
   const tz = clampTile(to.z);
   const start = sz * n + sx;
   const goal = tz * n + tx;
+  const clear = clearance(city);
   const cost = (i: number): number =>
-    i === start || i === goal ? 1 : marchCost(city, i) + crowding(city, i);
+    i === start || i === goal ? 1 : marchCost(city, i) + crowding(clear, i);
   if (start === goal)
     return [
       [from.x, from.z],
@@ -167,15 +201,24 @@ export function findPath(
   return simplify(city, pts);
 }
 
-/** Drops the turns a straight walk would not need: string-pulling along clear ground. */
+/**
+ * Drops the turns a straight walk would not need: string-pulling, but only along ground at
+ * least as clear of obstacles as the way it replaces (up to a couple of tiles), so a
+ * straightened march does not scrape along walls the search took care to keep off.
+ */
 function simplify(city: CityState, pts: Array<[number, number]>): Array<[number, number]> {
   if (pts.length <= 2) return pts;
+  const { grid } = city;
+  const field = clearance(city);
+  const room = pts.map(([x, z]) => field[grid.index(grid.tileOf(x), grid.tileOf(z))]);
   const out: Array<[number, number]> = [pts[0]];
   let k = 0;
   while (k < pts.length - 1) {
     let far = k + 1;
     for (let j = pts.length - 1; j > k + 1; j--) {
-      if (clear(city, pts[k], pts[j])) {
+      let need = 2;
+      for (let m = k + 1; m < j; m++) need = Math.min(need, room[m]);
+      if (clear(city, field, pts[k], pts[j], need)) {
         far = j;
         break;
       }
@@ -186,8 +229,14 @@ function simplify(city: CityState, pts: Array<[number, number]>): Array<[number,
   return out;
 }
 
-/** Whether a straight walk between two points keeps to ground troops may cross. */
-function clear(city: CityState, a: [number, number], b: [number, number]): boolean {
+/** Whether a straight walk between two points keeps at least `need` tiles clear of obstacles. */
+function clear(
+  city: CityState,
+  field: Uint8Array,
+  a: [number, number],
+  b: [number, number],
+  need: number,
+): boolean {
   const { grid } = city;
   const steps = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.35);
   const first = grid.index(grid.tileOf(a[0]), grid.tileOf(a[1]));
@@ -198,7 +247,7 @@ function clear(city: CityState, a: [number, number], b: [number, number]): boole
     if (!grid.inBounds(x, z)) return false;
     const i = grid.index(x, z);
     if (i === first || i === last) continue;
-    if (!passable(city, i)) return false;
+    if (field[i] < need) return false;
   }
   return true;
 }

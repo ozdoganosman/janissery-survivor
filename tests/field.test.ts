@@ -3,6 +3,7 @@ import { barracksOf, recruitMany } from '../src/sim/army';
 import { buildBuilding } from '../src/sim/buildings';
 import { WALL } from '../src/sim/constants';
 import type { CityState } from '../src/sim/city';
+import type { Building } from '../src/sim/buildings';
 import { simulateDays } from '../src/sim/economy';
 import {
   axes,
@@ -15,7 +16,7 @@ import {
   returnOrder,
   slotOf,
 } from '../src/sim/field';
-import { findPath, marchCost } from '../src/sim/paths';
+import { clearance, findPath, marchCost, standGround } from '../src/sim/paths';
 import { restoreGame, saveGame } from '../src/sim/save';
 import { insideWalls } from '../src/sim/walls';
 import { balance, def, newCity, siteFor } from './helpers';
@@ -32,6 +33,25 @@ function withArmy(n: number, drilled = true): CityState {
   recruitMany(c, 'mizrakci', n);
   if (drilled) simulateDays(c, units.mizrakci.months * 30);
   return c;
+}
+
+/**
+ * Open ground just off the barracks' own: on its near side (`side` 0) or its far side (1),
+ * along its longer axis.
+ */
+function outside(c: CityState, b: Building, side: 0 | 1): { x: number; z: number } {
+  const { grid } = c;
+  const long = b.w >= b.d;
+  for (let off = 2; off < 12; off++) {
+    for (let t = 0; t < (long ? b.d : b.w); t++) {
+      const x = long ? (side === 0 ? b.x0 - off : b.x0 + b.w - 1 + off) : b.x0 + t;
+      const z = long ? b.z0 + t : side === 0 ? b.z0 - off : b.z0 + b.d - 1 + off;
+      if (!grid.inBounds(x, z)) continue;
+      const i = grid.index(x, z);
+      if (standGround(c, i) && clearance(c)[i] >= 2) return { x: grid.centre(x), z: grid.centre(z) };
+    }
+  }
+  throw new Error('no open ground by the barracks');
 }
 
 /** A dry, open spot outside the walls, east of the city. */
@@ -102,7 +122,7 @@ describe('orders', () => {
   it('draws up in many lines when the army is too wide for one', () => {
     const c = withArmy(40);
     const ids = c.army.units.map((u) => u.id);
-    marchOrder(c, ids, OPEN.x, OPEN.z, 0, 'saf');
+    marchOrder(c, ids, OPEN.x, OPEN.z, 0, { formation: 'saf' });
     const forward = c.army.units.map((u) => Math.round((u.field!.z - OPEN.z) * 10));
     expect(new Set(forward).size).toBeGreaterThan(1);
   });
@@ -185,6 +205,26 @@ describe('orders', () => {
     for (const u of c.army.units) expect(insideWalls(c, u.field!.x, u.field!.z)).toBe(false);
   });
 
+  it('draws up along a front of the width the player drew, facing square to it', () => {
+    const c = withArmy(6);
+    const ids = c.army.units.map((u) => u.id);
+    // A wide front: all six in one line, spread out along it.
+    marchOrder(c, ids, OPEN.x, OPEN.z, Math.PI / 2, { width: 16 });
+    const a = axes(Math.PI / 2);
+    const across = c.army.units.map((u) => (u.field!.x - OPEN.x) * a.rx + (u.field!.z - OPEN.z) * a.rz);
+    const ahead = c.army.units.map((u) => (u.field!.x - OPEN.x) * a.fx + (u.field!.z - OPEN.z) * a.fz);
+    const w = companySize(units.mizrakci, 100, 10).w;
+    expect(Math.max(...across) - Math.min(...across) + w).toBeCloseTo(16, 0);
+    expect(new Set(ahead.map((f) => Math.round(f * 10))).size).toBe(1);
+    for (const u of c.army.units) expect(u.field!.heading).toBeCloseTo(Math.PI / 2);
+    // A narrow front: two abreast, three deep.
+    marchOrder(c, ids, OPEN.x, OPEN.z, Math.PI / 2, { width: 2 * w + 0.6 });
+    const deep = c.army.units.map((u) =>
+      Math.round(((u.field!.x - OPEN.x) * a.fx + (u.field!.z - OPEN.z) * a.fz) * 10),
+    );
+    expect(new Set(deep).size).toBe(3);
+  });
+
   it('comes back from a save where it was sent', () => {
     const c = withArmy(2);
     marchOrder(
@@ -193,7 +233,7 @@ describe('orders', () => {
       OPEN.x,
       OPEN.z,
       0.7,
-      'kol',
+      { formation: 'kol' },
     );
     const back = restoreGame(def, balance, JSON.parse(JSON.stringify(saveGame(c))));
     expect(back.army).toEqual(c.army);
@@ -201,10 +241,10 @@ describe('orders', () => {
 });
 
 describe('the way there', () => {
-  it('leaves the barracks, goes round the houses and through a gate, never over a wall', () => {
+  it('goes from outside the barracks round the houses and through a gate, never over a wall', () => {
     const c = withArmy(1);
     const b = barracksOf(c)!;
-    const from = { x: c.grid.centre(b.x0 + b.w / 2), z: c.grid.centre(b.z0 + b.d / 2) };
+    const from = outside(c, b, 0);
     // Into the heart of the city, inside the walls.
     const to = { x: 2, z: 10 };
     const path = findPath(c, from, to)!;
@@ -222,6 +262,28 @@ describe('the way there', () => {
           grid.tileOf(az + ((bz - az) * s) / steps),
         );
         expect(c.wall[i]).not.toBe(WALL);
+      }
+    }
+  });
+
+  it('goes round the barracks, never through it', () => {
+    const c = withArmy(1);
+    const b = barracksOf(c)!;
+    const { grid } = c;
+    const a = outside(c, b, 0);
+    const z = outside(c, b, 1);
+    const path = findPath(c, a, z)!;
+    expect(path).not.toBeNull();
+    for (let k = 1; k < path.length; k++) {
+      const [ax, az] = path[k - 1];
+      const [bx, bz] = path[k];
+      const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25);
+      for (let s = 0; s <= steps; s++) {
+        const i = grid.index(
+          grid.tileOf(ax + ((bx - ax) * s) / steps),
+          grid.tileOf(az + ((bz - az) * s) / steps),
+        );
+        expect(c.building[i]).not.toBe(b.id);
       }
     }
   });

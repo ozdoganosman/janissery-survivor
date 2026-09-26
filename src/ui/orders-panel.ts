@@ -163,7 +163,7 @@ export class OrdersPanel {
         'tips',
         v.touch
           ? 'Bölüğe dokun: seç · Boş yere dokun: oraya yürü'
-          : 'Tıkla ya da sürükle: seç · Shift: ekle · Çift tık: aynı türü seç<br>Sağ tık: oraya yürü',
+          : 'Tıkla ya da sürükle: seç · Shift: ekle · Çift tık: aynı türü seç<br>Sağ tık: oraya yürü · Sağ tuşla sürükle: cepheyi çiz (hiza ve genişlik)',
       ),
     );
   }

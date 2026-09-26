@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { FORMATION_KINDS, UNIT_KINDS, type FormationKind, type UnitKind } from './sim/balance';
 import type { CityState, Notice } from './sim/city';
-import { axes, faceOrder, formationOrder, haltOrder, marchOrder, returnOrder } from './sim/field';
+import { axes, faceOrder, formationOrder, haltOrder, marchOrder, planMarch, returnOrder } from './sim/field';
 import { sampleHeight } from './sim/terrain';
 import type { Cue } from './audio/sound';
+import type { Footprint } from './render/army-view';
 import type { World } from './render/world';
 import type { ArmyCommand, CompanyPlace, OrdersPanel, OrdersView } from './ui/orders-panel';
+
+/** A right drag shorter than this (tiles) is a click; the front is redrawn this often (ms). */
+const MIN_FRONT = 0.8;
+const FRONT_EVERY = 60;
 
 /** Two clicks on a company this close together (ms) choose every company of its kind. */
 const DOUBLE_CLICK = 350;
@@ -21,6 +26,9 @@ const FLAG_HEIGHT = 1.1;
 export class Commander {
   readonly selection = new Set<number>();
   private lastClick = { id: -1, time: 0 };
+  /** The front being drawn with a right drag, as the companies would stand on it. */
+  private preview: Footprint[] = [];
+  private previewAt = { time: 0, x: NaN, z: NaN };
   private readonly v = new THREE.Vector3();
 
   constructor(
@@ -154,6 +162,68 @@ export class Commander {
     return r.moved > 0;
   }
 
+  /**
+   * The front line a right drag draws, from where the button went down to where it is now:
+   * the army's front rank runs along it, left to right, and it faces square to it, away
+   * from whoever drew it left to right. Shown, not yet ordered.
+   */
+  drawFront(a: { x: number; z: number }, b: { x: number; z: number }): void {
+    const now = performance.now();
+    const moved = Math.hypot(b.x - this.previewAt.x, b.z - this.previewAt.z);
+    // Worked out afresh as the pointer moves, but not more often than the eye can follow.
+    if (now - this.previewAt.time < FRONT_EVERY && moved < 0.5) return;
+    this.previewAt = { time: now, x: b.x, z: b.z };
+    const f = this.frontOf(a, b);
+    if (f === null) {
+      this.preview = [];
+      return;
+    }
+    const r = planMarch(this.city, f.ids, f.x, f.z, f.heading, { width: f.width });
+    this.preview = r.plan.map((p) => ({ x: p.x, z: p.z, heading: p.heading, w: p.w, d: p.d }));
+  }
+
+  /** Stops showing the front being drawn. */
+  dropFront(): void {
+    this.preview = [];
+    this.previewAt = { time: 0, x: NaN, z: NaN };
+  }
+
+  /** Sends the chosen companies to stand along the front drawn from `a` to `b`. */
+  marchFront(a: { x: number; z: number }, b: { x: number; z: number }): boolean {
+    this.dropFront();
+    const f = this.frontOf(a, b);
+    if (f === null) return this.marchTo(a.x, a.z);
+    const r = marchOrder(this.city, f.ids, f.x, f.z, f.heading, { width: f.width });
+    if (r.problem !== undefined) {
+      this.say(r.problem, 'bad');
+      return false;
+    }
+    if (r.drilling > 0) this.say(`${r.drilling} bölük talimde, kışlada kaldı.`, 'info');
+    this.play('click');
+    return r.moved > 0;
+  }
+
+  /** The chosen companies, left to right as they stand, and the front from `a` to `b`. */
+  private frontOf(
+    a: { x: number; z: number },
+    b: { x: number; z: number },
+  ): { ids: number[]; x: number; z: number; heading: number; width: number } | null {
+    const ids = this.chosen();
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (ids.length === 0 || len < MIN_FRONT) return null;
+    // Along the front is the army's right hand; its heading follows from that.
+    const rx = (b.x - a.x) / len;
+    const rz = (b.z - a.z) / len;
+    const heading = Math.atan2(rz, -rx);
+    const at = ids.map((id) => ({ id, p: this.world.army.anchor(id) }));
+    at.sort((p, q) => {
+      const pr = p.p === null ? 0 : p.p.x * rx + p.p.z * rz;
+      const qr = q.p === null ? 0 : q.p.x * rx + q.p.z * rz;
+      return pr - qr;
+    });
+    return { ids: at.map((e) => e.id), x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, heading, width: len };
+  }
+
   home(): number {
     const n = returnOrder(this.city, this.chosen());
     if (n > 0) this.play('click');
@@ -228,7 +298,7 @@ export class Commander {
       const d = army.destination(id);
       if (d !== null) to.push(d);
     }
-    this.world.selection.set(now, to, this.world.rig.zoom);
+    this.world.selection.set(now, this.preview.length > 0 ? this.preview : to, this.world.rig.zoom);
 
     // Flags over every company out of the barracks, or on its way.
     const rig = this.world.rig;

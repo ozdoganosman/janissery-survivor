@@ -112,6 +112,8 @@ export class ArmyView {
   private laps = new Float32Array(0);
   private key = '';
   private frame = { cx: 0, cz: 0, base: 0, rot: 0 };
+  /** Depth of the barracks' ground, front to back. */
+  private depth = 0;
   private lay: BarracksLayout | null = null;
   private barracksId = -1;
   private readonly sphere = new THREE.Sphere();
@@ -174,6 +176,7 @@ export class ArmyView {
     }
     const { cx, cz, base, rot, front, depth } = buildingFrame(c, b);
     this.frame = { cx, cz, base, rot };
+    this.depth = depth;
     this.barracksId = b.id;
     const lay = barracksLayout(front, depth, b.level);
     this.lay = lay;
@@ -520,8 +523,9 @@ export class ArmyView {
     const fromHome = this.inBarracks(fx, fz);
     if (fromHome && to.home) return new March(def, u.men, from, facing, to, null, def.march);
     const lay = this.lay!;
+    // Through the gate, and out past the edge of the barracks' ground, where the way begins.
     const gateIn = this.toWorld(0, lay.wall.z1 - 0.8, 0);
-    const gateOut = this.toWorld(0, lay.wall.z1 + 1.4, 0);
+    const gateOut = this.toWorld(0, this.depth / 2 + 1.5, 0);
     const way = (a: [number, number], b: [number, number]): Array<[number, number]> =>
       findPath(this.city, { x: a[0], z: a[1] }, { x: b[0], z: b[1] }) ?? [a, b];
     let pts: Array<[number, number]>;

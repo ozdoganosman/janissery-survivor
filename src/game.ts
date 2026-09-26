@@ -34,7 +34,9 @@ type Drag =
   | { kind: 'pan'; lastX: number; lastY: number; startX: number; startY: number }
   | { kind: 'rotate'; lastX: number; startX: number; startY: number }
   /** Choosing companies with a box, in the Ordu tool. */
-  | { kind: 'box'; startX: number; startY: number; add: boolean };
+  | { kind: 'box'; startX: number; startY: number; add: boolean }
+  /** Drawing the front the chosen companies are to stand on, with the right button. */
+  | { kind: 'front'; startX: number; startY: number; at: { x: number; z: number } };
 
 /** A press that moves less than this (CSS pixels) is a click, not a drag. */
 const CLICK_SLOP = 6;
@@ -609,7 +611,14 @@ export class Game {
     if (this.pointers.size > 2) return;
     this.touch = e.pointerType !== 'mouse';
     if (e.button === 2) {
-      this.drag = { kind: 'rotate', lastX: e.clientX, startX: e.clientX, startY: e.clientY };
+      const at =
+        this.tool === 'ordu' && this.commander.selection.size > 0
+          ? this.groundAt(e.clientX, e.clientY)
+          : null;
+      this.drag =
+        at !== null
+          ? { kind: 'front', startX: e.clientX, startY: e.clientY, at }
+          : { kind: 'rotate', lastX: e.clientX, startX: e.clientX, startY: e.clientY };
       return;
     }
     if (this.tool === 'ordu' && e.pointerType === 'mouse' && e.button === 0) {
@@ -648,6 +657,12 @@ export class Game {
       drag.lastX = e.clientX;
       return;
     }
+    if (drag?.kind === 'front') {
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP) return;
+      const to = this.groundAt(e.clientX, e.clientY);
+      if (to !== null) this.commander.drawFront(drag.at, to);
+      return;
+    }
     if (drag?.kind === 'box') {
       const far = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP;
       this.commander.showBox(far ? { x0: drag.startX, y0: drag.startY, x1: e.clientX, y1: e.clientY } : null);
@@ -671,6 +686,7 @@ export class Game {
     if (this.tool === 'incele') this.canvas.style.cursor = 'grab';
     if (drag === null || cancelled) {
       this.commander.showBox(null);
+      this.commander.dropFront();
       return;
     }
     // A press that barely moved is a click.
@@ -717,6 +733,17 @@ export class Game {
   /** The end of a press in the Ordu tool: a box chosen, a click on a man, a right click. */
   private commandPress(drag: Drag, e: PointerEvent, click: boolean): void {
     this.commander.showBox(null);
+    if (drag.kind === 'front') {
+      // A click sends them to the point; a drag, onto the front drawn.
+      const to = click ? null : this.groundAt(e.clientX, e.clientY);
+      if (to === null) {
+        this.commander.dropFront();
+        this.commander.marchTo(drag.at.x, drag.at.z);
+      } else {
+        this.commander.marchFront(drag.at, to);
+      }
+      return;
+    }
     if (drag.kind === 'rotate') {
       if (!click) return;
       const at = this.groundAt(e.clientX, e.clientY);

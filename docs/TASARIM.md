@@ -226,6 +226,12 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
     arta kalan bölükler arkada yeni saflar). Her bölüğün yeri açık mı diye bakılır: surun,
     suyun, evlerin ve yapıların üstüne düşen, ya da gidilen noktadan ancak uzun bir
     dolambaçla (sur ötesi gibi) varılan yer kullanılmaz; bölük en yakın açık yeri alır.
+  - **Cephe çizmek (Total War gibi):** seçiliyken sağ tuşa basılı tutup sürüklemek ordunun
+    ön safını çizer: bölükler çizginin boyunca soldan sağa dizilir, çizgiye dik ve onu
+    soldan sağa çizene göre ileri bakar. Çizginin boyu cephenin genişliğidir: sığan kadar
+    bölük ön safta durur, kalanlar arkada yeni saflar kurar; çizgi ordudan genişse bölükler
+    aralarını açarak ona yayılır (en çok 3 karo ara, en çok 60 karo cephe). Sürüklerken
+    bölüklerin duracağı yerler soluk çerçevelerle görünür; tuş bırakılınca emir verilir.
   - **Yürüyüş:** bölük düzenini bozmadan yürür: önce yola döner (bu sırada yeni düzeninin
     biçimini alır), sonra saflarıyla yolu izler, yol döndükçe yavaşça döner, varınca
     emredilen yöne döner. Yol sokaklardan ve açık araziden geçer: evlerin, yapıların ve
