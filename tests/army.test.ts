@@ -143,6 +143,30 @@ describe('raising soldiers', () => {
     expect(c.population).toBe(people);
   });
 
+  it('gives a barracks saved at its old, smaller size the ground it needs now', () => {
+    const { c, b } = withBarracks(2);
+    const s = saveGame(c);
+    const k = balance.buildings.kisla;
+    const old = {
+      ...s,
+      buildings: s.buildings.map((x) =>
+        x.id === b.id ? { ...x, x0: x.x0 + 4, z0: x.z0 + 4, w: 14, d: 10 } : x,
+      ),
+    };
+    const back = restoreGame(def, balance, JSON.parse(JSON.stringify(old)));
+    const r = back.buildings.get(b.id)!;
+    expect(r.w * r.d).toBe(k.w * k.d);
+    expect(r.level).toBe(2);
+    expect(armyCapacity(back)).toBe(k.levels[1].capacity);
+    const { grid } = back;
+    for (const i of r.tiles) {
+      expect(back.building[i]).toBe(b.id);
+      expect(insideWalls(back, grid.centre(i % grid.size), grid.centre(Math.floor(i / grid.size)))).toBe(
+        false,
+      );
+    }
+  });
+
   it('comes back the same from a save', () => {
     const { c } = withBarracks(3);
     recruit(c, 'gulam');
@@ -151,5 +175,24 @@ describe('raising soldiers', () => {
     const back = restoreGame(def, balance, JSON.parse(JSON.stringify(saveGame(c))));
     expect(back.army).toEqual(c.army);
     expect(back.population).toBe(c.population);
+  });
+});
+
+describe('an army unpaid', () => {
+  it('melts away a company a month, the dearest first, while the treasury is in debt', () => {
+    const { c } = withBarracks(3);
+    recruit(c, 'mizrakci');
+    recruit(c, 'gulam');
+    simulateDays(c, DAYS_PER_MONTH - (c.calendar.day % DAYS_PER_MONTH));
+    c.treasury = -1e5;
+    simulateDays(c, DAYS_PER_MONTH);
+    expect(c.army.units.map((u) => u.kind)).toEqual(['mizrakci']);
+    // A deficit too deep for one company sends as many home as it takes.
+    recruitMany(c, 'gulam', 30);
+    c.treasury = -1e5;
+    updateStats(c);
+    simulateDays(c, DAYS_PER_MONTH);
+    expect(c.stats.income.total).toBeGreaterThanOrEqual(0);
+    expect(c.notices.some((n) => n.text.includes('ulufesini alamadı'))).toBe(true);
   });
 });

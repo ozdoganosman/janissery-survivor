@@ -1,11 +1,12 @@
 import type { Balance, BuildingKind, TaxRate, UnitKind } from './balance';
-import { TAX_RATES, UNIT_KINDS } from './balance';
-import type { Building, Work } from './buildings';
+import { FORMATION_KINDS, TAX_RATES, UNIT_KINDS } from './balance';
+import { refitBuilding, type Building, type Work } from './buildings';
 import type { Speed } from './calendar';
 import { createCity, type CityState } from './city';
 import type { CityDef } from './city-def';
 import { removeField } from './countryside';
 import { updateStats, type OrderState } from './economy';
+import type { FieldPost } from './field';
 import { replayGrowth } from './growth';
 import { syncHouses } from './housing';
 
@@ -86,6 +87,8 @@ export interface SavedUnit {
   kind: UnitKind;
   men: number;
   drill: { days: number; daysLeft: number } | null;
+  /** Where it stands out of the barracks. Older saves have none. */
+  field?: FieldPost | null;
 }
 
 export function saveGame(city: CityState): SaveGame {
@@ -123,7 +126,11 @@ export function saveGame(city: CityState): SaveGame {
     streetsLaid: city.streetsLaid,
     last: { ...city.stats.last },
     army: {
-      units: city.army.units.map((u) => ({ ...u, drill: u.drill === null ? null : { ...u.drill } })),
+      units: city.army.units.map((u) => ({
+        ...u,
+        drill: u.drill === null ? null : { ...u.drill },
+        field: u.field === null ? null : { ...u.field },
+      })),
       nextId: city.army.nextId,
     },
   };
@@ -183,11 +190,16 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
   }
   for (const u of s.army?.units ?? []) {
     if (!UNIT_KINDS.includes(u.kind) || !finite(u.men) || u.men <= 0) throw new SaveError('Kayıt bozuk.');
+    const f = u.field ?? null;
+    const fieldOk =
+      f === null ||
+      ([f.x, f.z, f.heading].every(finite) && FORMATION_KINDS.includes(f.formation) && u.drill === null);
     city.army.units.push({
       id: u.id,
       kind: u.kind,
       men: u.men,
       drill: u.drill === null ? null : { ...u.drill },
+      field: f !== null && fieldOk ? { ...f } : null,
     });
   }
   city.army.nextId = s.army?.nextId ?? city.army.units.reduce((n, u) => Math.max(n, u.id + 1), 1);
@@ -209,6 +221,9 @@ export function restoreGame(def: CityDef, balance: Balance, data: unknown): City
   // Walls and streets are laid again from the plan, up to where the save had them.
   replayGrowth(city, s.expansion?.built ?? 0, s.streetsLaid ?? 0);
   city.expansion.work = s.expansion?.work != null ? { ...s.expansion.work } : null;
+  // A building saved when its kind was smaller (the barracks, before the tenfold city)
+  // takes the ground its kind needs now.
+  for (const b of city.buildings.values()) refitBuilding(city, b);
   updateStats(city);
   syncHouses(city);
   city.revision.buildings++;

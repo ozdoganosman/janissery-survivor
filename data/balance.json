@@ -31,7 +31,7 @@
     "unrest": 40,
     "revolt": 25,
     "calmGrowth": 1.25,
-    "unrestIncome": 0.85,
+    "unrestIncome": 0.7,
     "revoltIncome": 0.6,
     "revoltLoss": 0.005
   },
@@ -50,7 +50,7 @@
       "maxBuildingLevel": 2,
       "builders": 2,
       "peoplePerHouse": 70,
-      "slots": 5
+      "slots": 7
     },
     {
       "name": "Büyük Şehir",
@@ -66,7 +66,7 @@
       "maxBuildingLevel": 3,
       "builders": 4,
       "peoplePerHouse": 110,
-      "slots": 12
+      "slots": 9
     }
   ],
   "rankSlack": 0.1,
@@ -94,10 +94,10 @@
           "income": 1100
         },
         {
-          "cost": 22000,
-          "material": 1000,
+          "cost": 33000,
+          "material": 1500,
           "months": 4,
-          "upkeep": 160,
+          "upkeep": 240,
           "income": 1800
         }
       ],
@@ -125,10 +125,10 @@
           "product": 400
         },
         {
-          "cost": 18000,
-          "material": 800,
+          "cost": 27000,
+          "material": 1200,
           "months": 4,
-          "upkeep": 220,
+          "upkeep": 330,
           "product": 700
         }
       ],
@@ -155,10 +155,10 @@
           "order": 10
         },
         {
-          "cost": 26000,
-          "material": 1800,
+          "cost": 39000,
+          "material": 2700,
           "months": 6,
-          "upkeep": 400,
+          "upkeep": 600,
           "order": 15
         }
       ],
@@ -187,10 +187,10 @@
           "growth": 0.001
         },
         {
-          "cost": 21000,
-          "material": 1200,
+          "cost": 31500,
+          "material": 1800,
           "months": 5,
-          "upkeep": 280,
+          "upkeep": 420,
           "order": 8,
           "growth": 0.0015
         }
@@ -219,10 +219,10 @@
           "income": 1600
         },
         {
-          "cost": 30000,
-          "material": 1800,
+          "cost": 45000,
+          "material": 2700,
           "months": 6,
-          "upkeep": 300,
+          "upkeep": 450,
           "income": 2600
         }
       ],
@@ -251,10 +251,10 @@
           "growth": 0.0025
         },
         {
-          "cost": 15000,
-          "material": 700,
+          "cost": 22500,
+          "material": 1050,
           "months": 4,
-          "upkeep": 220,
+          "upkeep": 330,
           "food": 50000,
           "growth": 0.004
         }
@@ -285,10 +285,10 @@
           "capacity": 5000
         },
         {
-          "cost": 42000,
-          "material": 3200,
+          "cost": 63000,
+          "material": 4800,
           "months": 8,
-          "upkeep": 550,
+          "upkeep": 820,
           "order": 10,
           "capacity": 10000
         }
@@ -306,7 +306,7 @@
           "material": 600,
           "months": 4,
           "upkeep": 180,
-          "incomePct": 0.05,
+          "incomePct": 0.08,
           "order": 1
         },
         {
@@ -314,15 +314,15 @@
           "material": 1200,
           "months": 5,
           "upkeep": 300,
-          "incomePct": 0.1,
+          "incomePct": 0.15,
           "order": 2
         },
         {
-          "cost": 30000,
-          "material": 2000,
+          "cost": 45000,
+          "material": 3000,
           "months": 6,
-          "upkeep": 450,
-          "incomePct": 0.15,
+          "upkeep": 680,
+          "incomePct": 0.22,
           "order": 3
         }
       ],
@@ -343,18 +343,18 @@
           "order": 2
         },
         {
-          "cost": 17000,
+          "cost": 14000,
           "material": 1000,
           "months": 5,
           "upkeep": 250,
           "growth": 0.002,
-          "order": 3
+          "order": 4
         },
         {
-          "cost": 28000,
-          "material": 1800,
+          "cost": 42000,
+          "material": 2700,
           "months": 6,
-          "upkeep": 400,
+          "upkeep": 600,
           "growth": 0.003,
           "order": 5
         }
@@ -365,14 +365,31 @@
   "food": {
     "base": 25000,
     "perFieldTile": 30,
-    "starve": 0.04,
+    "starve": 0.4,
     "orderPer10Pct": -6
   },
   "debt": {
-    "order": -15
+    "order": -25
   },
   "army": {
     "levy": 0.15,
+    "formations": {
+      "saf": {
+        "name": "Saf",
+        "hint": "Geniş cephe, beş sıra derin",
+        "cols": 20
+      },
+      "kare": {
+        "name": "Kare",
+        "hint": "On sıra, on dizi: sık ve derin",
+        "cols": 10
+      },
+      "kol": {
+        "name": "Kol",
+        "hint": "Yürüyüş düzeni: dört yan yana, uzun",
+        "cols": 4
+      }
+    },
     "units": {
       "mizrakci": {
         "name": "Mızraklı yaya",
@@ -388,7 +405,10 @@
         "defense": 8,
         "missile": 0,
         "speed": 3,
-        "morale": 6
+        "morale": 6,
+        "file": 0.125,
+        "rank": 0.14,
+        "march": 1.0
       },
       "okcu": {
         "name": "Yaya okçu",
@@ -404,7 +424,10 @@
         "defense": 3,
         "missile": 8,
         "speed": 3,
-        "morale": 5
+        "morale": 5,
+        "file": 0.125,
+        "rank": 0.15,
+        "march": 1.0
       },
       "atli_okcu": {
         "name": "Türkmen atlı okçusu",
@@ -420,7 +443,10 @@
         "defense": 4,
         "missile": 7,
         "speed": 9,
-        "morale": 6
+        "morale": 6,
+        "file": 0.16,
+        "rank": 0.33,
+        "march": 1.8
       },
       "gulam": {
         "name": "Gulam süvarisi",
@@ -436,7 +462,10 @@
         "defense": 9,
         "missile": 0,
         "speed": 7,
-        "morale": 9
+        "morale": 9,
+        "file": 0.17,
+        "rank": 0.34,
+        "march": 1.6
       }
     }
   }

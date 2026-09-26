@@ -38,12 +38,21 @@ yapıları şehrin **istediği yerine** koyar. Yol, imar, tarla ve mal zinciri y
   ister ve birkaç ay sürer; iş bitene dek yapı iskele içindedir, yükseltilen yapı ise
   eski seviyesinde çalışmaya devam eder. Aynı anda yürüyen inşaat sayısı şehir
   düzeyiyle sınırlıdır.
-- **İnşaat sınırsız değildir.** Şehrin bir **yapı hakkı** vardır (Şehir 5, Büyük Şehir 8,
-  Payitaht 12; her yeni sur halkası birkaç hak daha verir) ve her yapı türünden en çok
+- **İnşaat sınırsız değildir.** Şehrin bir **yapı hakkı** vardır (Şehir 7, Büyük Şehir 8,
+  Payitaht 9; Dış Sur +2, Varoş Suru +3 hak daha verir, böylece bütün surlar örülünce
+  her yapıya tam bir yer düşer) ve her yapı türünden en çok
   bir ya da iki tane kurulur. Hak dolunca büyümenin yolu yeni yapı değil, eldekini
   yükseltmek ya da yıkıp yerine başkasını kurmaktır.
 - **Her yapının aylık bakımı vardır** ve seviyeyle artar. Akçe eksiye düşerse borç
-  huzuru bozar; ama yapılar kapanmaz, emir borcu kapatmanın yolunu bulmalıdır.
+  huzuru bozar; yapılar kapanmaz, ama ulufesi ödenmeyen ordu dağılır: hazine ay sonunda
+  eksideyse en pahalı bölük, ay açık veriyorsa açık kapanana dek en pahalıdan başlayarak
+  bölükler evine döner. Emir borcu kapatmanın yolunu bulmalıdır.
+- **Gelecek surların hattı boş tutulur.** Henüz örülmemiş sur halkalarının geçeceği
+  şeride yapı kurulamaz (önizleme "Sur hattı" der); böylece yeni sur ne bir yapıyı yutar
+  ne de onun için boşluk bırakır. Sur dışına kurulan yapılar (kervansaray, kışla) bütün
+  surlar örüldükten sonra da dışarıda kalacak yere kurulur. Tarlaların üstüne kurulan
+  yapı bütün tarlayı kaldırır; önizleme kaç tarlanın kalkacağını ve erzaktan ne kadar
+  gideceğini söyler.
 - **Nüfus, huzur ve vergi** dengeyi kurar. Vergi hanelerden gelir; ağır vergi daha çok
   akçe getirir ama huzuru düşürür. Kalabalıklaştıkça huzur azalır; cami, kışla ve hamam
   huzuru, ambar ve darüşşifa büyümeyi artırır.
@@ -68,7 +77,7 @@ gelir        = (vergi × (1 + medrese payı) + çarşı + kervansaray) × huzur 
 erzak sınırı = 25.000 + ekili tarla karosu × 30 + ambarlar
 nüfus artışı = nüfus × (%0,3 + ambar, hamam, darüşşifa) × huzur çarpanı
                × en çok 1, (1 − nüfus / erzak sınırı) × 4
-açlık        = nüfus erzak sınırını aştıysa her ay aşımın %40'ı kadar halk göçer
+açlık        = nüfus erzak sınırını aştıysa her ay aşımın %40'ı kadar halk göçer (food.starve)
 ```
 
 Konya 42.000 kişi, 30.000 akçe ve 600 araba taşla, Larende Çarşısı ve Meram Ambarı kurulu
@@ -82,7 +91,7 @@ borç`, 0–100 arası.
 - **Kalabalık:** 30.000 kişiden sonra her 10.000 kişi için −4.
 - **Surlar:** her yeni sur halkası +5.
 - **Açlık:** nüfus erzak sınırını her %10 aştıkça −6.
-- **Borç:** hazine eksideyken −15.
+- **Borç:** hazine eksideyken −25.
 
 Defterdeki **Hesap** bu kalemlerin her birini ayrı gösterir.
 
@@ -90,16 +99,16 @@ Defterdeki **Hesap** bu kalemlerin her birini ayrı gösterir.
 | ------- | -------- | ------------------------------------------------ |
 | 65+     | Huzurlu  | Nüfus %25 daha hızlı artar                       |
 | 40–65   | Sakin    | —                                                |
-| 25–40   | Huzursuz | Gelir %15 düşer, nüfus artmaz                    |
+| 25–40   | Huzursuz | Gelir %30 düşer, nüfus artmaz                    |
 | 25 altı | İsyan    | Gelir ve ürün %40 düşer, halk her ay %0,5 azalır |
 
 ### Şehir düzeyi
 
 | Düzey       | Nüfus    | En yüksek yapı seviyesi | Aynı anda inşaat | Yapı hakkı | Ada başına |
 | ----------- | -------- | ----------------------- | ---------------- | ---------- | ---------- |
-| Şehir       | —        | 2                       | 2                | 5          | 70         |
+| Şehir       | —        | 2                       | 2                | 7          | 70         |
 | Büyük Şehir | 60.000+  | 3                       | 3                | 8          | 90         |
-| Payitaht    | 100.000+ | 3                       | 4                | 12         | 110        |
+| Payitaht    | 100.000+ | 3                       | 4                | 9          | 110        |
 
 Bir düzeye varan şehir onu, nüfusu eşiğin %10 altına inene dek korur (Büyük Şehir 54.000,
 Payitaht 90.000). Kıtlıkta birkaç aile eksilen şehir her ay düzey kazanıp kaybetmez;
@@ -132,15 +141,18 @@ Değerler sırasıyla 1., 2. ve 3. seviye içindir; bedeller akçe + ürün, bak
 
 | Yapı        | En çok | Etki                                                                | Bedel                                    | Bakım           |
 | ----------- | ------ | ------------------------------------------------------------------- | ---------------------------------------- | --------------- |
-| Çarşı       | 2      | +500 / +1.100 / +1.800 akçe                                         | 6.000 · 12.000+400 · 22.000+1.000        | 50 / 100 / 160  |
-| Taş Ocağı   | 2      | +200 / +400 / +700 ürün; kaynak başında                             | 5.000 · 10.000+300 · 18.000+800          | 80 / 140 / 220  |
-| Cami        | 2      | +6 / +10 / +15 huzur                                                | 9.000+500 · 16.000+1.000 · 26.000+1.800  | 150 / 250 / 400 |
-| Hamam       | 2      | +3 / +5 / +8 huzur; büyüme +%0,05 / +%0,1 / +%0,15                  | 7.000+300 · 13.000+600 · 21.000+1.200    | 100 / 180 / 280 |
-| Kervansaray | 1      | +800 / +1.600 / +2.600 akçe; sur dışında                            | 10.000+600 · 18.000+1.000 · 30.000+1.800 | 100 / 180 / 300 |
-| Ambar       | 2      | erzak +15.000 / +30.000 / +50.000; büyüme +%0,15 / +%0,25 / +%0,4   | 5.000 · 9.000+300 · 15.000+700           | 80 / 140 / 220  |
-| Kışla       | 1      | 2.000 / 5.000 / 10.000 asker yeri; +3 / +6 / +10 huzur; sur dışında | 12.000+600 · 24.000+1.600 · 42.000+3.200 | 200 / 350 / 550 |
-| Medrese     | 1      | vergi +%5 / +%10 / +%15; huzur +1 / +2 / +3                         | 11.000+600 · 19.000+1.200 · 30.000+2.000 | 180 / 300 / 450 |
-| Darüşşifa   | 1      | büyüme +%0,1 / +%0,2 / +%0,3; huzur +2 / +3 / +5                    | 10.000+500 · 17.000+1.000 · 28.000+1.800 | 150 / 250 / 400 |
+| Çarşı       | 2      | +500 / +1.100 / +1.800 akçe                                         | 6.000 · 12.000+400 · 33.000+1.500        | 50 / 100 / 240  |
+| Taş Ocağı   | 2      | +200 / +400 / +700 ürün; kaynak başında                             | 5.000 · 10.000+300 · 27.000+1.200        | 80 / 140 / 330  |
+| Cami        | 2      | +6 / +10 / +15 huzur                                                | 9.000+500 · 16.000+1.000 · 39.000+2.700  | 150 / 250 / 600 |
+| Hamam       | 2      | +3 / +5 / +8 huzur; büyüme +%0,05 / +%0,1 / +%0,15                  | 7.000+300 · 13.000+600 · 31.500+1.800    | 100 / 180 / 420 |
+| Kervansaray | 1      | +800 / +1.600 / +2.600 akçe; sur dışında                            | 10.000+600 · 18.000+1.000 · 45.000+2.700 | 100 / 180 / 450 |
+| Ambar       | 2      | erzak +15.000 / +30.000 / +50.000; büyüme +%0,15 / +%0,25 / +%0,4   | 5.000 · 9.000+300 · 22.500+1.050         | 80 / 140 / 330  |
+| Kışla       | 1      | 2.000 / 5.000 / 10.000 asker yeri; +3 / +6 / +10 huzur; sur dışında | 12.000+600 · 24.000+1.600 · 63.000+4.800 | 200 / 350 / 820 |
+| Medrese     | 1      | vergi +%8 / +%15 / +%22; huzur +1 / +2 / +3                         | 11.000+600 · 19.000+1.200 · 45.000+3.000 | 180 / 300 / 680 |
+| Darüşşifa   | 1      | büyüme +%0,1 / +%0,2 / +%0,3; huzur +2 / +4 / +5                    | 10.000+500 · 14.000+1.000 · 42.000+2.700 | 150 / 250 / 600 |
+
+Üçüncü seviyeler bilerek pahalıdır: Payitaht'a varan şehir her şeyi birden bitiremesin,
+geç oyunda da akçenin gidecek yeri olsun.
 
 Yıkılan yapı, son seviyesinin akçe bedelinin dörtte birini geri verir. Kesin sayılar
 `data/balance.json` içindedir.
@@ -203,6 +215,27 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   ekran kartına yalnız değişen kısım gider. Aynı anda en çok üç atlı bölüğü tur atar,
   gerisi sırasını bekler. Kamera uzaklaşınca ok, sadak, flama ve kuyruk çizilmez.
 - Kamera askerleri seçebilmek için eskisinden daha yakına iner.
+- **Ordu komutası (Ordu aracı, O):** bölükler tek tek ya da topluca seçilip yürütülür.
+  - **Seçmek:** bir askere tıklamak bölüğünü seçer; Shift ile eklenir ya da çıkarılır; aynı
+    bölüğe çift tık o türün bütün bölüklerini seçer; haritada sürüklenen kutu içindeki
+    bütün bölükleri seçer. Panelde "Hepsini seç", türe göre seçim ve "Seçimi bırak"
+    vardır; kışlanın panelindeki "Orduyu seç ve komuta et" bütün orduyu seçer.
+  - **Yürümek:** sağ tık (telefonda boş yere dokunmak) seçili bölükleri oraya gönderir.
+    Bölükler şimdiki sıralarını bozmadan soldan sağa yan yana, geldikleri yöne bakarak
+    dizilir; 28 karodan geniş ordu arka arkaya saflar kurar. Kışladan çıkan bölük dörtlü
+    kol olur, kapıdan çıkar, sokaklardan ve açık araziden yürür: evlerin, yapıların ve
+    anıtların içinden geçmez, surdan yalnız kapıdan, çaydan yalnız köprüden geçer. Varınca
+    bölük düzenine açılır. Suya yürüme emri verilemez; talimdeki bölük kışladan çıkamaz.
+  - **Emirler:** Dur (H), Kışlaya dön (K), sola ve sağa 45° dönüş (bölükler ortalarının
+    çevresinde döner), düzen: **Saf** (20 yan yana, geniş cephe), **Kare** (10×10), **Kol**
+    (4 yan yana, yürüyüş düzeni). Sahadaki her bölüğün üstünde türünü ve er sayısını
+    gösteren bir sancak durur; sancağa tıklamak bölüğü seçer.
+  - Seçili bölüklerin çevresinde yaldızlı bir çerçeve, yürüyenlerin varacağı yerde soluk
+    bir çerçeve görünür. Bölüğün nerede durduğu kayda girer; yürüyüş yalnız görüntüdür.
+- **Kışla dolup taşmaz:** bölükler önce talim meydanına, sonra ok menzili ve ağılın açık
+  yerine dizilir; sığmazlarsa saflar sıklaşır, yine de sığmazsa meydanın içinde
+  kalabalıklaşırlar, kapıdan dışarı taşmazlar. Eski (14×10 kışlalı) kayıtlar yüklenirken
+  kışla, yeri elveriyorsa yeni boyuna (26×22) genişletilir.
 
 ### Surlar ve sokaklar
 
@@ -221,10 +254,10 @@ ileride kampanya haritasında yürüyecek, savaş katmanında çarpışacak; şe
   yan yana uzanıyorsa kesilir; kıyıdaki ağaçlar surun yolundan çekilir. "Sur içi" her
   yönde surun gerçekten çevirdiği yere kadardır; çayın ötesindeki evler varoştur.
 
-  | Halka      | Yarıçap | Gerekli düzey | Bedel          | Süre  | Kazanç                  |
-  | ---------- | ------- | ------------- | -------------- | ----- | ----------------------- |
-  | Dış Sur    | 34      | Büyük Şehir   | 50.000 + 4.000 | 10 ay | +2 yapı hakkı, +5 huzur |
-  | Varoş Suru | 46      | Payitaht      | 90.000 + 8.000 | 14 ay | +3 yapı hakkı, +5 huzur |
+  | Halka      | Yarıçap | Gerekli düzey | Bedel            | Süre  | Kazanç                  |
+  | ---------- | ------- | ------------- | ---------------- | ----- | ----------------------- |
+  | Dış Sur    | 34      | Büyük Şehir   | 75.000 + 4.000   | 10 ay | +2 yapı hakkı, +5 huzur |
+  | Varoş Suru | 46      | Payitaht      | 135.000 + 10.000 | 14 ay | +3 yapı hakkı, +5 huzur |
 
 - **Varoş sokakları.** Sur dışında, kapı yollarının arasında üç çevre yolu (eski surdan
   6, 17 ve 29 karo ötede) vardır. Başlangıç nüfusunun üstünde her 5.500 kişide bir yeni
@@ -241,9 +274,9 @@ Oyuncu hangi yapının ne beklediğini haritada ve tek bir listede görür.
   akçe ya da taş bekleyeninki soluk ▲ taşır; inşaattakinde ilerleme çubuğu vardır.
   Rozete tıklamak kamerayı yapıya götürür ve panelini açar.
 - **İnşa kartları:** şu an başlanamayan yapının kartı soluklaşır ve neyin eksik olduğunu
-  kırmızıyla yazar: `taş 30/50`, `akçe 700/900`, `ustalar işte 2/2`, `yapı hakkı dolu 5/5`,
+  kırmızıyla yazar: `taş 30/50`, `akçe 700/900`, `ustalar işte 2/2`, `yapı hakkı dolu 7/7`,
   `en çok 2`. Yer seçmeden önce görülür.
-- **Defter:** Şehir satırında yapı hakkı (`yapı 3/5`), İnşaat satırında aynı anda yürüyen
+- **Defter:** Şehir satırında yapı hakkı (`yapı 3/7`), İnşaat satırında aynı anda yürüyen
   inşaat ve yükseltmeler (`1/2 · 1 usta boşta`). İkisi ayrı sınırdır: yapı hakkı şehirde
   kaç yapı olabileceğini, ustalar kaçının aynı anda yapılabileceğini söyler.
 - **Yapılar listesi** (araç çubuğu ya da **L**): bütün yapılar, yükseltilebilir olanlar
@@ -355,18 +388,19 @@ Numaralar oyunun baştan beri süren sırasıdır. 1–5 arası ayrıntılı bir
 sonra daha sade bir çekirdeğe çevrildi, görüntü, şehir ve halk o yoldan kaldı. O yolun
 kodu git geçmişinde durur (5. aşamanın ara kaydı `285ceb6`).
 
-| #   | Aşama                                                                                                                               | Durum |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                    | ✅    |
-| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                             | ↺     |
-| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                               | ↺     |
-| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                        | ↺     |
-| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                      | ↺     |
-| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                  | ✅    |
-| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                  | ✅    |
-| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi | ✅    |
-| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                             |       |
-| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama | ✅    |
-| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi | ✅    |
-| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                               |       |
-| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                    |       |
+| #   | Aşama                                                                                                                                             | Durum |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| 1   | **Zemin:** arazi, Konya'nın çekirdeği, sokaklar, kamera, zaman, minyatür görüntü                                                                  | ✅    |
+| 2   | ~~Konut imarı ve tarla çizme~~ — sade çekirdekte kalktı                                                                                           | ↺     |
+| 3   | ~~Üretim zincirleri, esnaf~~ — sade çekirdekte kalktı                                                                                             | ↺     |
+| 4   | ~~Hizmet menzilleri, bütçe, vakıf~~ — sade çekirdekte kalktı                                                                                      | ↺     |
+| 5   | ~~Olaylar ve savunma (ilk deneme)~~ — git geçmişinde; 7. ve 8. aşamada yeniden                                                                    | ↺     |
+| Ç   | **Sade çekirdek:** akçe ve şehir ürünü, serbest yerleşim, üç seviyeli yapılar, nüfus, huzur, vergi                                                | ✅    |
+| 6   | **Cila:** mevsim görünümleri, ses ve müzik, kayıt/yükleme, telefon                                                                                | ✅    |
+| 6b  | **Zorluk ve büyüme:** yapı hakkı, tür sınırı, bakım, erzak, borç; sur halkaları, varoş sokakları; yapı rozetleri ve Yapılar listesi               | ✅    |
+| 7   | **Olaylar:** yangın, salgın, kıtlık, Moğol elçileri ve Kösedağ, bu çekirdeğe uyarlanmış                                                           |       |
+| 8   | **Ordu:** sur dışında büyüyen kışla, gerçekçi bölükler, ulufe ve erzak, eklemli ve savaşa hazır askerler, kışlada birebir konaklama               | ✅    |
+| 8a  | **Tarihî ölçek:** nüfus ve ekonomi ×10 (Konya 42.000 kişi), 10.000 askerlik kışla, toplu asker toplama, on bin figürün akıcı çizimi               | ✅    |
+| 8c  | **Ordu komutası:** bölükleri tek tek ya da kutuyla seçme, sağ tıkla yürütme (kol düzeninde, sokaklardan, kapıdan), dur, dön, düzen, kışlaya dönüş | ✅    |
+| 8b  | **Savunma:** garnizonla sur savunması, sur bakımı, kuşatmaya hazırlık                                                                             |       |
+| 9   | **Kampanya bağlantısı:** birden çok şehir, ürünlerin imparatorluk deposuna akışı                                                                  |       |

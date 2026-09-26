@@ -110,7 +110,7 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   // head, and a name that takes the camera to the building and its badge.
   await page.keyboard.press('l');
   await expect(page.locator('.roster')).toBeVisible();
-  await expect(page.locator('.roster .summary')).toContainText('yapı hakkı 3/5');
+  await expect(page.locator('.roster .summary')).toContainText('yapı hakkı 3/7');
   await expect(page.locator('.roster .entry.walls')).toContainText('Dış Sur');
   await expect(page.locator('.roster .entry.walls')).toContainText('Büyük Şehir');
   await page.locator('.roster .entry .name', { hasText: 'Meram Ambarı' }).click();
@@ -171,6 +171,34 @@ test('the city draws and grows; buildings go up where they are put, rise a level
   }, barracks);
   await expect.poll(() => page.evaluate(() => window.__game!.world.army.count)).toBe(100);
   await expect(page.locator('.ledger')).toContainText('100 er');
+
+  // Drilled, the company is chosen from the barracks panel and a right click on the map
+  // sends it marching out of the gate.
+  await page.evaluate(() => window.__game!.fastForward(61));
+  await page.locator('.info .army .command').click();
+  await expect(page.locator('.orders')).toBeVisible();
+  expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(1);
+  // Let go of it, and choose it again with a box dragged over the barracks.
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(0);
+  const area = (await page.locator('#view').boundingBox())!;
+  await page.mouse.move(area.x + area.width * 0.35, area.y + area.height * 0.25);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width * 0.65, area.y + area.height * 0.6, { steps: 4 });
+  await page.mouse.move(area.x + area.width * 0.95, area.y + area.height * 0.95, { steps: 4 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.__game!.commander.selection.size)).toBe(1);
+  await page.evaluate((p) => {
+    const rig = window.__game!.world.rig;
+    rig.setView(p.x + 6, p.z - 14, 16, 0.5);
+    rig.snap();
+  }, barracks);
+  const view = (await page.locator('#view').boundingBox())!;
+  await page.mouse.click(view.x + view.width / 2, view.y + view.height / 2, { button: 'right' });
+  await expect.poll(() => page.evaluate(() => window.__game!.city.army.units[0].field !== null)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__game!.world.army.marching)).toBe(1);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
 
   // The menu keeps the city and brings it back.
   await page.getByRole('button', { name: 'Menü' }).click();

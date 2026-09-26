@@ -1,4 +1,4 @@
-import { armyCapacity, armyDay, armyMen, armyPay } from './army';
+import { armyCapacity, armyDay, armyMen, armyPay, disband } from './army';
 import { buildDay, builders, levelEffects } from './buildings';
 import { expansionDay, growStreets, wallGifts } from './growth';
 import { DAYS_PER_MONTH, DAYS_PER_SECOND } from './calendar';
@@ -137,7 +137,7 @@ export function updateStats(city: CityState): void {
   s.product = Math.round(product * (state === 'isyan' ? b.order.revoltIncome : 1));
   if (fullness > 1) {
     // More mouths than bread: people go hungry and leave.
-    s.growth = -city.population * Math.min(1, fullness - 1) * b.food.starve * 10;
+    s.growth = -city.population * Math.min(1, fullness - 1) * b.food.starve;
   } else if (state === 'isyan') {
     s.growth = -city.population * b.order.revoltLoss;
   } else if (state === 'huzursuz') {
@@ -183,12 +183,38 @@ function closeMonth(city: CityState): void {
   const s = city.stats;
   city.treasury += s.income.total;
   city.product += s.product;
+  // An army left unpaid melts away, the dearest company first.
+  if (city.treasury < 0) desert(city);
   city.population = Math.max(0, city.population + s.growth);
   s.last = { income: s.income.total, product: s.product, growth: s.growth };
   updateStats(city);
   announce(city);
   // The people have come or gone: streets open where the suburbs reach, houses follow.
   if (!growStreets(city)) syncHouses(city);
+}
+
+/**
+ * A month without pay: the dearest company goes home, and as many more, dearest first, as
+ * it takes for the month's accounts to stop running into debt.
+ */
+function desert(city: CityState): void {
+  const units = city.balance.army.units;
+  let deficit = -city.stats.income.total;
+  do {
+    let worst: { id: number; pay: number } | null = null;
+    for (const u of city.army.units) {
+      const pay = units[u.kind].pay;
+      if (worst === null || pay > worst.pay) worst = { id: u.id, pay };
+    }
+    if (worst === null) return;
+    const u = city.army.units.find((x) => x.id === worst.id)!;
+    disband(
+      city,
+      u.id,
+      `${units[u.kind].name} bölüğü ulufesini alamadı ve dağıldı; ${u.men} kişi evine döndü.`,
+    );
+    deficit -= worst.pay;
+  } while (deficit > 0);
 }
 
 /** Tells the player when the city's rank or mood has changed since it was last told. */

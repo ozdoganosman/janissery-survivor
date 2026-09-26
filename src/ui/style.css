@@ -1422,3 +1422,177 @@ body {
   opacity: 0.45;
   cursor: default;
 }
+
+/* Commanding the army: the chosen companies and their orders. */
+.orders {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 270px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  display: grid;
+  gap: 6px;
+}
+
+.orders[hidden] {
+  display: none;
+}
+
+.orders h3 {
+  margin: 0;
+}
+
+.orders .kinds {
+  display: grid;
+  gap: 3px;
+}
+
+.orders .kind {
+  display: grid;
+  justify-items: start;
+  padding: 2px 8px;
+  text-align: left;
+}
+
+.orders .kind small {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.orders .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.orders .buttons .btn {
+  flex: 1 1 auto;
+  padding: 3px 8px;
+}
+
+.orders .buttons .btn.on,
+.orders .buttons .btn.on:disabled {
+  color: var(--parchment);
+  background: var(--lapis);
+  border-color: var(--gold);
+}
+
+.orders .bad {
+  color: var(--red);
+}
+
+.orders .tips {
+  opacity: 0.75;
+  font-size: 11.5px;
+}
+
+.orders .btn {
+  border-color: var(--gold-dark);
+  background: var(--parchment-dark);
+}
+
+.orders .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.info .army .command {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  padding: 4px 8px;
+  font-weight: 600;
+  border-color: var(--gold);
+  background: var(--banner, #a8261c);
+  color: var(--parchment);
+}
+
+.info .army .command svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The box dragged over the map to choose companies. */
+.selbox {
+  position: fixed;
+  pointer-events: none;
+  border: 1.5px solid #f2c14e;
+  background: rgba(242, 193, 78, 0.12);
+  z-index: 5;
+}
+
+.selbox[hidden] {
+  display: none;
+}
+
+/* A flag over each company out of the barracks. */
+.companies {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.companies[hidden] {
+  display: none;
+}
+
+.company {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px 1px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--parchment);
+  background: #8c2a1c;
+  border: 1px solid var(--gold-dark);
+  border-radius: 2px 8px 8px 2px;
+  box-shadow: 0 1px 3px rgba(60, 35, 10, 0.35);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.company.okcu {
+  background: #3f7a4a;
+}
+
+.company.atli_okcu {
+  background: #a8702e;
+}
+
+.company.gulam {
+  background: #2f4f9a;
+}
+
+.company.on {
+  outline: 2px solid #f2c14e;
+  outline-offset: 1px;
+}
+
+.company.moving {
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .orders {
+    left: 6px;
+    right: 6px;
+    bottom: 72px;
+    width: auto;
+    max-height: 45vh;
+    font-size: 12.5px;
+  }
+}

@@ -5,6 +5,7 @@ import { sampleHeight } from '../sim/terrain';
 import { BuildingsView } from './buildings-view';
 import { CameraRig } from './camera-rig';
 import { CursorView } from './cursor-view';
+import { SelectionView } from './selection-view';
 import { FieldsView } from './fields-view';
 import { HousesView } from './houses-view';
 import { shading } from './materials';
@@ -29,6 +30,7 @@ export class World {
   readonly rig: CameraRig;
   readonly terrain: TerrainView;
   readonly cursor: CursorView;
+  readonly selection: SelectionView;
   private readonly roads: RoadsView;
   private readonly houses: HousesView;
   private readonly trees: TreesView;
@@ -68,6 +70,7 @@ export class World {
     this.people = new PeopleView(city);
     this.army = new ArmyView(city);
     this.cursor = new CursorView(city);
+    this.selection = new SelectionView(city);
     this.scene.add(
       this.terrain.group,
       this.fields.group,
@@ -80,6 +83,7 @@ export class World {
       this.people.group,
       this.army.group,
       this.cursor.group,
+      this.selection.group,
     );
 
     this.sun.castShadow = true;

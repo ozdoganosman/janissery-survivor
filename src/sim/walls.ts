@@ -145,9 +145,8 @@ const plans = new WeakMap<Terrain, Map<string, WallRing>>();
  * Plans the city's expansion `stage` round the ring standing inside it: the circle it was
  * drawn as, pulled back to the near bank wherever the stream comes inside it.
  */
-export function planRing(city: CityState, stage: number): WallRing {
+export function planRing(city: CityState, stage: number, inner: WallRing = city.rings[stage]): WallRing {
   const def = city.def.expansions[stage];
-  const inner = city.rings[stage];
   const { tepe } = city.def;
   const key = `${stage}:${def.radius}:${inner.radius}`;
   let cache = plans.get(city.terrain);
@@ -271,4 +270,43 @@ export function ringBand(grid: Grid, ring: WallRing, width: number): Uint8Array 
     }
   }
   return out;
+}
+
+const futures = new WeakMap<CityState, { built: number; mask: Uint8Array; outer: WallRing }>();
+
+/** The rings still to come, planned from the ring standing now; cached until one is raised. */
+function future(city: CityState): { mask: Uint8Array; outer: WallRing } {
+  const built = city.expansion.built;
+  const known = futures.get(city);
+  if (known !== undefined && known.built === built) return known;
+  const mask = new Uint8Array(city.grid.count);
+  let inner = city.rings[city.rings.length - 1];
+  for (let stage = built; stage < city.def.expansions.length; stage++) {
+    const ring = planRing(city, stage, inner);
+    const band = ringBand(city.grid, ring, 1.3);
+    for (let i = 0; i < mask.length; i++) if (band[i] === 1) mask[i] = 1;
+    inner = ring;
+  }
+  const out = { built, mask, outer: inner };
+  futures.set(city, out);
+  return out;
+}
+
+/**
+ * Tiles where the rings still to come will stand, a tile's breadth either side: kept free
+ * of buildings, so a new ring never has to leave a gap for one or swallow it.
+ */
+export function futureWallLine(city: CityState): Uint8Array {
+  return future(city).mask;
+}
+
+/**
+ * Whether a point will lie within the walls once every ring is raised, give or take
+ * `margin` tiles: what "outside the walls" has to keep clear of, so that a caravanserai or
+ * a barracks is not walled in later.
+ */
+export function insideFinalWalls(city: CityState, x: number, z: number, margin = 0): boolean {
+  const { tepe } = city.def;
+  const outer = future(city).outer;
+  return Math.hypot(x - tepe.x, z - tepe.z) < boundAt(outer, Math.atan2(z - tepe.z, x - tepe.x)) + margin;
 }

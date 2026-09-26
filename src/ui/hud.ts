@@ -13,8 +13,9 @@ import {
   type Readiness,
   type TileInfo,
 } from '../sim/inspect';
+import type { ArmyCommand } from './orders-panel';
 
-export type Tool = 'incele' | 'insa' | 'yik';
+export type Tool = 'incele' | 'insa' | 'yik' | 'ordu';
 
 export interface HudCallbacks {
   onTool(tool: Tool): void;
@@ -40,6 +41,8 @@ export interface HudCallbacks {
   onFocus(buildingId: number): void;
   /** Begins the next ring of walls. */
   onExpand(): void;
+  /** An order for the army, or a choice of companies, from a panel. */
+  onArmy(cmd: ArmyCommand): void;
 }
 
 /** The next ring of walls as the roster shows it. */
@@ -87,6 +90,7 @@ const ICONS = {
   muted: '<path d="M2 6h3l4-3v10l-4-3H2z"/><path class="s" d="m11 6 4 4M15 6l-4 4"/>',
   menu: '<path class="s" d="M2 4h12M2 8h12M2 12h12"/>',
   yapilar: '<path d="M4 20V9l4-3 4 3v11M12 20v-7l4-3 4 3v7M3 20h18"/><path d="M8 3v3M16 7v3"/>',
+  ordu: '<path d="M6 21V3M6 4h12l-3 4 3 4H6"/><path d="M3 21h6"/>',
 } as const;
 
 const svg = (body: string, viewBox = '0 0 24 24'): string =>
@@ -152,6 +156,9 @@ export class Hud {
   private statsKey = '';
   private affordKey = '';
 
+  /** The layer every panel sits in. */
+  readonly ui: HTMLElement;
+
   constructor(
     root: HTMLElement,
     private readonly city: CityState,
@@ -160,6 +167,7 @@ export class Hud {
     const balance: Balance = city.balance;
     root.appendChild(el('div', 'frame'));
     const ui = el('div', 'ui');
+    this.ui = ui;
     root.appendChild(ui);
     // Building badges ride on the map, under every panel.
     this.markerLayer = el('div', 'markers');
@@ -355,6 +363,7 @@ export class Hud {
       ['incele', 'İncele', ICONS.incele, 'Esc'],
       ['insa', 'İnşa', ICONS.insa, 'Y'],
       ['yik', 'Yık', ICONS.yik, 'B'],
+      ['ordu', 'Ordu', ICONS.ordu, 'O'],
     ];
     for (const [tool, label, icon, key] of tools) {
       const b = el('button', 'btn', `${svg(icon)}<span>${label}</span>`);
@@ -466,7 +475,8 @@ export class Hud {
           ? `yer ${fmt(army.room)}`
           : `${fmt(army.men - army.ready)} talimde`;
     this.food.textContent = `${fmt(s.food)} kişi`;
-    const full = city.population / Math.max(1, s.food);
+    // Soldiers eat from the same stores as everyone else.
+    const full = (city.population + s.army.men) / Math.max(1, s.food);
     this.foodShare.textContent = full > 1 ? 'kıtlık' : `%${Math.round(full * 100)} dolu`;
     this.foodShare.classList.toggle('bad', full > 0.95);
     for (const [rate, b] of this.taxButtons) b.classList.toggle('on', rate === city.policy.tax);
@@ -668,6 +678,12 @@ export class Hud {
       box.appendChild(row);
     }
     if (!pinned) return box;
+    if (a.kinds.length > 0) {
+      const command = el('button', 'btn command', `${svg(ICONS.ordu)}<span>Orduyu seç ve komuta et</span>`);
+      command.title = 'Bütün bölükleri seç; sağ tıkla haritada yürüt (O)';
+      command.addEventListener('click', () => this.cb.onArmy({ kind: 'selectAll' }));
+      box.appendChild(command);
+    }
     box.appendChild(el('div', 'sub', `Asker topla · halk en çok ${fmt(a.levy)} asker verebilir`));
     for (const o of a.offers) {
       const line = el('div', 'offer');

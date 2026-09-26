@@ -48,6 +48,21 @@ export interface UnitDef {
   missile: number;
   speed: number;
   morale: number;
+  /** Room a man takes in the ranks, in tiles: along the rank, and from rank to rank. */
+  file: number;
+  rank: number;
+  /** Marching pace on the map, in tiles a second at normal speed. */
+  march: number;
+}
+
+export type FormationKind = 'saf' | 'kare' | 'kol';
+export const FORMATION_KINDS: readonly FormationKind[] = ['saf', 'kare', 'kol'];
+
+/** How a company stands in the field: how many men abreast. */
+export interface FormationDef {
+  name: string;
+  hint: string;
+  cols: number;
 }
 
 export type TaxRate = 'hafif' | 'orta' | 'agir';
@@ -148,6 +163,7 @@ export interface Balance {
   army: {
     /** Share of the townspeople that may be under arms at once. */
     levy: number;
+    formations: Record<FormationKind, FormationDef>;
     units: Record<UnitKind, UnitDef>;
   };
   buildings: Record<BuildingKind, BuildingDef>;

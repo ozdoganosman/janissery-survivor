@@ -2,6 +2,7 @@ import { UNIT_KINDS, type UnitDef, type UnitKind } from './balance';
 import type { Building } from './buildings';
 import { DAYS_PER_MONTH } from './calendar';
 import type { CityState } from './city';
+import type { FieldPost } from './field';
 import { notify } from './notices';
 
 /**
@@ -17,6 +18,8 @@ export interface Unit {
   men: number;
   /** Drill still to do; null when the company is ready to march. */
   drill: { days: number; daysLeft: number } | null;
+  /** Where it stands out in the field; null while it is in the barracks. */
+  field: FieldPost | null;
 }
 
 export interface Army {
@@ -96,7 +99,13 @@ export function recruit(city: CityState, kind: UnitKind): Unit | null {
   city.treasury -= def.cost;
   city.population -= def.men;
   const days = def.months * DAYS_PER_MONTH;
-  const unit: Unit = { id: city.army.nextId++, kind, men: def.men, drill: { days, daysLeft: days } };
+  const unit: Unit = {
+    id: city.army.nextId++,
+    kind,
+    men: def.men,
+    drill: { days, daysLeft: days },
+    field: null,
+  };
   city.army.units.push(unit);
   city.revision.army++;
   return unit;
@@ -125,13 +134,15 @@ export function recruitMany(city: CityState, kind: UnitKind, n: number): number 
 }
 
 /** Sends a company home: the men go back to their households. False when there is none. */
-export function disband(city: CityState, id: number): boolean {
+export function disband(city: CityState, id: number, why?: string): boolean {
   const k = city.army.units.findIndex((u) => u.id === id);
   if (k < 0) return false;
   const [u] = city.army.units.splice(k, 1);
   city.population += u.men;
   city.revision.army++;
-  notify(city, `${city.balance.army.units[u.kind].name} bölüğü terhis edildi; ${u.men} kişi evine döndü.`);
+  if (why !== undefined) notify(city, why, 'bad');
+  else
+    notify(city, `${city.balance.army.units[u.kind].name} bölüğü terhis edildi; ${u.men} kişi evine döndü.`);
   return true;
 }
 

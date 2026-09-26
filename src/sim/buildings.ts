@@ -5,7 +5,7 @@ import { WALL_NONE } from './constants';
 import { removeField } from './countryside';
 import { syncHouses } from './housing';
 import { notify } from './notices';
-import { insideWalls } from './walls';
+import { futureWallLine, insideFinalWalls } from './walls';
 import { disbandAll } from './army';
 
 /**
@@ -54,6 +54,9 @@ export interface BuildingProposal {
   months: number;
   /** Houses that would make way for it. */
   clears: number;
+  /** Fields it would take (a field goes whole), and the bread they gave. */
+  fields: number;
+  foodLost: number;
   problem?: string;
 }
 
@@ -125,6 +128,7 @@ function tileReason(city: CityState, x: number, z: number): string | undefined {
   if (city.structure[i] >= 0) return 'Anıt';
   if (city.building[i] >= 0) return 'Yapı';
   if (city.road[i] === 1) return 'Sokak';
+  if (futureWallLine(city)[i] === 1) return 'Sur hattı';
   if (terrain.slope[i] > city.balance.maxSlope) return 'Çok dik';
   return undefined;
 }
@@ -193,6 +197,7 @@ export function proposeBuilding(
   let onSite = 0;
   let inside = 0;
   let clears = 0;
+  const fields = new Set<number>();
   for (let z = z0; z < z0 + d; z++) {
     for (let x = x0; x < x0 + w; x++) {
       const reason = tileReason(city, x, z);
@@ -202,7 +207,8 @@ export function proposeBuilding(
       const i = grid.index(x, z);
       if (terrain.site[i] > 0) onSite++;
       if (city.house[i] > 0) clears++;
-      if (insideWalls(city, grid.centre(x), grid.centre(z), 1)) inside++;
+      if (city.field[i] >= 0) fields.add(city.field[i]);
+      if (def.outside === true ? insideFinalWalls(city, grid.centre(x), grid.centre(z), 1) : false) inside++;
     }
   }
   const p: BuildingProposal = {
@@ -217,11 +223,17 @@ export function proposeBuilding(
     material: first.material,
     months: first.months,
     clears,
+    fields: fields.size,
+    foodLost:
+      [...fields].reduce((n, id) => n + (city.fields.get(id)?.tiles.length ?? 0), 0) *
+      city.balance.food.perFieldTile,
   };
   if (problem === undefined && def.site === true && onSite * 2 < w * d) {
     problem = `${kindName(city, kind)} yalnız ocak yerine kurulur`;
   }
-  if (problem === undefined && def.outside === true && inside > 0) problem = 'Sur dışına kurulur';
+  if (problem === undefined && def.outside === true && inside > 0) {
+    problem = 'Sur dışına kurulur (yeni surların da dışına)';
+  }
   if (problem === undefined && !free) problem = startBlock(city, kind)?.text;
   if (problem !== undefined) p.problem = problem;
   return p;
@@ -293,6 +305,40 @@ function place(city: CityState, p: BuildingProposal, name: string): Building {
   // The families living there move to the next free lots.
   syncHouses(city);
   return b;
+}
+
+/**
+ * Gives a building saved with an older, smaller footprint the one its kind has now, on the
+ * same spot or as near to it as the ground allows. It keeps its id, name, level and work.
+ * False when it already fits, or when there is no room for it anywhere near.
+ */
+export function refitBuilding(city: CityState, b: Building): boolean {
+  const def = city.balance.buildings[b.kind];
+  if (b.w * b.d === def.w * def.d && Math.max(b.w, b.d) === Math.max(def.w, def.d)) return false;
+  const { grid } = city;
+  for (const i of b.tiles) city.building[i] = -1;
+  const cx = b.x0 + Math.floor(b.w / 2);
+  const cz = b.z0 + Math.floor(b.d / 2);
+  for (let r = 0; r <= 10; r++) {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const p = proposeBuilding(city, b.kind, cx + dx, cz + dz, true);
+        if (p.problem !== undefined) continue;
+        Object.assign(b, { x0: p.x0, z0: p.z0, w: p.w, d: p.d, facing: p.facing });
+        b.tiles = p.tiles.map((t) => grid.index(t.x, t.z));
+        for (const i of b.tiles) {
+          city.building[i] = b.id;
+          city.house[i] = 0;
+          if (city.field[i] >= 0) removeField(city, city.field[i]);
+        }
+        city.revision.buildings++;
+        return true;
+      }
+    }
+  }
+  for (const i of b.tiles) city.building[i] = b.id;
+  return false;
 }
 
 /** What the next level would take, or null at the top. */

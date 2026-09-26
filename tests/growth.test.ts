@@ -13,7 +13,7 @@ import {
   streetPlan,
 } from '../src/sim/growth';
 import { restoreGame, saveGame } from '../src/sim/save';
-import { ringBand, runDistance } from '../src/sim/walls';
+import { futureWallLine, ringBand, runDistance } from '../src/sim/walls';
 import { balance, def, newCity } from './helpers';
 
 const count = (a: ArrayLike<number>, v: number): number => {
@@ -97,7 +97,9 @@ describe('new walls', () => {
     expect(c.stats.orderParts.walls).toBe(first.order);
     // The caravanserai must now stand outside the new walls.
     const inside = proposeBuilding(c, 'kervansaray', c.grid.tileOf(28), c.grid.tileOf(0));
-    expect(inside.problem === 'Sur dışına kurulur' || inside.tiles.some((t) => !t.ok)).toBe(true);
+    expect((inside.problem ?? '').startsWith('Sur dışına kurulur') || inside.tiles.some((t) => !t.ok)).toBe(
+      true,
+    );
     expect(expansionOffer(c)?.stage).toBe(1);
   });
 
@@ -163,5 +165,28 @@ describe('new walls', () => {
     expect(Array.from(back.wall)).toEqual(Array.from(c.wall));
     expect(back.gates.map((g) => g.name).sort()).toEqual(c.gates.map((g) => g.name).sort());
     expect(count(back.road, 1)).toBe(count(c.road, 1));
+  });
+});
+
+describe('the line of the walls to come', () => {
+  it('is kept free of buildings, so no ring has to swallow one or leave a gap', () => {
+    const c = newCity();
+    c.treasury = 1e6;
+    c.product = 1e5;
+    const line = futureWallLine(c);
+    expect(line.some((v) => v === 1)).toBe(true);
+    const { grid } = c;
+    let refused = 0;
+    for (let a = 0; a < 360; a += 15) {
+      const r = c.def.expansions[0].radius;
+      const x = c.def.tepe.x + r * Math.cos((a * Math.PI) / 180);
+      const z = c.def.tepe.z + r * Math.sin((a * Math.PI) / 180);
+      const p = proposeBuilding(c, 'hamam', grid.tileOf(x), grid.tileOf(z), true);
+      if (p.tiles.some((t) => grid.inBounds(t.x, t.z) && line[grid.index(t.x, t.z)] === 1)) {
+        expect(p.problem).toBeDefined();
+        if (p.problem === 'Sur hattı') refused++;
+      }
+    }
+    expect(refused).toBeGreaterThan(0);
   });
 });

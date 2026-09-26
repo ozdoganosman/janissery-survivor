@@ -25,12 +25,16 @@ import { World } from './render/world';
 import { offerFile } from './host';
 import { readJson, removeKey, writeJson } from './storage';
 import { Hud, type MarkerPlace, type SaveSlot, type SlotLabels, type Tool } from './ui/hud';
+import { OrdersPanel } from './ui/orders-panel';
+import { Commander } from './command';
 
 type TilePos = { x: number; z: number };
 
 type Drag =
   | { kind: 'pan'; lastX: number; lastY: number; startX: number; startY: number }
-  | { kind: 'rotate'; lastX: number };
+  | { kind: 'rotate'; lastX: number; startX: number; startY: number }
+  /** Choosing companies with a box, in the Ordu tool. */
+  | { kind: 'box'; startX: number; startY: number; add: boolean };
 
 /** A press that moves less than this (CSS pixels) is a click, not a drag. */
 const CLICK_SLOP = 6;
@@ -59,7 +63,8 @@ const MARKER_ZOOM = 42;
  * This is the only place that knows about all three.
  *
  * Every tool pans on a drag; a click inspects, places the chosen building, or pulls one
- * down, depending on the tool in hand.
+ * down, depending on the tool in hand. In the Ordu tool a click or a dragged box chooses
+ * companies and a right click sends them marching; the commander does the rest.
  */
 export class Game {
   readonly world: World;
@@ -87,6 +92,9 @@ export class Game {
   private roster: BuildingSummary[] = [];
   private sinceRoster = Infinity;
   private readonly projected = new THREE.Vector3();
+  readonly commander: Commander;
+  /** The last press came from a finger. */
+  private touch = false;
   frames = 0;
 
   constructor(
@@ -123,7 +131,26 @@ export class Game {
       onMusic: (on) => this.setAudio({ ...this.settings, music: on }),
       onFocus: (id) => this.focusBuilding(id),
       onExpand: () => this.expand(),
+      onArmy: (cmd) => {
+        if (this.tool !== 'ordu') this.setTool('ordu');
+        this.commander.command(cmd);
+      },
     });
+    const orders = new OrdersPanel(this.hud.ui, {
+      onCommand: (cmd) => this.commander.command(cmd),
+      onPick: (id, add) => {
+        if (this.tool !== 'ordu') this.setTool('ordu');
+        this.commander.pick(id, add);
+      },
+    });
+    this.commander = new Commander(
+      city,
+      this.world,
+      orders,
+      canvas,
+      (text, kind) => this.say(text, kind),
+      (cue) => this.sound.play(cue),
+    );
     this.hud.setAudio(this.settings.sound, this.settings.music);
     this.hud.setSlots(this.slotLabels());
     this.hud.setTool(this.tool);
@@ -190,6 +217,7 @@ export class Game {
       this.refreshRoster();
     }
     this.placeMarkers();
+    this.commander.update(this.tool === 'ordu', this.touch);
     this.frames++;
   }
 
@@ -201,7 +229,9 @@ export class Game {
     this.hud.hideTip();
     this.hud.setTool(tool);
     this.world.showSites(tool === 'insa' && this.buildKind === 'ocak');
-    this.canvas.style.cursor = tool === 'incele' ? 'grab' : 'crosshair';
+    this.canvas.style.cursor = tool === 'incele' ? 'grab' : tool === 'ordu' ? 'default' : 'crosshair';
+    // Commanding needs the map free of a building's panel.
+    if (tool === 'ordu' && this.selected !== null) this.select(null);
   }
 
   setBuildKind(kind: BuildingKind): void {
@@ -348,6 +378,7 @@ export class Game {
     this.month = Math.floor(this.city.calendar.day / DAYS_PER_MONTH);
     this.selected = null;
     this.hoverTile = null;
+    this.commander.clear();
     this.lastDateText = '';
     this.setTool('incele');
     this.hud.closeMenu();
@@ -495,7 +526,11 @@ export class Game {
     }));
     this.world.cursor.setPreview(preview);
     const name = kindName(city, this.buildKind);
-    const moving = plan.clears > 0 ? ` · ${plan.clears} hane taşınır` : '';
+    const moving =
+      (plan.clears > 0 ? ` · ${plan.clears} hane taşınır` : '') +
+      (plan.fields > 0
+        ? ` · ${plan.fields} tarla kalkar (erzak −${plan.foodLost.toLocaleString('tr-TR')})`
+        : '');
     this.hud.showTip(
       plan.problem !== undefined
         ? `${name} · ${plan.problem}`
@@ -572,8 +607,18 @@ export class Game {
       return;
     }
     if (this.pointers.size > 2) return;
+    this.touch = e.pointerType !== 'mouse';
     if (e.button === 2) {
-      this.drag = { kind: 'rotate', lastX: e.clientX };
+      this.drag = { kind: 'rotate', lastX: e.clientX, startX: e.clientX, startY: e.clientY };
+      return;
+    }
+    if (this.tool === 'ordu' && e.pointerType === 'mouse' && e.button === 0) {
+      this.drag = {
+        kind: 'box',
+        startX: e.clientX,
+        startY: e.clientY,
+        add: e.shiftKey || e.ctrlKey || e.metaKey,
+      };
       return;
     }
     this.drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY };
@@ -603,6 +648,11 @@ export class Game {
       drag.lastX = e.clientX;
       return;
     }
+    if (drag?.kind === 'box') {
+      const far = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP;
+      this.commander.showBox(far ? { x0: drag.startX, y0: drag.startY, x1: e.clientX, y1: e.clientY } : null);
+      return;
+    }
     const tile = this.tileAt(e.clientX, e.clientY);
     if (e.pointerType === 'mouse') this.setHover(tile);
     if (tile === null || e.pointerType !== 'mouse') return;
@@ -619,9 +669,25 @@ export class Game {
     const drag = this.drag;
     this.drag = null;
     if (this.tool === 'incele') this.canvas.style.cursor = 'grab';
-    if (drag?.kind !== 'pan' || cancelled) return;
+    if (drag === null || cancelled) {
+      this.commander.showBox(null);
+      return;
+    }
     // A press that barely moved is a click.
-    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= CLICK_SLOP) return;
+    const click = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CLICK_SLOP;
+    if (this.tool === 'ordu' && drag.kind !== 'pan') {
+      this.commandPress(drag, e, click);
+      return;
+    }
+    if (drag.kind !== 'pan' || !click) return;
+    if (this.tool === 'ordu') {
+      // A finger: a tap on a company chooses it, a tap on the ground sends the chosen there.
+      const at = this.groundAt(e.clientX, e.clientY);
+      if (at !== null && !this.commander.clickAt(at.x, at.z, true) && this.commander.selection.size > 0) {
+        this.commander.marchTo(at.x, at.z);
+      }
+      return;
+    }
     const tile = this.tileAt(e.clientX, e.clientY);
     if (tile === null) return;
     // A tap on a touch screen first shows the footprint and the price; a second tap on the
@@ -646,6 +712,24 @@ export class Game {
       const same = this.selected?.x === tile.x && this.selected.z === tile.z;
       this.select(same ? null : tile);
     }
+  }
+
+  /** The end of a press in the Ordu tool: a box chosen, a click on a man, a right click. */
+  private commandPress(drag: Drag, e: PointerEvent, click: boolean): void {
+    this.commander.showBox(null);
+    if (drag.kind === 'rotate') {
+      if (!click) return;
+      const at = this.groundAt(e.clientX, e.clientY);
+      if (at !== null) this.commander.marchTo(at.x, at.z);
+      return;
+    }
+    if (drag.kind !== 'box') return;
+    if (!click) {
+      this.commander.selectBox({ x0: drag.startX, y0: drag.startY, x1: e.clientX, y1: e.clientY }, drag.add);
+      return;
+    }
+    const at = this.groundAt(e.clientX, e.clientY);
+    if (at !== null) this.commander.clickAt(at.x, at.z, drag.add);
   }
 
   /** Marks the building under the pointer and what pulling it down would give back. */
@@ -711,7 +795,23 @@ export class Game {
         break;
       case 'escape':
         if (this.selected !== null) this.select(null);
+        else if (this.tool === 'ordu' && this.commander.selection.size > 0) this.commander.clear();
         else this.setTool('incele');
+        break;
+      case 'o':
+        this.setTool(this.tool === 'ordu' ? 'incele' : 'ordu');
+        break;
+      case 'h':
+        if (this.tool === 'ordu') this.commander.halt();
+        break;
+      case 'k':
+        if (this.tool === 'ordu') this.commander.home();
+        break;
+      case 'a':
+        if (this.tool === 'ordu' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          this.commander.selectAll();
+        }
         break;
       case 'y':
         this.setTool('insa');

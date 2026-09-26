@@ -12,7 +12,7 @@ import {
 } from '../src/sim/buildings';
 import { DAYS_PER_MONTH } from '../src/sim/calendar';
 import type { CityState } from '../src/sim/city';
-import { orderState, sellProduct, simulateDays, updateStats } from '../src/sim/economy';
+import { foodCapacity, orderState, sellProduct, simulateDays, updateStats } from '../src/sim/economy';
 import { housesWanted } from '../src/sim/housing';
 import { restoreGame, saveGame } from '../src/sim/save';
 import { balance, def, newCity, siteFor } from './helpers';
@@ -92,7 +92,7 @@ describe('placing buildings', () => {
     const inside = siteFor(c, 'cami', [4, 14]);
     const cx = inside.x0 + Math.floor(inside.w / 2);
     const cz = inside.z0 + Math.floor(inside.d / 2);
-    expect(proposeBuilding(c, 'kervansaray', cx, cz).problem).toBe('Sur dışına kurulur');
+    expect(proposeBuilding(c, 'kervansaray', cx, cz).problem).toContain('Sur dışına kurulur');
     expect(siteFor(c, 'kervansaray', [34, 0]).problem).toBeUndefined();
   });
 
@@ -124,19 +124,21 @@ describe('placing buildings', () => {
     const c = newCity();
     c.treasury = 1e6;
     c.product = 1e5;
-    const kinds = ['hamam', 'cami', 'medrese'] as const;
+    const kinds = ['hamam', 'cami', 'medrese', 'darussifa', 'ambar'] as const;
     const spots: Array<[number, number]> = [
       [6, 12],
       [-10, 8],
       [10, -12],
+      [-14, -4],
+      [2, -16],
     ];
     kinds.forEach((kind, k) => {
       const b = buildBuilding(c, siteFor(c, kind, spots[k]))!;
       finish(c, b);
     });
     expect(c.buildings.size).toBe(balance.levels[0].slots);
-    expect(() => siteFor(c, 'darussifa', [12, 8], 6)).toThrow();
-    expect(openGround(c, 'darussifa', [12, 8]).problem).toContain('Yapı hakkı dolu');
+    expect(() => siteFor(c, 'hamam', [12, 8], 6)).toThrow();
+    expect(openGround(c, 'hamam', [12, 8]).problem).toContain('Yapı hakkı dolu');
     // A great city has more room, but still only one caravanserai.
     c.population = balance.levels[1].population + 100;
     updateStats(c);
@@ -352,9 +354,7 @@ describe('the month', () => {
     buildBuilding(c, siteFor(c, 'cami', [-8, -10]));
     expect(startBlock(c, 'kisla')?.by).toBe('builders');
     // The spot's own problems come first, then the same reason.
-    expect(proposeBuilding(c, 'kisla', c.grid.tileOf(40), c.grid.tileOf(-40)).problem).toBe(
-      startBlock(c, 'kisla')?.text,
-    );
+    expect(openGround(c, 'kisla', [70, -30]).problem).toBe(startBlock(c, 'kisla')?.text);
   });
 
   it('lives the same history given the same choices', () => {
@@ -365,5 +365,21 @@ describe('the month', () => {
       return JSON.stringify([c.treasury, c.product, c.population, Array.from(c.house)]);
     };
     expect(run()).toBe(run());
+  });
+});
+
+describe('farmland', () => {
+  it('says how much bread a building on the fields would cost, and costs that much', () => {
+    const c = newCity();
+    c.treasury = 1e6;
+    c.product = 1e5;
+    // A caravanserai out among the fields.
+    const p = [...c.fields.values()]
+      .map((f) => proposeBuilding(c, 'kervansaray', f.x0 + 1, f.z0 + 1))
+      .find((q) => q.problem === undefined && q.fields > 0);
+    expect(p).toBeDefined();
+    const before = foodCapacity(c);
+    buildBuilding(c, p!);
+    expect(before - foodCapacity(c)).toBe(p!.foodLost);
   });
 });
